@@ -2,7 +2,6 @@
 Custom library based on raw PyTorch to automate DNN development, tracking and deployment, tightly integrated with MLflow and Optuna.
 
 # Quick installation (bash)
-```bash
 1) Clone the repository
 2) Create a virtual environment using python >= 3.10 (tested with 3.11), using `python -m venv <your_venv_name>`
 3) Activate the virtual environment using `source <your_venv_name>/bin/activate` on Linux 
