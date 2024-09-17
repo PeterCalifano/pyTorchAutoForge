@@ -5,8 +5,9 @@ from .optimization import *
 from .modelBuilding import *
 from .hparamsOptim import *
 from .api import *
-import os, importlib
 from pyTorchAutoForge import *
+import os
+import importlib
 
 # Removed modules
 excluded_modules = ['tests', 'tensorboard']

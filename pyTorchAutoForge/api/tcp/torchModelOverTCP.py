@@ -1,19 +1,17 @@
 """! Prototype script for torch model instantiation and evaluation over TCP, created by PeterC - 15-06-2024"""
 
 # Python imports
-import torch
-from torch import nn 
 import sys, os
 
 # Append paths of custom modules
-sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/tcpServerPy'))
-sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch'))
-sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/LimbBasedNavigationAtMoon'))
+#sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/tcpServerPy'))
+#sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch'))
+#sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/LimbBasedNavigationAtMoon'))
 
 import numpy as np
 
 # Custom imports
-import PyTorch.pyTorchAutoForge.pyTorchAutoForge.pyTorchAutoForge as pyTorchAutoForge
+import pyTorchAutoForge
 import tcpServerPy
 
 from torch.utils.tensorboard import SummaryWriter 

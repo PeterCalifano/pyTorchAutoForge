@@ -1,1 +1,1 @@
-from .AnalyzeOptunaStudy import *
+from AnalyzeOptunaStudy import *

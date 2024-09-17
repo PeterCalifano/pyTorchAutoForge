@@ -6,32 +6,17 @@ NOTE: This however, requires TorchTCP module (not included yet) and a MATLAB tcp
 Created by PeterC - 04-05-2024. Current version: v0.1 (30-06-2024)
 '''
 
-
 # Import modules
 from typing import Optional, Any, Union
 import torch, mlflow, optuna
 from torch import nn
 from torch.utils.data import Dataset
-from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader # Utils for dataset management, storing pairs of (sample, label)
-from torchvision import datasets # Import vision default datasets from torchvision
-from torchvision.transforms import ToTensor # Utils
-from dataclasses import dataclass, asdict
 
 # import datetime
 import numpy as np
-import sys, os, signal, copy, inspect, subprocess
-import psutil
-import onnx
-from onnx import version_converter
+import os, copy, inspect
 from typing import Union
-
-from torch.utils.tensorboard import SummaryWriter # Key class to use tensorboard with PyTorch. VSCode will automatically ask if you want to load tensorboard in the current session.
-import torch.optim as optim
-import torch.nn.functional as F # Module to apply activation functions in forward pass instead of defining them in the model class
-
-# class FDNNbuilder:
-#     def __init__():
 
 # %% Function to get device if not passed to trainModel and validateModel()
 def GetDevice():

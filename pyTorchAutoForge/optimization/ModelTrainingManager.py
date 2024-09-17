@@ -6,38 +6,15 @@
 # Loading methods only modify the parameters the user has specified
 
 
-from typing import Optional, Any, Union
+from typing import Optional, Any, Union, IO
 import torch
-import mlflow
-import optuna
 from torch import nn
-from torch.utils.data import Dataset
-from torchvision.transforms import ToTensor
-# Utils for dataset management, storing pairs of (sample, label)
-from torch.utils.data import DataLoader
-from torchvision import datasets  # Import vision default datasets from torchvision
-from torchvision.transforms import ToTensor  # Utils
 from dataclasses import dataclass, asdict, fields, Field, MISSING
-
 # import datetime
-import numpy as np
-import sys
-import os
-import signal
-import copy
-import inspect
-import subprocess
-import psutil
-import onnx
 import yaml
-from onnx import version_converter
-from typing import Union, IO
 
 # Key class to use tensorboard with PyTorch. VSCode will automatically ask if you want to load tensorboard in the current session.
-from torch.utils.tensorboard import SummaryWriter
 import torch.optim as optim
-# Module to apply activation functions in forward pass instead of defining them in the model class
-import torch.nn.functional as F
 
 
 # %% Training and validation manager class - 22-06-2024 (WIP)

@@ -2,8 +2,6 @@
 Script created by PeterC, 12-07-2024, to analyze statistics and performance of Optuna studies
 '''
 import optuna, os
-import numpy as np
-
 
 def GetOptunaStudy(studyName:str, storagePath:str='optuna_db') -> optuna.study.Study:
 

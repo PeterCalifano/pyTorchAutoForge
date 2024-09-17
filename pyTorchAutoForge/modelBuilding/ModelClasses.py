@@ -1,10 +1,7 @@
 # Module to apply activation functions in forward pass instead of defining them in the model class
 from typing import Union
 import torch
-import sys
-import os
-
-import customTorchTools.api.torchModelIO
+from pyTorchAutoForge.api.torch import * 
 
 # For initialization
 
@@ -18,7 +15,7 @@ class torchModel(torch.nn.Module):
         super().__init__(*args, **kwargs)
 
     def saveCheckpoint(self):
-        SaveTorchModel(model: nn.Module, modelName: str="trainedModel", saveAsTraced: bool=False, exampleInput=None, targetDevice: str='cpu')
+        SaveTorchModel() # To do: first input must be the model itself (traced or not)
 
 
 #############################################################################################################################################
