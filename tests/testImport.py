@@ -6,6 +6,7 @@ from pyTorchAutoForge.optimization import ModelTrainingManager
 from torch.utils import data
 
 from pyTorchAutoForge.api.onnx import onnx_converters
+from pyTorchAutoForge.pyTorchAutoForge import TrainAndValidateModel 
 
 if __name__ == '__main__':
     print("Imported modules successfully.")
@@ -14,6 +15,7 @@ if __name__ == '__main__':
     print(f"optimization: {optimization}")
 
     print(f"data from pytorch: {data}")
+
 
     
 
