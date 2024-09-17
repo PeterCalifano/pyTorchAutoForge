@@ -41,7 +41,9 @@ def lazy_import_subpackage(excluded_modules=[]):
 
 if __name__ == '__main__':
     print('Initializing with all sub-packages and modules except:', excluded_modules)
-    lazy_import_subpackage(excluded_modules)
-
+    #lazy_import_subpackage(excluded_modules)
+    from .api import *
+    from .hparamsOptim import *
+    from .modelBuilding import *
 
 

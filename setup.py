@@ -3,9 +3,9 @@ Major update for release version: 09/17/2024'''
 from setuptools import setup, find_packages
 
 setup(
-    name='pcTorchTools',
+    name='pyTorchAutoForge',
     version='0.1',
-    packages=find_packages(['pyTorchAutoForge', 'pytorchAutoForge*']),
+    packages=find_packages(),
     install_requires=[
         "torch==2.2.1",
         "torch-tb-profiler==0.4.3",

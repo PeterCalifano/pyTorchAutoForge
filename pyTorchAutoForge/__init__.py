@@ -1,10 +1,17 @@
 # Import scripts of the library at initialization
-import os
-import importlib
-import importlib, os
+
+from .utils import *
+from .optimization import *
+from .modelBuilding import *
+from .hparamsOptim import *
+from .api import *
+import os, importlib
+from pyTorchAutoForge import *
 
 # Removed modules
 excluded_modules = ['tests', 'tensorboard']
+print('Initializing with all sub-packages and modules except:', excluded_modules)
+
 
 def lazy_import(subpackage_name):
     module = None
@@ -38,10 +45,7 @@ def lazy_import_subpackage(excluded_modules=[]):
             globals()[subpackage] = lazy_import(
                 subpackage_name=f'{__name__}.{subpackage}')
 
-
-if __name__ == '__main__':
-    print('Initializing with all sub-packages and modules except:', excluded_modules)
-    lazy_import_subpackage(excluded_modules)
+    
 
 
 
