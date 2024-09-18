@@ -1,1 +1,1 @@
-mlflow ui --port 8080 --backend-store-uri sqlite:///localdb/mlruns.db #${MLFLOW_TRACKING_URI} # Temporarily store db in localdb due to permission issue
+mlflow ui --port 8080 --backend-store-uri ${MLFLOW_TRACKING_URI} # Using secondary disk (mounted under /media)
