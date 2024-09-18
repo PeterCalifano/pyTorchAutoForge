@@ -1,0 +1,1 @@
+mlflow ui --port 8080 --backend-store-uri sqlite:///localdb/mlruns.db #${MLFLOW_TRACKING_URI} # Temporarily store db in localdb due to permission issue
