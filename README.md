@@ -1,5 +1,5 @@
 # pyTorchAutoForge
-Custom library based on raw PyTorch to automate DNN development, tracking and deployment, tightly integrated with MLflow and Optuna.
+Custom library based on raw PyTorch to automate DNN development, tracking and deployment, tightly integrated with MLflow and Optuna. The package also includes functions to export and load models to/from ONNx format, as well as a MATLAB wrapper class for model evaluation.
 
 # Quick installation (bash)
 1) Clone the repository
