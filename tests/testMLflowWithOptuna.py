@@ -11,18 +11,14 @@ from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 
 # Import modules
-import sys, os, subprocess, time, logging
+import os, subprocess, time, logging
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Append paths of custom modules
-sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/customTorchTools'))
-sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/LimbBasedNavigationAtMoon'))
-
-import PyTorch.pyTorchAutoForge.pyTorchAutoForge.pyTorchAutoForge as pyTorchAutoForge # Custom torch tools
+import pyTorchAutoForge # Custom torch tools
 import numpy as np
 
 def StartMLflowUI(port:int=5000):

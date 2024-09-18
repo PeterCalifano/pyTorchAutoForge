@@ -4,21 +4,15 @@ Created by PeterC, 26-06-2024. Reference: “[14] Y. Wu, H. Wang, F. Tang, and Z
 ” Pattern Recognition, vol. 90, pp. 415-423, 2019.” 
 '''
 
-import sys, os
-# Append paths of custom modules
-sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/customTorchTools'))
-sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/LimbBasedNavigationAtMoon'))
-
 # Import the required modules
 import torch
-import PyTorch.pyTorchAutoForge.pyTorchAutoForge.pyTorchAutoForge as pyTorchAutoForge
+import pyTorchAutoForge
 import numpy as np
 
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-import cv2
 from typing import Union
 
 
