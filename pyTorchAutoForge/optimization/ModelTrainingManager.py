@@ -7,14 +7,15 @@
 
 
 from typing import Optional, Any, Union, IO
-import torch, mlflow
+import torch, mlflow, os
 from torch import nn
 import numpy as np
 from torch.utils.data import DataLoader
 from dataclasses import dataclass, asdict, fields, Field, MISSING
 
 from pyTorchAutoForge.datasets import DataloaderIndex
-from pyTorchAutoForge.utils.utils import GetDevice
+from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
+from pyTorchAutoForge.api.torch import SaveTorchModel
 
 # import datetime
 import yaml
@@ -369,7 +370,7 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
 
 
 # %% TRAINING and VALIDATION template function - 04-06-2024
-def TrainAndValidateModel(dataloaderIndex: dataloaderIndex, model:nn.Module, lossFcn: nn.Module, optimizer, options:dict={}):
+def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model:nn.Module, lossFcn: nn.Module, optimizer, options:dict={}):
     # NOTE: is the default dictionary considered as "single" object or does python perform a merge of the fields?
 
     # TODO: For merging of options: https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
