@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../MachineLearning_PeterCdev"
 		}
 	],
 	"settings": {}

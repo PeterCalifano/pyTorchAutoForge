@@ -193,6 +193,8 @@ def main():
     port = 7000
     #StartMLflowUI(port) # Start MLflow UI
 
+    # TODO: add change of script execution working directory to the current directory
+
     # %% Optuna study configuration
     if not (os.path.exists('testdata/optuna_db')):
         os.makedirs('testdata/optuna_db')
