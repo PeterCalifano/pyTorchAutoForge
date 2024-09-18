@@ -1,3 +1,7 @@
+import subprocess, os, psutil, signal
+from torch.utils.tensorboard import SummaryWriter # SummaryWriter from torch.utils.tensorboard
+
+
 # %% TENSORBOARD functions - 04-06-2024
 # Function to check if Tensorboard is running
 def IsTensorboardRunning() -> bool:

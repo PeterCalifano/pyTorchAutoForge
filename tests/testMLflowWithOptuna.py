@@ -194,12 +194,12 @@ def main():
     #StartMLflowUI(port) # Start MLflow UI
 
     # %% Optuna study configuration
-    if not (os.path.exists('optuna_db')):
-        os.makedir('optuna_db')
+    if not (os.path.exists('testdata/optuna_db')):
+        os.makedirs('testdata/optuna_db')
 
     studyName = 'CIFAR10_CNN_OptimizationExample'
     optunaStudyObj = optuna.create_study(study_name=studyName,
-                                         storage='sqlite:///{studyName}.db'.format(studyName=os.path.join('optuna_db', studyName)),
+                                         storage='sqlite:///testdata/{studyName}.db'.format(studyName=os.path.join('optuna_db', studyName)),
                                          load_if_exists=True,
                                          direction='maximize',
                                          sampler=optuna.samplers.TPESampler(),

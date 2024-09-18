@@ -1,2 +1,2 @@
-from ModelTrainingManager import *
-from lossFcns import *
+from .ModelTrainingManager import *
+from .lossFcns import *
