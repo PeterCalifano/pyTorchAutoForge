@@ -2,6 +2,8 @@ import torch, sys, os
 from torch.utils.data import Dataset
 import torch.utils
 
+from pyTorchAutoForge.utils.utils import AddZerosPadding
+
 def SaveTorchModel(model: torch.nn.Module, modelName: str = "trainedModel", saveAsTraced: bool = False, exampleInput=None, targetDevice: str = 'cpu') -> None:
     if 'os.path' not in sys.modules:
         import os.path
@@ -116,7 +118,34 @@ def SaveTorchDataset(datasetObj: Dataset, datasetFilePath: str = '', datasetName
         print('Failed to save dataset object with error: ', exception)
 
 # %% Function to load Dataset object - 01-06-2024
-
-
 def LoadTorchDataset(datasetFilePath: str, datasetName: str = 'dataset') -> Dataset:
     return torch.load(os.path.join(datasetFilePath, datasetName + ".pt"))
+
+# %% Function to get model checkpoint and load it into nn.Module for training restart - 09-06-2024
+def LoadModelAtCheckpoint(model: torch.nn.Module, modelSavePath: str = './checkpoints', 
+                          modelName: str = 'trainedModel', modelEpoch: int = 0) -> torch.nn.Module:
+    # TODO: add checks that model and checkpoint matches: how to? Check number of parameters?
+
+    # Create path to model state file
+    checkPointPath = os.path.join(
+        modelSavePath, modelName + '_' + AddZerosPadding(modelEpoch, stringLength=4))
+
+    # Attempt to load the model state and evaluate it
+    if os.path.isfile(checkPointPath):
+        print('Loading model to RESTART training from checkpoint: ', checkPointPath)
+        try:
+            loadedModel = LoadTorchModel(model, modelName, modelSavePath)
+        except Exception as exception:
+            print('Loading of model for training restart failed with error:', exception)
+            print('Skipping reload and training from scratch...')
+            return model
+    else:
+        raise ValueError(
+            'Specified model state file not found. Check input path.')
+
+    # Get last saving of model (NOTE: getmtime does not work properly. Use scandir + list comprehension)
+    # with os.scandir(modelSavePath) as it:
+        # modelNamesWithTime = [(entry.name, entry.stat().st_mtime) for entry in it if entry.is_file()]
+        # modelName = sorted(modelNamesWithTime, key=lambda x: x[1])[-1][0]
+
+    return loadedModel

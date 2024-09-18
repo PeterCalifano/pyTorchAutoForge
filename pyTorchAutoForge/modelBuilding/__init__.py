@@ -1,2 +1,2 @@
-from ModelAutoBuilder import *
-from ModelClasses import *
+from .ModelAutoBuilder import *
+from .modelClasses import *

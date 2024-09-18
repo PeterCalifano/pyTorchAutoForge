@@ -1,13 +1,49 @@
 import torch 
 import numpy as np
 import random
+from torch.utils.data import DataLoader
+
+
+# GetDevice:
+def GetDevice():
+    '''Function to get working device. Used by most modules of pyTorchAutoForge'''
+    device = ("cuda:0"
+              if torch.cuda.is_available()
+              else "mps"
+              if torch.backends.mps.is_available()
+              else "cpu")
+    # print(f"Using {device} device")
+    return device
+
+
+# %% Function to extract specified number of samples from dataloader - 06-06-2024
+# ACHTUNG: TO REWORK USING NEXT AND ITER!
+def GetSamplesFromDataset(dataloader: DataLoader, numOfSamples: int = 10):
+
+    samples = []
+    for batch in dataloader:
+        for sample in zip(*batch):  # Construct tuple (X,Y) from batch
+            samples.append(sample)
+
+            if len(samples) == numOfSamples:
+                return samples
+
+    return samples
+
+
+
 
 # %% Other auxiliary functions - 09-06-2024
 def AddZerosPadding(intNum: int, stringLength: str = 4):
+    '''Function to add zeros padding to an integer number'''
     return f"{intNum:0{stringLength}d}"  # Return strings like 00010
 
+def getNumOfTrainParams(model):
+    '''Function to get the total number of trainable parameters in a model'''
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-def split_rand_perm_id_array(array_of_ids, training_perc, validation_perc, rng_seed=0, *args):
+
+def SplitIdsArray_RandPerm(array_of_ids, training_perc, validation_perc, rng_seed=0, *args):
     """
     Randomly split an array of IDs into three sets (training, validation, and testing)
     based on the input percentages. Optionally extracts values into any number of input
@@ -76,6 +112,7 @@ def split_rand_perm_id_array(array_of_ids, training_perc, validation_perc, rng_s
     return training_set_ids, validation_set_ids, testing_set_ids, varargout
 
 
+
 if __name__ == '__main__':
     # Example usage
     N = 100
@@ -88,7 +125,7 @@ if __name__ == '__main__':
     additional_array1 = torch.rand((5, len(array_of_ids)))
     additional_array2 = torch.rand((3, len(array_of_ids)))
 
-    training_set_ids, validation_set_ids, testing_set_ids, varargout = split_rand_perm_id_array(
+    training_set_ids, validation_set_ids, testing_set_ids, varargout = SplitIdsArray_RandPerm(
         array_of_ids, training_perc, validation_perc, rng_seed, additional_array1, additional_array2
     )
 
