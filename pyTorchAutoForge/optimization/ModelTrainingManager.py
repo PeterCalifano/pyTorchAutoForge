@@ -20,6 +20,7 @@ from pyTorchAutoForge.api.torch import SaveTorchModel
 # import datetime
 import yaml
 import copy
+from enum import Enum
 
 # Key class to use tensorboard with PyTorch. VSCode will automatically ask if you want to load tensorboard in the current session.
 import torch.optim as optim
@@ -107,8 +108,6 @@ class ModelTrainingManagerConfig():
         return [f.name for f in fields(cls)]
 
 # %% ModelTrainingManager class - 24-07-2024
-
-
 class ModelTrainingManager(ModelTrainingManagerConfig):
     '''Class to manage training and validation of PyTorch models using specified datasets and loss functions.'''
 
@@ -166,6 +165,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
     def GetTracedModel(self):
         pass
+
+
+class TaskType(Enum):
+    '''Enum class to define task types for training and validation'''
+    CLASSIFICATION = 'classification'
+    REGRESSION = 'regression'
+    CUSTOM = 'custom'
 
 
 # LEGACY FUNCTIONS - 18/09/2024
