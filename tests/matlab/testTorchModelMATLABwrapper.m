@@ -1,6 +1,6 @@
 classdef testTorchModelMATLABwrapper < matlab.unittest.TestCase
     % TBD: how to use this class?
-    
+
     methods (TestClassSetup)
         % Shared setup for the entire test class
     end
@@ -12,7 +12,7 @@ classdef testTorchModelMATLABwrapper < matlab.unittest.TestCase
     methods (Test)
         % Test methods
 
-        function unimplementedTest(testCase)
+        function TestConstructorss(testCase)
             testCase.verifyFail("Unimplemented test");
         end
     end
