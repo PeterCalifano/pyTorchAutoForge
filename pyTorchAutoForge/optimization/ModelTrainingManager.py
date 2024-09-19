@@ -405,7 +405,7 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
     # epoch_start = combined_options['epochStart']
 
     # Setup options from input dictionary
-    # NOTE: Classification is not well developed (July, 2024)
+    # NOTE: Classification is not developed (July, 2024)
     taskType = options.get('taskType', 'regression')
     device = options.get('device', GetDevice())
     numOfEpochs = options.get('epochs', 10)
@@ -430,7 +430,7 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
     early_stopper = options.get('early_stopper', None)
 
     # Get Torch dataloaders
-    trainingDataset = dataloaderIndex.getTrainloader()
+    trainingDataset = dataloaderIndex.getTrainLoader()
     validationDataset = dataloaderIndex.getValidationLoader()
 
     # Configure Tensorboard

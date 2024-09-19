@@ -4,7 +4,7 @@ from typing import Optional
 # %%  Data loader indexer class - PeterC - 23-07-2024
 class DataloaderIndex:
     '''
-    Class to index dataloaders for training and validation datasets. Performs splitting if validation loader is not provided.
+    Class to index dataloaders for training and validation datasets. Performs splitting if separate validation loader is not provided.
     Created by PeterC, 23-07-2024
     '''
     def __init__(self, trainLoader:DataLoader, validLoader:Optional[DataLoader] = None) -> None:
@@ -34,7 +34,7 @@ class DataloaderIndex:
             
             self.ValidationDataLoader = validLoader
 
-    def getTrainloader(self) -> DataLoader:
+    def getTrainLoader(self) -> DataLoader:
         return self.TrainingDataLoader
     
     def getValidationLoader(self) -> DataLoader:
