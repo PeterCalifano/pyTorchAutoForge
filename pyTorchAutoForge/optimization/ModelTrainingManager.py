@@ -1,13 +1,13 @@
-
-
 # TODO Add yaml interface for training, compatible with mlflow and optuna
 # The idea is to let the user specify all the parameters in a yaml file, which is then loaded and used
-# to set the configuration class. Default values are specified as the class defaults. 
+# to set the configuration class. Default values are specified as the class defaults.
 # Loading methods only modify the parameters the user has specified
 
 
 from typing import Optional, Any, Union, IO
-import torch, mlflow, os
+import torch
+import mlflow
+import os
 from torch import nn
 import numpy as np
 from torch.utils.data import DataLoader
@@ -35,14 +35,14 @@ import torch.optim as optim
 @dataclass(frozen=True)
 class ModelTrainingManagerConfig():
     '''Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.'''
-    
+
     # DATA fields with default values
     initial_lr: float = 1e-4
     lr_scheduler: Any = None
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
-    
+
     # Define default optimizer as Adam
-    optimizer: Any = torch.optim.Adam(lr=initial_lr)
+    optimizer: Any = torch.optim.Adam
 
     # DEVNOTE: dataclass generates __init__() automatically
     # Same goes for __repr()__ for printing and __eq()__ for equality check methods
@@ -51,7 +51,7 @@ class ModelTrainingManagerConfig():
         '''Method to return the dataclass as dictionary'''
         return asdict(self)
 
-    #def display(self) -> None:
+    # def display(self) -> None:
     #    print('ModelTrainingManager configuration parameters:\n\t', self.getConfig())
 
     @classmethod
@@ -90,28 +90,32 @@ class ModelTrainingManagerConfig():
         missingRequired = requiredFields & missingFields
 
         if missingRequired:
-            raise ValueError(f"Config dict is missing required fields: {missingRequired}")
-        
+            raise ValueError(
+                f"Config dict is missing required fields: {missingRequired}")
+
         # Build initialization arguments for class (using autogen __init__() method)
         # All fields not specified by configDict are initialized as default from cls values
-        initArgs = {key: configDict.get( key, getattr(cls, key)) for key in fieldNames}
-        
+        initArgs = {key: configDict.get(key, getattr(cls, key))
+                    for key in fieldNames}
+
         # Return instance of class with attributes defined from dictionary
         return cls(**initArgs)
-    
+
     @staticmethod
     def getConfigParamsNames(cls) -> list:
         '''Method to return the names of all parameters in the configuration class'''
         return [f.name for f in fields(cls)]
 
 # %% ModelTrainingManager class - 24-07-2024
+
+
 class ModelTrainingManager(ModelTrainingManagerConfig):
     '''Class to manage training and validation of PyTorch models using specified datasets and loss functions.'''
-    
-    def __init__(self, model: nn.Module, lossFcn: nn.Module, 
-                 optimizer:Union[optim.Optimizer, int], options: Union[ModelTrainingManagerConfig, dict, str]) -> None:
+
+    def __init__(self, model: nn.Module, lossFcn: nn.Module, options: Union[ModelTrainingManagerConfig, dict, str],
+                 optimizer: Union[optim.Optimizer, int, None] = None) -> None:
         '''Constructor for TrainAndValidationManager class. Initializes model, loss function, optimizer and training/validation options.'''
-        
+
         if isinstance(options, str):
             # Initialize ModelTrainingManagerConfig base instance from yaml file
             super().load_from_yaml(options)
@@ -122,8 +126,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         elif isinstance(options, ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
-            raise NotImplementedError('Construction from ModelTrainingManagerConfig instance not supported yet.')
-
+            raise NotImplementedError(
+                'Construction from ModelTrainingManagerConfig instance not supported yet.')
 
         # Define ModelTrainingManager attributes
         self.model = model
@@ -135,14 +139,20 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         elif isinstance(optimizer, int):
             if optimizer == 0:
-                optimizer = torch.optim.SGD(
-                     self.model.parameters(), lr=self.initial_lr, momentum=self.momentumValue)
+                self.optimizer = torch.optim.SGD(
+                    self.model.parameters(), lr=self.initial_lr, momentum=self.momentumValue)
+
             elif optimizer == 1:
-                optimizer = torch.optim.Adam(
-                     self.model.parameters(), lr=self.learnRate)
+                self.optimizer = torch.optim.Adam(
+                    self.model.parameters(), lr=self.learnRate)
             else:
                 raise ValueError(
-                     'Optimizer type not recognized. Use either 0 for SGD or 1 for Adam.')
+                    'Optimizer ID not recognized. Use either 0 for SGD or 1 for Adam.')
+
+        elif optimizer is None:
+            self.optimizer = optimizer(
+                self.model.parameters(), lr=self.initial_lr)
+
         else:
             raise ValueError(
                 'Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
@@ -233,6 +243,8 @@ def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
 
 # %% Function to validate model using dataset and specified loss function - 04-05-2024
 # Updated by PC 04-06-2024
+
+
 def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDevice(), taskType: str = 'classification') -> Union[float, dict]:
     '''Function to validate model using dataset and specified loss function'''
     # Get size of dataset (How many samples are in the dataset)
@@ -370,7 +382,8 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
 
 
 # %% TRAINING and VALIDATION template function - 04-06-2024
-def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model:nn.Module, lossFcn: nn.Module, optimizer, options:dict={}):
+
+def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lossFcn: nn.Module, optimizer, options: dict = {}):
     # NOTE: is the default dictionary considered as "single" object or does python perform a merge of the fields?
 
     # TODO: For merging of options: https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
