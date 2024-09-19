@@ -1,5 +1,5 @@
 '''
-Script implementing the argument parses for customTorchTools library, first created by PeterC 23-07-2024
+TODO
 '''
 import argparse
 

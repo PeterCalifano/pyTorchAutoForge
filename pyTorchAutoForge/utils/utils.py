@@ -31,8 +31,6 @@ def GetSamplesFromDataset(dataloader: DataLoader, numOfSamples: int = 10):
     return samples
 
 
-
-
 # %% Other auxiliary functions - 09-06-2024
 def AddZerosPadding(intNum: int, stringLength: str = 4):
     '''Function to add zeros padding to an integer number'''
