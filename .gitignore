@@ -128,7 +128,11 @@ celerybeat.pid
 
 # Environments
 .env
+<<<<<<< HEAD
 .venv*
+=======
+.venv*/
+>>>>>>> fdfbee2 (Added script for automatic setup on Linux)
 env/
 venv/
 ENV/
