@@ -1,0 +1,63 @@
+# TODO: define yaml schema for config file (training, validation)
+# Experiment setup (mlflow)
+
+experimentInfo:
+  experimentName: "TestModelTrainingManager"
+  seedRNG: 42
+
+datasetInfo:
+  dataset_path: "/path/to/dataset"
+  batch_size: 32
+  shuffle: True
+  num_workers: 4
+  pin_memory: True
+
+# This goes into another file
+#model:
+#  model_name: "CustomCNN"
+#  input_size: [3, 224, 224]
+#  output_size: 10
+#  num_layers: 5
+#  hidden_units: [64, 128, 256, 512]
+#  activation_function: "ReLU"
+
+trainerSettings:
+  numOfEpochs: 50
+  initialLearnRate: 0.001
+  optimizerClass: "Adam"
+
+  optimizerParams:
+    weightDecay: 0.0001
+
+  lossFunctionClass: "CrossEntropyLoss"
+
+
+  # Advanced features not implemented now
+  #early_stopping:
+  #  early_stopping: True
+  #  patience: 5
+  #  min_delta: 0.001
+
+  # TBC: depends on the scheduler --> trainer may store the opaque step object rather than the specific options
+  #schedulerClass: "StepLR"
+  #scheduler_params:
+  #  step_size: 10
+  #  gamma: 0.1
+
+logging:
+  log_interval: 10
+  save_checkpoint: True
+  checkpoint_path: "/path/to/checkpoints"
+  monitor_metric: "val_loss"
+  mlflow_logging: True
+  save_best_only: True
+
+evaluation:
+  validation_split: 0.2
+  evaluation_metrics: ["accuracy", "precision"]
+
+# Default device (PyTorch)
+deviceInfo:
+  device: DEFAULT # 'cuda', 'cpu', 'DEFAULT'
+
+
