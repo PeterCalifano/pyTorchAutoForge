@@ -15,9 +15,13 @@ loggingSettings:
   mlflow_logging: True
   mlflowSettings:
     tracking_uri: "http://localhost:5000" # DEFAULT: "http://localhost:5000"
+  # DEVNOTE: current version does not allow the use to customize mlflow settings (e.g. what to log, etc.)
 
 datasetSettings:
-  torchDataset_savepath: "" # DEFAULT: Not saved
+  training_torchDataset_savepath: "" 
+  validation_torchDataset_savepath: "" # DEFAULT: None, using random_split
+  split_ratio: 0.8 # DEFAULT: 0.8
+
   batch_size: 32 # DEFAULT: 32
   shuffle: True # DEFAULT: True
   num_workers: 1 # DEFAULT: 1
@@ -44,6 +48,8 @@ trainerSettings:
 
     loss_function_class: "CrossEntropyLoss"
 
+    enable_SWA: False # DEFAULT: False
+
     # Advanced features not implemented now
     #early_stopping:
     #  early_stopping: True
@@ -58,4 +64,8 @@ trainerSettings:
 
   validation:
     cross_validation: False # DEFAULT: False, not implemented yet
+
+  # Placeholder for future features
+  hparamsOptSettings:
+    optuna_study_name: "" # DEFAULT: disabled
 
