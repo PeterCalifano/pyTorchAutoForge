@@ -17,11 +17,11 @@ loggingSettings:
     tracking_uri: "http://localhost:5000" # DEFAULT: "http://localhost:5000"
 
 datasetSettings:
-  dataset_save_path: "" # DEFAULT: Not saved
+  torchDataset_savepath: "" # DEFAULT: Not saved
   batch_size: 32 # DEFAULT: 32
   shuffle: True # DEFAULT: True
-  num_workers: 4 # DEFAULT: 1
-  #pin_memory: True
+  num_workers: 1 # DEFAULT: 1
+  pin_memory: True # DEFAULT: True (Related to CUDA memory management)
 
 # This goes into another file
 # model:
@@ -34,10 +34,11 @@ datasetSettings:
 
 trainerSettings:
   training:
-    num_of_epochs: 50 # DEFAULT: 10
+    initial_epoch: 0 # DEFAULT: 0 --> Required to ensure correct logging and saving
+    num_of_epochs: 25 # DEFAULT: 10
     initial_learn_rate: 0.001 # DEFAULT: 1E-4
-    optimizer_class: "Adam"
 
+    optimizer_class: "Adam"
     optimizerParams: # DEFAULT values set depending on the optimizer. Extra parameters N/A are ignored.
       weight_decay: 0.0001 # DEFAULT: 0
 
