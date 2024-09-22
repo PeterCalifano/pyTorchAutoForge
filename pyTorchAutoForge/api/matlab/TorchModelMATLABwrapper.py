@@ -26,6 +26,8 @@ class TorchModelMATLABwrapper():
         # Set debug mode flag
         self.DEBUG_MODE = DEBUG_MODE
 
+        # TODO: Implement code to print model summary and information to MATLAB (reduces likelihood of errors in loading model)
+
     def forward(self, inputSample: Union[np.array, torch.tensor], numBatches: int = 1):
         '''Forward method to perform inference on N sample input using loaded trainedModel. Batch size assumed as 1 if not given.'''
 
@@ -46,9 +48,11 @@ class TorchModelMATLABwrapper():
             print('Input sample shape: ', X.shape, 'on device: ', self.device)
             print('Evaluating model using batch input: ', X)
         ############################################
+    
+        # TODO: Add check on input shape before attempting inference
 
+        # Perform inference using model
         try:
-            # Perform inference using model
             Y = self.trainedModel(X.to(self.device))
         except Exception as e:
             raise Exception('Error during model inference: ', e)
