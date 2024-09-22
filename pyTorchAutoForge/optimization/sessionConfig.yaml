@@ -1,19 +1,30 @@
-# TODO: define yaml schema for config file (training, validation)
-# Experiment setup (mlflow)
+# Configuration file for training/validation session in pyTorchAutoForge, V0.1 22-09-2024 by PeterC
+# Experiment setup (mlflow, torch)
+experimentSettings:
+  experiment_name: "TestModelTrainingManager"
+  seed_RNG: 42 # DEFAULT: Not specified
+  deviceInfo:
+    device: AUTO # 'cuda', 'cpu', 'AUTO'
 
-experimentInfo:
-  experimentName: "TestModelTrainingManager"
-  seedRNG: 42
+# Logging settings (mlflow, checkpoints)
+loggingSettings:
+  save_bestmodel_only: True # DEFAULT: True (save best model if changed wrt previous best)
+  epoch_model_log_interval: 1 # DEFAULT: 1 (every epoch)
+  save_checkpoint: True # DEFAULT: True (enable saving of checkpoints)
+  checkpoint_savepath: "./checkpoints" # DEFAULT: "./checkpoints" (where to save checkpoints)
+  mlflow_logging: True
+  mlflowSettings:
+    tracking_uri: "http://localhost:5000" # DEFAULT: "http://localhost:5000"
 
-datasetInfo:
-  dataset_path: ""
-  batch_size: 32
-  shuffle: True
-  num_workers: 4
+datasetSettings:
+  dataset_save_path: "" # DEFAULT: Not saved
+  batch_size: 32 # DEFAULT: 32
+  shuffle: True # DEFAULT: True
+  num_workers: 4 # DEFAULT: 1
   #pin_memory: True
 
 # This goes into another file
-#model:
+# model:
 #  model_name: "CustomCNN"
 #  input_size: [3, 224, 224]
 #  output_size: 10
@@ -22,42 +33,28 @@ datasetInfo:
 #  activation_function: "ReLU"
 
 trainerSettings:
-  numOfEpochs: 50
-  initialLearnRate: 0.001
-  optimizerClass: "Adam"
+  training:
+    num_of_epochs: 50 # DEFAULT: 10
+    initial_learn_rate: 0.001 # DEFAULT: 1E-4
+    optimizer_class: "Adam"
 
-  optimizerParams:
-    weightDecay: 0.0001
+    optimizerParams: # DEFAULT values set depending on the optimizer. Extra parameters N/A are ignored.
+      weight_decay: 0.0001 # DEFAULT: 0
 
-  lossFunctionClass: "CrossEntropyLoss"
+    loss_function_class: "CrossEntropyLoss"
 
+    # Advanced features not implemented now
+    #early_stopping:
+    #  early_stopping: True
+    #  patience: 5
+    #  min_delta: 0.001
 
-  # Advanced features not implemented now
-  #early_stopping:
-  #  early_stopping: True
-  #  patience: 5
-  #  min_delta: 0.001
+    # TBC: depends on the scheduler --> trainer may store the opaque step object rather than the specific options
+    #schedulerClass: "StepLR"
+    #scheduler_params:
+    #  step_size: 10
+    #  gamma: 0.1
 
-  # TBC: depends on the scheduler --> trainer may store the opaque step object rather than the specific options
-  #schedulerClass: "StepLR"
-  #scheduler_params:
-  #  step_size: 10
-  #  gamma: 0.1
-
-logging:
-  log_interval: 10
-  save_checkpoint: True
-  checkpoint_path: "/path/to/checkpoints"
-  monitor_metric: "val_loss"
-  mlflow_logging: True
-  save_best_only: True
-
-evaluation:
-  validation_split: 0.2
-  evaluation_metrics: ["accuracy", "precision"]
-
-# Default device (PyTorch)
-deviceInfo:
-  device: DEFAULT # 'cuda', 'cpu', 'DEFAULT'
-
+  validation:
+    cross_validation: False # DEFAULT: False, not implemented yet
 
