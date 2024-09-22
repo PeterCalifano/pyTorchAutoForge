@@ -4,7 +4,7 @@ from typing import Union
 # %% Class to define a custom loss function for training, validation and testing - 01-06-2024
 # NOTE: Function EvalLossFcn must be implemented using Torch operations to work!
 
-class CustomLossFcn(Union([torch.nn.Module])):
+class CustomLossFcn(Union[torch.nn.Module]):
     '''Custom loss function based class, instantiated by specifiying a loss function (callable object) and optionally, a dictionary containing parameters required for the evaluation'''
 
     def __init__(self, EvalLossFcn: callable, lossParams: dict = None) -> None:

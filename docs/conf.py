@@ -31,7 +31,7 @@ html_static_path = ['_static']
 
 # -- Options for autodoc -----------------------------------------------------
 napoleon_google_docstring = True  # Enable Google-style
-napoleon_numpy_docstring = False   # Enable NumPy-style
+napoleon_numpy_docstring = True   # Enable NumPy-style
 napoleon_include_init_with_doc = False  # Don't include __init__ docstring
 napoleon_use_param = True         # Use :param: for function params
 napoleon_use_rtype = True         # Use :rtype: for return type
