@@ -12,7 +12,37 @@ Welcome to pyTorchAutoForge's documentation!
 
 .. TODO: Add all modules here explicitly (ask GPT)
 
-.. automodule:: pyTorchAutoForge
+.. automodule:: pyTorchAutoForge.api.torch.torchModulesIO
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: pyTorchAutoForge.api.matlab.TorchModelMATLABwrapper
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: pyTorchAutoForge.datasets
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: pyTorchAutoForge.hparamsOptim
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: pyTorchAutoForge.modelBuilding.ModelAutoBuilder
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: pyTorchAutoForge.optimization
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: pyTorchAutoForge.utils
    :members:
    :undoc-members:
    :show-inheritance:
