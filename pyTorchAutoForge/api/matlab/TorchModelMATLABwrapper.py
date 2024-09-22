@@ -47,8 +47,11 @@ class TorchModelMATLABwrapper():
             print('Evaluating model using batch input: ', X)
         ############################################
 
-        # Perform inference using model
-        Y = self.trainedModel(X.to(self.device))
+        try:
+            # Perform inference using model
+            Y = self.trainedModel(X.to(self.device))
+        except Exception as e:
+            raise Exception('Error during model inference: ', e)
 
         # ########### DEBUG ######################:
         if self.DEBUG_MODE:
