@@ -64,16 +64,16 @@ def main():
     # Define model training manager config  (dataclass init)
     trainerConfig = ModelTrainingManagerConfig(
         initial_lr=initial_lr, lr_scheduler=None, optimizer=optimizer)
-    print("ModelTrainingManagerConfig instance:", trainerConfig)
+    print("\nModelTrainingManagerConfig instance:", trainerConfig)
+
+    print("\nDict of ModelTrainingManagerConfig instance:", trainerConfig.getConfigDict())
 
     # Define model training manager instance
-    trainer = ModelTrainingManager(trainerConfig)
-    print("ModelTrainingManager instance:", trainer)
+    trainer = ModelTrainingManager(model=model, lossFcn=lossFcn, config=trainerConfig)
+    print("\nModelTrainingManager instance:", trainer)
 
     # Define dataloader index for training
     dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
-
-    exit(0)
 
     # Perform training and validation of model
     optim.TrainAndValidateModel(dataloaderIndex, model, lossFcn, optimizer)

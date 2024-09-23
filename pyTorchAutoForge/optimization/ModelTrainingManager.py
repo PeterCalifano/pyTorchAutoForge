@@ -55,15 +55,15 @@ class ModelTrainingManagerConfig():
     # Define default device
     device: str = GetDevice()  # Default device is GPU if available
 
-    def __copy__(self) -> 'ModelTrainingManagerConfig':
+    def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
         Create a shallow copy of the ModelTrainingManagerConfig instance.
 
         Returns:
             ModelTrainingManagerConfig: A new instance of ModelTrainingManagerConfig with the same configuration.
         """
-        return ModelTrainingManagerConfig(**self.getConfigDict())
-
+        return self.__init__(**instanceToCopy.getConfigDict())
+    
     # DEVNOTE: dataclass generates __init__() automatically
     # Same goes for __repr()__ for printing and __eq()__ for equality check methods
 
@@ -173,12 +173,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         elif isinstance(config, dict):
             # Initialize ModelTrainingManagerConfig base instance from dictionary
-            super().load_from_dict(config)
+            super().load_from_dict(config) # This method only copies the attributes present in the dictionary, which may be a subset.
 
         elif isinstance(config, ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
-            super().__copy__(config)  # Call init of parent class for shallow copy
-
+            super().__init__(**config.getConfigDict())  # Call init of parent class for shallow copy
 
         # Define ModelTrainingManager-specific attributes
         self.model = model
