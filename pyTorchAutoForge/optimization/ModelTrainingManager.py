@@ -273,7 +273,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress = f"\tBatch {batch_idx}/{self.trainingDataloaderSize}, Average loss: {running_loss / current_batch:.4f}"
+            progress = f"\tBatch {batch_idx}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, current lr: {self.current_lr:.11f}"
 
             # Print progress on the same line
             sys.stdout.write('\r' + progress)
@@ -350,7 +350,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         for epoch_num in range(self.num_of_epochs):
 
             print(f"Training epoch {epoch_num}/{self.num_of_epochs}\n")
-
             # Update current learning rate
             self.current_lr = self.optimizer.param_groups[0]['lr']
 
@@ -358,15 +357,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 mlflow.log_metric('lr', self.current_lr, step=self.currentEpoch)
 
             # Perform training for one epoch
-            tmpTrainLoss = self.trainModelOneEpoch_()
-
-            if self.mlflow_logging:
-                mlflow.log_metric('train_loss', self.currentTrainingLoss)
+            tmpTrainLoss = self.trainModelOneEpoch_()                
 
             # Perform validation at current epoch
             tmpValidLoss = self.validateModel_()
 
             if self.mlflow_logging:
+                mlflow.log_metric('train_loss', self.currentTrainingLoss)
                 mlflow.log_metric('validation_loss', self.currentValidationLoss)
 
             # Execute post-epoch operations
@@ -391,6 +388,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # "Early stopping" strategy implementation
             if self.checkForEarlyStop(noNewBestCounter):
                 break
+        
+        # Post-training operations
+        print('Training and validation cycle completed.')
+        if self.mlflow_logging:
+            mlflow.end_run(status='FINISHED')
 
                 
     def checkForEarlyStop(self, counter: int) -> bool:
