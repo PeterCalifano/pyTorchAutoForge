@@ -176,6 +176,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.currentEpoch = 0
         self.numOfUpdates = 0
 
+        self.currentValidationLoss = None
 
         # Load configuration parameters from config
         if isinstance(config, str):
@@ -291,23 +292,72 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         print('\n')
 
 
-
     def validateModel_(self):
         if self.validationDataloader is None:
             raise ValueError('No validation dataloader provided.')
         
         self.model.eval()
+        validationLoss = 0.0  # Accumulation variables
+        batchMaxLoss = 0
 
-        raise NotImplementedError('Method not implemented yet.')
+        validationData = {}  # Dictionary to store validation data
+
+        # Backup the original batch size (TODO: TBC if it is useful)
+        original_dataloader = self.validationDataloader
+                
+        # Temporarily initialize a new dataloader for validation
+        newBathSizeTmp = 2 * self.validationDataloader.batch_size # TBC how to set this value
+
+        tmpdataloader = DataLoader(
+                                original_dataloader.dataset, 
+                                batch_size=newBathSizeTmp, 
+                                shuffle=False, 
+                                drop_last=False, 
+                                pin_memory=True,
+                                num_workers=0
+                                )
+        
+        lossTerms = {}
+        numberOfBatches = len(tmpdataloader)
+        
+        with torch.no_grad():
+            if self.tasktype == TaskType.CLASSIFICATION:
+                correctPredictions = 0
+
+                for X, Y in tmpdataloader:
+                #    Get input and labels and move to target device memory
+                    X, Y = X.to(self.device), Y.to(self.device)
+
+                    # Perform FORWARD PASS
+                    predVal = self.model(X)  # Evaluate model at input
+
+                    # Evaluate how many correct predictions (assuming CrossEntropyLoss)
+                    correctPredictions += (predVal.argmax(1) == Y).type(torch.float).sum().item()
+
+                validationLoss /= numberOfBatches  # Compute batch size normalized loss value
+                correctPredictions /= tmpdataloader.size  # Compute percentage of correct classifications over batch size
+                print(f"\tValidation accuracy: {(100*correctPredictions):>0.2f}%, Average loss: {validationLoss:>8f}\n")
+
+                # Update current validation loss
+                self.currentValidationLoss = validationLoss
+
+            elif self.tasktype == TaskType.REGRESSION:
+                raise NotImplementedError('Regression task validation not implemented yet.')
+
+            
+
 
     def trainAndValidate(self):
         '''Method to train and validate the model using the specified datasets and loss function'''
 
         for epoch_num in range(self.num_of_epochs):
 
-            print(f"Training epoch {epoch_num}/{self.num_of_epochs}")
-
+            print(f"Training epoch {epoch_num}/{self.num_of_epochs}\n")
+            # Perform training for one epoch
             self.trainModelOneEpoch_()
+
+            # Perform validation at current epoch
+            self.validateModel_()
             
 
 
@@ -425,7 +475,13 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
             round(0.5 * freeMem / estimated_memory_per_sample), 2048)
 
         dataloader = DataLoader(
-            dataloader.dataset, batch_size=newBathSizeTmp, shuffle=False, drop_last=False)
+            dataloader.dataset, 
+            batch_size=newBathSizeTmp, 
+            shuffle=False, 
+            drop_last=False, 
+            pin_memory=True,
+            num_workers=0)
+        
         lossTerms = {}
         numberOfBatches = len(dataloader)
 
@@ -462,8 +518,7 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
                 # Determine if prediction is correct and accumulate
                 # Explanation: get largest output logit (the predicted class) and compare to Y.
                 # Then convert to float and sum over the batch axis, which is not necessary if size is single prediction
-                correctOuputs += (predVal.argmax(1) ==
-                                  Y).type(torch.float).sum().item()
+                correctOuputs += (predVal.argmax(1) == Y).type(torch.float).sum().item()
 
             # elif taskType.lower() == 'regression':
             #    #print('TODO')
