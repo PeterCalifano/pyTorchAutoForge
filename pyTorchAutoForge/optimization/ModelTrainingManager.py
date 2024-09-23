@@ -55,6 +55,7 @@ class ModelTrainingManagerConfig():
     
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
+    eval_example: bool = False  # Evaluate example input during training
 
     # Optimization parameters
     lr_scheduler: Any = None 
@@ -200,6 +201,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.currentEpoch = 0
         self.numOfUpdates = 0
 
+        self.currentTrainingLoss = None
         self.currentValidationLoss = None
         self.currentMlflowRun = mlflow.active_run() # Returns None if no active run
 
@@ -237,7 +239,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """
         self.trainingDataloader = dataloaderIndex.getTrainLoader()
         self.validationDataloader = dataloaderIndex.getValidationLoader()
-        self.trainingDataloaderSize = len(self.trainingDataloader.dataset)
+        self.trainingDataloaderSize = len(self.trainingDataloader)
 
     def getTracedModel(self):
         raise NotImplementedError('Method not implemented yet.')
@@ -252,7 +254,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
         
         running_loss = 0.0
-            
+
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
 
             # Get input and labels and move to target device memory
@@ -266,7 +268,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             trainLossDict = self.lossFcn(predVal, Y)
 
             # Get loss value from dictionary
-            trainLossVal = trainLossDict.get('lossValue')
+            trainLossVal = trainLossDict.get('lossValue') if isinstance(trainLossDict, dict) else trainLossDict
+
 
             # Print status bar for current epoch
             running_loss += trainLossVal
@@ -283,7 +286,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress = f"\tBatch {batch_idx}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, current lr: {self.current_lr:.11f}"
+            progress = f"\tBatch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, current lr: {self.current_lr:.11f}"
 
             # Print progress on the same line
             sys.stdout.write('\r' + progress)
@@ -294,7 +297,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         
         # Post epoch operations
         self.currentEpoch += 1
-        print('\n')
 
         return running_loss / current_batch
 
@@ -328,7 +330,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         with torch.no_grad():
             if self.tasktype == TaskType.CLASSIFICATION:
 
-                if self.lossFcn is not torch.nn.CrossEntropyLoss:
+                if not(isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
                     raise NotImplementedError('Current classification validation function only supports nn.CrossEntropyLoss.')
                 
                 correctPredictions = 0
@@ -344,7 +346,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     correctPredictions += (predVal.argmax(1) == Y).type(torch.float).sum().item()
 
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
-                correctPredictions /= tmpdataloader.size  # Compute percentage of correct classifications over batch size
+                correctPredictions /= tmpdataloader.batch_size  # Compute percentage of correct classifications over batch size
                 print(f"\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {validationLossVal:>4f}\n")
 
                 return validationLossVal, correctPredictions
@@ -365,7 +367,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     validationLossVal += validationLossDict.get('lossValue') if isinstance(validationLossDict, dict) else validationLossDict
 
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
-                print(f"\tValidation: regression average loss: {validationLossVal:>4f}\n")
+                print(f"\n\tValidation: regression average loss: {validationLossVal:>4f}\n")
 
                 return validationLossVal
     
@@ -376,47 +378,52 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             NotImplementedError: _description_
         """
         self.startMlflowRun()
+        try:
+            for epoch_num in range(self.num_of_epochs):
 
-        for epoch_num in range(self.num_of_epochs):
+                print(f"\nTraining epoch: {epoch_num}/{self.num_of_epochs}:")
+                # Update current learning rate
+                self.current_lr = self.optimizer.param_groups[0]['lr']
 
-            print(f"Training epoch {epoch_num}/{self.num_of_epochs}\n")
-            # Update current learning rate
-            self.current_lr = self.optimizer.param_groups[0]['lr']
+                if self.mlflow_logging:
+                    mlflow.log_metric('lr', self.current_lr, step=self.currentEpoch)
 
+                # Perform training for one epoch
+                tmpTrainLoss = self.trainModelOneEpoch_()                
+
+                # Perform validation at current epoch
+                tmpValidLoss = self.validateModel_()
+
+                # Execute post-epoch operations
+                self.updateLerningRate()  # Update learning rate if scheduler is provided
+                self.evalExample()        # Evaluate example if enabled
+
+                # "Keep best" strategy implementation
+                if self.keep_best:
+                    if self.currentValidationLoss is None or tmpValidLoss < self.currentValidationLoss:
+                        self.currentTrainingLoss = tmpTrainLoss
+                        self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
+
+                # Update stats if new best model found (independently of keep_best flag)
+                if self.currentValidationLoss is None or tmpValidLoss < self.currentValidationLoss:
+                    self.bestEpoch = epoch_num
+                    self.bestValidationLoss = tmpValidLoss
+                    noNewBestCounter = 0
+                else:
+                    noNewBestCounter += 1
+
+                if self.mlflow_logging:
+                    mlflow.log_metric('train_loss', self.currentTrainingLoss)
+                    mlflow.log_metric('validation_loss', self.currentValidationLoss)
+
+                # "Early stopping" strategy implementation
+                if self.checkForEarlyStop(noNewBestCounter):
+                    break
+        except Exception as e:
+            print(f"Error during training and validation cycle: {e}")
             if self.mlflow_logging:
-                mlflow.log_metric('lr', self.current_lr, step=self.currentEpoch)
+                mlflow.end_run(status='FAILED')
 
-            # Perform training for one epoch
-            tmpTrainLoss = self.trainModelOneEpoch_()                
-
-            # Perform validation at current epoch
-            tmpValidLoss = self.validateModel_()
-
-            if self.mlflow_logging:
-                mlflow.log_metric('train_loss', self.currentTrainingLoss)
-                mlflow.log_metric('validation_loss', self.currentValidationLoss)
-
-            # Execute post-epoch operations
-            self.updateLerningRate()  # Update learning rate if scheduler is provided
-            self.evalExample()        # Evaluate example if enabled
-
-            # "Keep best" strategy implementation
-            if self.keep_best:
-                if tmpValidLoss < self.currentValidationLoss:
-                    self.currentTrainingLoss = tmpTrainLoss
-                    self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
-
-            # Update stats if new best model found (independently of keep_best flag)
-            if tmpValidLoss < self.currentValidationLoss:
-                self.bestEpoch = epoch_num
-                self.bestValidationLoss = tmpValidLoss
-                noNewBestCounter = 0
-            else:
-                noNewBestCounter += 1
-
-            # "Early stopping" strategy implementation
-            if self.checkForEarlyStop(noNewBestCounter):
-                break
         
         # Post-training operations
         print('Training and validation cycle completed.')
@@ -424,7 +431,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             mlflow.end_run(status='FINISHED')
 
     def evalExample(self):
-        if self.evalExample:
+        if self.eval_example:
             #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
             #if self.mlflow_logging: # TBC, not sure it is useful
             #    # Log example input to mlflow
@@ -485,7 +492,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 active_run=self.currentMlflowRun.info.run_name))
             
             # Log configuration parameters
-            ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames().sort()        
+            ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()      
+            print("DEBUG:", ModelTrainerConfigParamsNames)
             mlflow.log_params({key: getattr(self, key) for key in ModelTrainerConfigParamsNames})
         
         #else:

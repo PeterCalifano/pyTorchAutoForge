@@ -31,7 +31,8 @@ def main():
     print("\nModelTrainingManagerConfig instance:", trainerConfig)
 
     print("\nNames of all attributes in ModelTrainingManagerConfig instance:", ModelTrainingManagerConfig.getConfigParamsNames())
-
+    listOfKeys = {key for key in ModelTrainingManagerConfig.getConfigParamsNames() if key in trainerConfig.__dict__.keys()}
+    
     print("\nDict of ModelTrainingManagerConfig instance:",
           trainerConfig.getConfigDict())
 

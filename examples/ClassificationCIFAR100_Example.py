@@ -12,7 +12,6 @@ import mlflow
 
 from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConfig, TaskType
 from pyTorchAutoForge.datasets import DataloaderIndex
-import pyTorchAutoForge.optimization as optim
 import torchvision.models as models
 
 from pyTorchAutoForge.utils import GetDevice
