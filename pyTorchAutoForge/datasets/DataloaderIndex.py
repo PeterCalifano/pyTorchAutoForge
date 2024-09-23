@@ -3,10 +3,21 @@ from typing import Optional
 
 # %%  Data loader indexer class - PeterC - 23-07-2024
 class DataloaderIndex:
-    '''
-    Class to index dataloaders for training and validation datasets. Performs splitting if separate validation loader is not provided.
-    Created by PeterC, 23-07-2024
-    '''
+    """
+    DataloaderIndex class to index dataloaders for training and validation datasets. 
+    This class performs splitting of the training dataset if a separate validation loader is not provided.
+    Attributes:
+        TrainingDataLoader (DataLoader): DataLoader for the training dataset.
+        ValidationDataLoader (DataLoader): DataLoader for the validation dataset.
+    Methods:
+        __init__(trainLoader: DataLoader, validLoader: Optional[DataLoader] = None) -> None:
+            Initializes the DataloaderIndex with the provided training and optional validation dataloaders.
+            If no validation dataloader is provided, splits the training dataset into training and validation datasets.
+        getTrainLoader() -> DataLoader:
+            Returns the DataLoader for the training dataset.
+        getValidationLoader() -> DataLoader:
+            Returns the DataLoader for the validation dataset.
+    """
     def __init__(self, trainLoader:DataLoader, validLoader:Optional[DataLoader] = None) -> None:
         if not(isinstance(trainLoader, DataLoader)):
             raise TypeError('Training dataloader is not of type "DataLoader"!')
