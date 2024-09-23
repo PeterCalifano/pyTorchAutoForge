@@ -16,7 +16,7 @@ import pyTorchAutoForge.optimization as optim
 import torchvision.models as models
 
 from pyTorchAutoForge.utils import GetDevice
-
+from pyTorchAutoForge.optimization import TaskType
 
 def main():
 
@@ -62,7 +62,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=True)
 
     # Define model training manager config  (dataclass init)
-    trainerConfig = ModelTrainingManagerConfig(
+    trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
         initial_lr=initial_lr, lr_scheduler=None, optimizer=optimizer)
     print("\nModelTrainingManagerConfig instance:", trainerConfig)
 
