@@ -7,7 +7,7 @@
 from typing import Optional, Any, Union, IO
 import torch
 import mlflow
-import os, sys
+import os, sys, traceback
 from torch import nn
 import numpy as np
 from torch.utils.data import DataLoader
@@ -394,6 +394,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # Perform validation at current epoch
                 tmpValidLoss = self.validateModel_()
 
+                if isinstance(tmpValidLoss, tuple):
+                    tmpValidLoss = tmpValidLoss[0]
+
                 # Execute post-epoch operations
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
                 self.evalExample()        # Evaluate example if enabled
@@ -424,6 +427,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     break
         except Exception as e:
             print(f"Error during training and validation cycle: {e}")
+            traceback.print_exc()
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
 
@@ -485,13 +489,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.mlflow_logging:
             if self.currentMlflowRun is not None:
                 mlflow.end_run()
-                print(('Active mlflow run %{active_run} ended before creating new one.').format(
+                print(('\nActive mlflow run {active_run} ended before creating new one.').format(
                     active_run=self.currentMlflowRun.info.run_name))
 
             mlflow.start_run()
             # Update current mlflow run
             self.currentMlflowRun = mlflow.active_run()
-            print(('Started new mlflow run %{active_run}.').format(
+            print(('\nStarted new mlflow run witn name: {active_run}.').format(
                 active_run=self.currentMlflowRun.info.run_name))
             
             # Log configuration parameters
