@@ -347,7 +347,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
                 correctPredictions /= tmpdataloader.batch_size  # Compute percentage of correct classifications over batch size
-                print(f"\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {validationLossVal:>4f}\n")
+                print(f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {validationLossVal:>4f}\n")
 
                 return validationLossVal, correctPredictions
 
@@ -398,19 +398,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
                 self.evalExample()        # Evaluate example if enabled
 
-                # "Keep best" strategy implementation
-                if self.keep_best:
-                    if self.currentValidationLoss is None or tmpValidLoss < self.currentValidationLoss:
-                        self.currentTrainingLoss = tmpTrainLoss
-                        self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
-
                 # Update stats if new best model found (independently of keep_best flag)
-                if self.currentValidationLoss is None or tmpValidLoss < self.currentValidationLoss:
+                if self.currentValidationLoss is None:
+                    self.currentValidationLoss = tmpValidLoss
+                
+                if tmpValidLoss <= self.currentValidationLoss:
                     self.bestEpoch = epoch_num
                     self.bestValidationLoss = tmpValidLoss
                     noNewBestCounter = 0
                 else:
                     noNewBestCounter += 1
+
+                # "Keep best" strategy implementation
+                if self.keep_best:
+                    if tmpValidLoss <= self.currentValidationLoss:
+                        self.currentTrainingLoss = tmpTrainLoss
+                        self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
 
                 if self.mlflow_logging:
                     mlflow.log_metric('train_loss', self.currentTrainingLoss)
