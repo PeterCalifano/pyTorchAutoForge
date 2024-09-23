@@ -7,7 +7,7 @@
 from typing import Optional, Any, Union, IO
 import torch
 import mlflow
-import os
+import os, sys
 from torch import nn
 import numpy as np
 from torch.utils.data import DataLoader
@@ -53,6 +53,8 @@ class ModelTrainingManagerConfig():
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
     optimizer: Any = torch.optim.Adam # optimizer class
     device: str = GetDevice()  # Default device is GPU if available
+    mlflow_logging: bool = True  # Enable MLFlow logging
+    num_of_epochs: int = 10  # Number of epochs for training
 
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
@@ -170,6 +172,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.lossFcn = lossFcn
         self.trainingDataloader = None
         self.validationDataloader = None
+        self.trainingDataloaderSize = 0
+        self.currentEpoch = 0
+        self.numOfUpdates = 0
+
 
         # Load configuration parameters from config
         if isinstance(config, str):
@@ -183,6 +189,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         elif isinstance(config, ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
             super().__init__(**config.getConfigDict())  # Call init of parent class for shallow copy
+
+        # Set current learning rate at start
+        self.current_lr = self.initial_lr
 
         # Initialize dataloaders if provided
         if dataLoaderIndex is not None:
@@ -216,21 +225,90 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """
         self.trainingDataloader = dataloaderIndex.getTrainLoader()
         self.validationDataloader = dataloaderIndex.getValidationLoader()
+        self.trainingDataloaderSize = len(self.trainingDataloader.dataset)
 
     def getTracedModel(self):
         raise NotImplementedError('Method not implemented yet.')
 
-    def trainModel():
+    def trainModelOneEpoch_(self):
         '''Method to train the model using the specified datasets and loss function'''
-        raise NotImplementedError('Method not implemented yet.')
-    
-    def validateModel():
-        '''Method to validate the model using the specified datasets and loss function'''
+
+        # Get current learning rate
+        self.current_lr = self.optimizer.param_groups[0]['lr']
+
+        if self.trainingDataloader is None:
+            raise ValueError('No training dataloader provided.')
+        
+        if self.mlflow_logging:
+            mlflow.log_metric('Learning rate', self.current_lr, step=self.currentEpoch)
+
+        # Set model instance in training mode (mainly for dropout and batch normalization layers)
+        self.model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
+        
+        running_loss = 0.0
+            
+        for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
+
+            # Get input and labels and move to target device memory
+            # Define input, label pairs for target device
+            X, Y = X.to(self.device), Y.to(self.device) # DEVNOTE: TBD if this goes here or if to move dataloader to device
+
+            # Perform FORWARD PASS to get predictions
+            predVal = self.model(X)  # Evaluate model at input, calls forward() method
+            
+            # Evaluate loss function to get loss value dictionary
+            trainLossDict = self.lossFcn(predVal, Y)
+
+            # Get loss value from dictionary
+            trainLossVal = trainLossDict.get('lossValue')
+
+            # Print status bar for current epoch
+            running_loss += trainLossVal
+
+            # TODO: here one may log intermediate metrics at each update
+            # if self.mlflow_logging:
+            #     mlflow.log_metrics()
+
+            # Perform BACKWARD PASS to update parameters
+            trainLossVal.backward()     # Compute gradients
+            self.optimizer.step()       # Apply gradients from the loss
+            self.optimizer.zero_grad()  # Reset gradients for next iteration
+            self.numOfUpdates += 1
+
+            # Calculate progress
+            current_batch = batch_idx + 1
+            progress = f"\tBatch {batch_idx}/{self.trainingDataloaderSize}, Average loss: {running_loss / current_batch:.4f}"
+
+            # Print progress on the same line
+            sys.stdout.write('\r' + progress)
+            sys.stdout.flush()
+
+            # TODO: implement management of SWA model
+            #if swa_model is not None and epochID >= swa_start_epoch:
+        
+        # Post epoch operations
+        self.currentEpoch += 1
+        print('\n')
+
+
+
+    def validateModel_(self):
+        if self.validationDataloader is None:
+            raise ValueError('No validation dataloader provided.')
+        
+        self.model.eval()
+
         raise NotImplementedError('Method not implemented yet.')
 
-    def trainAndValidate():
+    def trainAndValidate(self):
         '''Method to train and validate the model using the specified datasets and loss function'''
-        raise NotImplementedError('Method not implemented yet.')
+
+        for epoch_num in range(self.num_of_epochs):
+
+            print(f"Training epoch {epoch_num}/{self.num_of_epochs}")
+
+            self.trainModelOneEpoch_()
+            
 
 
 # LEGACY FUNCTIONS - 18/09/2024
@@ -288,6 +366,7 @@ def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
             # print(f"Training loss value: {trainLoss:>7f}  [{currentStep:>5d}/{size:>5d}]")
             # if keys != []:
             #    print("\t",", ".join([f"{key}: {trainLossOut[key]:.4f}" for key in keys]))    # Update learning rate if scheduler is provided
+    
     # Perform step of SWA if enabled
     if swa_model is not None and epochID >= swa_start_epoch:
         # Update SWA model parameters
@@ -542,8 +621,7 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
     # TRAINING and VALIDATION LOOP
     for epochID in range(numOfEpochs):
 
-        print(
-            f"\n\t\t\tTRAINING EPOCH: {epochID + epochStart} of {epochStart + numOfEpochs-1}\n-------------------------------")
+        print(f"\n\t\t\tTRAINING EPOCH: {epochID + epochStart} of {epochStart + numOfEpochs-1}\n-------------------------------")
         # Do training over all batches
         trainLossHistory[epochID], numOfUpdatesForEpoch = TrainModel(trainingDataset, model, lossFcn, optimizer, epochID, device,
                                                                      taskType, lr_scheduler, swa_scheduler, swa_model, swa_start_epoch)
