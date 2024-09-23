@@ -8,7 +8,6 @@ experimentSettings:
 
 # Logging settings (mlflow, checkpoints)
 loggingSettings:
-  save_bestmodel_only: True # DEFAULT: True (save best model if changed wrt previous best)
   epoch_model_log_interval: 1 # DEFAULT: 1 (every epoch)
   save_checkpoint: True # DEFAULT: True (enable saving of checkpoints)
   checkpoint_savepath: "./checkpoints" # DEFAULT: "./checkpoints" (where to save checkpoints)
@@ -50,11 +49,10 @@ trainerSettings:
 
     enable_SWA: False # DEFAULT: False
 
-    # Advanced features not implemented now
-    #early_stopping:
-    #  early_stopping: True
-    #  patience: 5
-    #  min_delta: 0.001
+    keep_best: True # DEFAULT: True (keep and save best model if changed wrt previous best)
+    early_stopping:
+      patience: 5
+      min_delta: 0.001
 
     # TBC: depends on the scheduler --> trainer may store the opaque step object rather than the specific options
     #schedulerClass: "StepLR"

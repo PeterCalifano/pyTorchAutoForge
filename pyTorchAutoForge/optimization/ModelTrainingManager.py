@@ -166,18 +166,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         Raises:
         ValueError: If the optimizer is not an instance of torch.optim.Optimizer or an integer representing the optimizer type, or if the optimizer ID is not recognized.
         """
-
-        # Initialize ModelTrainingManager-specific attributes
-        self.model = model
-        self.lossFcn = lossFcn
-        self.trainingDataloader = None
-        self.validationDataloader = None
-        self.trainingDataloaderSize = 0
-        self.currentEpoch = 0
-        self.numOfUpdates = 0
-
-        self.currentValidationLoss = None
-
         # Load configuration parameters from config
         if isinstance(config, str):
             # Initialize ModelTrainingManagerConfig base instance from yaml file
@@ -191,7 +179,20 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
             super().__init__(**config.getConfigDict())  # Call init of parent class for shallow copy
 
-        # Set current learning rate at start
+
+        # Initialize ModelTrainingManager-specific attributes
+        self.model = (model).to(self.device)
+        self.bestModel = None
+        self.lossFcn = lossFcn
+        self.trainingDataloader = None
+        self.validationDataloader = None
+        self.trainingDataloaderSize = 0
+        self.currentEpoch = 0
+        self.numOfUpdates = 0
+
+        self.currentValidationLoss = None
+        self.currentMlflowRun = mlflow.active_run() # Returns None if no active run
+
         self.current_lr = self.initial_lr
 
         # Initialize dataloaders if provided
@@ -232,17 +233,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         raise NotImplementedError('Method not implemented yet.')
 
     def trainModelOneEpoch_(self):
-        '''Method to train the model using the specified datasets and loss function'''
-
-        # Get current learning rate
-        self.current_lr = self.optimizer.param_groups[0]['lr']
-
+        '''Method to train the model using the specified datasets and loss function. Not intended to be called as standalone.'''
+        
         if self.trainingDataloader is None:
             raise ValueError('No training dataloader provided.')
         
-        if self.mlflow_logging:
-            mlflow.log_metric('Learning rate', self.current_lr, step=self.currentEpoch)
-
         # Set model instance in training mode (mainly for dropout and batch normalization layers)
         self.model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
         
@@ -291,8 +286,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.currentEpoch += 1
         print('\n')
 
+        return running_loss / current_batch
 
     def validateModel_(self):
+        """Method to validate the model using the specified datasets and loss function. Not intended to be called as standalone."""
         if self.validationDataloader is None:
             raise ValueError('No validation dataloader provided.')
         
@@ -322,6 +319,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         
         with torch.no_grad():
             if self.tasktype == TaskType.CLASSIFICATION:
+
+                if self.lossFcn is not torch.nn.CrossEntropyLoss:
+                    raise NotImplementedError('Current classification validation function only supports nn.CrossEntropyLoss.')
+                
                 correctPredictions = 0
 
                 for X, Y in tmpdataloader:
@@ -338,26 +339,109 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 correctPredictions /= tmpdataloader.size  # Compute percentage of correct classifications over batch size
                 print(f"\tValidation accuracy: {(100*correctPredictions):>0.2f}%, Average loss: {validationLoss:>8f}\n")
 
-                # Update current validation loss
-                self.currentValidationLoss = validationLoss
-
             elif self.tasktype == TaskType.REGRESSION:
                 raise NotImplementedError('Regression task validation not implemented yet.')
 
-            
-
-
+        return validationLoss
+    
     def trainAndValidate(self):
         '''Method to train and validate the model using the specified datasets and loss function'''
 
         for epoch_num in range(self.num_of_epochs):
 
             print(f"Training epoch {epoch_num}/{self.num_of_epochs}\n")
+
+            # Update current learning rate
+            self.current_lr = self.optimizer.param_groups[0]['lr']
+
+            if self.mlflow_logging:
+                mlflow.log_metric('lr', self.current_lr, step=self.currentEpoch)
+
             # Perform training for one epoch
-            self.trainModelOneEpoch_()
+            tmpTrainLoss = self.trainModelOneEpoch_()
+
+            if self.mlflow_logging:
+                mlflow.log_metric('train_loss', self.currentTrainingLoss)
 
             # Perform validation at current epoch
-            self.validateModel_()
+            tmpValidLoss = self.validateModel_()
+
+            if self.mlflow_logging:
+                mlflow.log_metric('validation_loss', self.currentValidationLoss)
+
+            # Execute post-epoch operations
+            if self.eval_example:
+                #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
+                raise NotImplementedError('Example evaluation feature not implemented yet.')
+
+            # "Keep best" strategy implementation
+            if self.keep_best:
+                if tmpValidLoss < self.currentValidationLoss:
+                    self.currentTrainingLoss = tmpTrainLoss
+                    self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
+
+            # Update stats if new best model found (independently of keep_best flag)
+            if tmpValidLoss < self.currentValidationLoss:
+                self.bestEpoch = epoch_num
+                self.bestValidationLoss = tmpValidLoss
+                noNewBestCounter = 0
+            else:
+                noNewBestCounter += 1
+
+            # "Early stopping" strategy implementation
+            if self.checkForEarlyStop(noNewBestCounter):
+                break
+
+                
+    def checkForEarlyStop(self, counter: int) -> bool:
+        """
+        Checks if the early stopping criteria have been met.
+        Parameters:
+        counter (int): The current count of epochs or iterations without improvement.
+        Returns:
+        bool: True if early stopping criteria are met and training should stop, False otherwise.
+        """
+        returnValue = False
+
+        if self.enable_early_stop:
+            if counter >= self.early_stop_patience:
+                print('Early stopping criteria met.')
+                returnValue = True
+                if self.mlflow_logging:
+                    mlflow.end_run(status='KILLED')
+
+        return returnValue
+    
+    def startMlflowRun(self):
+        """
+        Starts a new MLflow run if MLflow logging is enabled.
+
+        If there is an active MLflow run, it ends the current run before starting a new one.
+        Updates the current MLflow run to the newly started run.
+
+        Prints messages indicating the status of the MLflow runs.
+
+        Raises:
+            Warning: If MLflow logging is disabled.
+        """
+        if self.mlflow_logging:
+            if self.currentMlflowRun is not None:
+                mlflow.end_run()
+                print(('Active mlflow run %{active_run} ended before creating new one.').format(
+                    active_run=self.currentMlflowRun.info.run_name))
+
+            mlflow.start_run()
+            # Update current mlflow run
+            self.currentMlflowRun = mlflow.active_run()
+            print(('Started new mlflow run %{active_run}.').format(
+                active_run=self.currentMlflowRun.info.run_name))
+        else:
+            Warning('MLFlow logging is disabled. No run started.')
+
+        
+
+
+
             
 
 

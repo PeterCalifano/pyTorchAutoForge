@@ -23,7 +23,7 @@ def main():
     # NOTE: seems that mlflow is not using server location
 
     # Set mlflow experiment
-    mlflow.set_experiment('ImageClassificationCIFAR100_Example')
+    mlflow.set_experiment('ImageClassificationCIFAR100_Example_TEST')
 
     # Get model backbone from torchvision
     # All models in torchvision.models for classification are trained on ImageNet, thus have 1000 classes as output
