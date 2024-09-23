@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../MachineLearning_PeterCdev"
+		},
+		{
+			"path": "../vbn-ai-dart"
 		}
 	],
 	"settings": {}
