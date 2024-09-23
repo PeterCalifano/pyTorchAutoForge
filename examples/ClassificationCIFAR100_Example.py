@@ -10,13 +10,12 @@ from torchvision import datasets  # Import vision default datasets from torchvis
 from torchvision import transforms
 import mlflow
 
-from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConfig
+from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConfig, TaskType
 from pyTorchAutoForge.datasets import DataloaderIndex
 import pyTorchAutoForge.optimization as optim
 import torchvision.models as models
 
 from pyTorchAutoForge.utils import GetDevice
-from pyTorchAutoForge.optimization import TaskType
 
 def main():
 
@@ -59,7 +58,7 @@ def main():
     initial_lr = 1E-4
 
     lossFcn = nn.CrossEntropyLoss()
-    
+
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=True)
 
     # Define model training manager config  (dataclass init)

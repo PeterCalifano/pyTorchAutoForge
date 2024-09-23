@@ -304,7 +304,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             raise ValueError('No validation dataloader provided.')
         
         self.model.eval()
-        validationLoss = 0.0  # Accumulation variables
+        validationLossVal = 0.0  # Accumulation variables
         # batchMaxLoss = 0
         # validationData = {}  # Dictionary to store validation data
 
@@ -334,7 +334,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 correctPredictions = 0
 
                 for X, Y in tmpdataloader:
-                #    Get input and labels and move to target device memory
+                    # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform FORWARD PASS
@@ -343,14 +343,31 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Evaluate how many correct predictions (assuming CrossEntropyLoss)
                     correctPredictions += (predVal.argmax(1) == Y).type(torch.float).sum().item()
 
-                validationLoss /= numberOfBatches  # Compute batch size normalized loss value
+                validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
                 correctPredictions /= tmpdataloader.size  # Compute percentage of correct classifications over batch size
-                print(f"\tValidation accuracy: {(100*correctPredictions):>0.2f}%, Average loss: {validationLoss:>8f}\n")
+                print(f"\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {validationLossVal:>4f}\n")
+
+                return validationLossVal, correctPredictions
 
             elif self.tasktype == TaskType.REGRESSION:
-                raise NotImplementedError('Regression task validation not implemented yet.')
+                
+                for X, Y in tmpdataloader:
+                    # Get input and labels and move to target device memory
+                    X, Y = X.to(self.device), Y.to(self.device)
 
-        return validationLoss
+                    # Perform FORWARD PASS
+                    predVal = self.model(X)  # Evaluate model at input
+
+                    # Evaluate loss function to get loss value dictionary
+                    validationLossDict = self.lossFcn(predVal, Y)
+
+                    # Get loss value from dictionary
+                    validationLossVal += validationLossDict.get('lossValue') if isinstance(validationLossDict, dict) else validationLossDict
+
+                validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
+                print(f"\tValidation: regression average loss: {validationLossVal:>4f}\n")
+
+                return validationLossVal
     
     def trainAndValidate(self):
         """_summary_
