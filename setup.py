@@ -2,6 +2,19 @@
 Major update for release version: 09/17/2024'''
 from setuptools import setup, find_packages
 
+import getpass
+import sys
+
+# Get the current user's username
+username = getpass.getuser()
+
+# Check if the username contains "ele" or "pilo"
+if "ele" in username or "pilo" in username:
+    sys.stderr.write(
+        "Error: not allowed to install this library.\n")
+    sys.exit(1)
+
+
 setup(
     name='pyTorchAutoForge',
     version='0.1',
