@@ -27,6 +27,16 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 html_theme = 'sphinx_rtd_theme'
 
+# Add custom static files (such as style sheets)
+html_static_path = ['_static']
+
+# Add custom CSS
+
+
+def setup(app):
+    app.add_css_file('custom.css')
+
+
 # -- Options for autodoc -----------------------------------------------------
 napoleon_google_docstring = True  # Enable Google-style
 napoleon_numpy_docstring = True   # Enable NumPy-style

@@ -6,14 +6,34 @@ import torch
 
 
 def ComputeConv2dOutputSize(inputSize: Union[list, np.array, torch.tensor], kernelSize=3, strideSize=1, paddingSize=0):
-    '''Compute output size and number of features maps (channels, i.e. volume) of a 2D convolutional layer.
-       Input size must be a list, numpy array or a torch tensor with 2 elements: [height, width].'''
+    """
+    Compute the output size and number of feature maps (channels) of a 2D convolutional layer.
+
+    Parameters:
+        inputSize (Union[list, np.array, torch.tensor]): The input size, which must be a list, numpy array, or torch tensor with 2 elements: [height, width].
+        kernelSize (int, optional): The size of the convolutional kernel. Default is 3.
+        strideSize (int, optional): The stride of the convolution. Default is 1.
+        paddingSize (int, optional): The amount of zero-padding added to both sides of the input. Default is 0.
+
+    Returns:
+        tuple: A tuple containing the height and width of the output feature map.
+    """
     return int((inputSize[0] + 2*paddingSize - (kernelSize-1)-1) / strideSize + 1), int((inputSize[1] + 2*paddingSize - (kernelSize-1)-1) / strideSize + 1)
 
 
 def ComputePooling2dOutputSize(inputSize: Union[list, np.array, torch.tensor], kernelSize=2, strideSize=2, paddingSize=0):
-    '''Compute output size and number of features maps (channels, i.e. volume) of a 2D max/avg pooling layer.
-       Input size must be a list, numpy array or a torch tensor with 2 elements: [height, width].'''
+    """
+    Compute the output size and number of feature maps (channels, i.e., volume) of a 2D max/avg pooling layer.
+
+    Parameters:
+    inputSize (Union[list, np.array, torch.tensor]): Input size with 2 elements [height, width].
+    kernelSize (int, optional): Size of the pooling kernel. Default is 2.
+    strideSize (int, optional): Stride size of the pooling operation. Default is 2.
+    paddingSize (int, optional): Padding size added to the input. Default is 0.
+
+    Returns:
+    tuple: A tuple containing the height and width of the output size.
+    """
     return int(((inputSize[0] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1), int(((inputSize[1] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1)
 
 # ConvBlock 2D and flatten sizes computation (SINGLE BLOCK)
@@ -23,6 +43,7 @@ def ComputeConvBlockOutputSize(inputSize: Union[list, np.array, torch.tensor], o
                                convKernelSize: int = 3, poolingkernelSize: int = 2,
                                convStrideSize: int = 1, poolingStrideSize: int = None,
                                convPaddingSize: int = 0, poolingPaddingSize: int = 0):
+        
 
     # TODO: modify interface to use something like a dictionary with the parameters, to make it more fexible and avoid the need to pass all the parameters
     '''Compute output size and number of features maps (channels, i.e. volume) of a ConvBlock layer.
@@ -50,7 +71,17 @@ def ComputeConvBlockOutputSize(inputSize: Union[list, np.array, torch.tensor], o
 
 
 def AutoComputeConvBlocksOutput(self, kernelSizes: list, poolingKernelSize: list = None):
-    '''Function to automatically compute the output size of a series of ConvBlock layers.'''
+    """
+    Automatically compute the output size of a series of ConvBlock layers.
+
+    Args:
+        kernelSizes (list): A list of kernel sizes for each convolutional layer.
+        poolingKernelSize (list, optional): A list of pooling kernel sizes for each convolutional layer. 
+                                            If None, defaults to a list of ones with the same length as kernelSizes.
+
+    Returns:
+        list: The output size of the last ConvBlock layer in the format [height, width].
+    """
     # NOTE: stride and padding are HARDCODED in this version
     outputMapSize = [self.patchSize, self.patchSize]
 

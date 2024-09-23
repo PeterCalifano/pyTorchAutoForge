@@ -1,0 +1,11 @@
+/* Increase the width of the content area */
+.wy-nav-content {
+    max-width: 80%;
+    /* Set to your preferred width */
+}
+
+/* Optionally adjust the width of the side navigation */
+.wy-nav-side {
+    width: 200px;
+    /* Set a custom width for the side index */
+}
