@@ -44,15 +44,14 @@ class TaskType(Enum):
 class ModelTrainingManagerConfig():
     '''Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.'''
 
-    # DATA fields with default values
+    # REQUIRED fields
+    tasktype: TaskType # Task type for training and validation --> How to enforce the definition of this?
+
+    # FIELDS with DEFAULTS
     initial_lr: float = 1e-4
-    lr_scheduler: Any = None
+    lr_scheduler: Any = None 
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
-
-    # Define default optimizer as Adam
-    optimizer: Any = torch.optim.Adam
-
-    # Define default device
+    optimizer: Any = torch.optim.Adam # optimizer class
     device: str = GetDevice()  # Default device is GPU if available
 
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
@@ -152,7 +151,7 @@ class ModelTrainingManagerConfig():
 
 # %% ModelTrainingManager class - 24-07-2024
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    def __init__(self, model: Union[nn.Module], lossFcn: nn.Module, config: Union[ModelTrainingManagerConfig, dict, str], optimizer: Union[optim.Optimizer, int, None] = None) -> None:
+    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module], config: Union[ModelTrainingManagerConfig, dict, str], optimizer: Union[optim.Optimizer, int, None] = None, dataLoaderIndex: Optional[DataloaderIndex] = None) -> None:
         """
         Initializes the ModelTrainingManager class.
 
@@ -165,6 +164,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         Raises:
         ValueError: If the optimizer is not an instance of torch.optim.Optimizer or an integer representing the optimizer type, or if the optimizer ID is not recognized.
         """
+
+        # Initialize ModelTrainingManager-specific attributes
+        self.model = model
+        self.lossFcn = lossFcn
+        self.trainingDataloader = None
+        self.validationDataloader = None
 
         # Load configuration parameters from config
         if isinstance(config, str):
@@ -179,9 +184,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
             super().__init__(**config.getConfigDict())  # Call init of parent class for shallow copy
 
-        # Define ModelTrainingManager-specific attributes
-        self.model = model
-        self.lossFcn = lossFcn
+        # Initialize dataloaders if provided
+        if dataLoaderIndex is not None:
+            self.setDataloaders(dataLoaderIndex)
 
         # Handle override of optimizer inherited from ModelTrainingManagerConfig
         if optimizer is not None:
@@ -201,15 +206,18 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 raise ValueError(
                     'Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
 
+    def setDataloaders(self, dataloaderIndex: DataloaderIndex) -> None:
+        """
+        Sets the training and validation dataloaders using the provided DataloaderIndex.
 
-    def LoadDatasets(self, dataloaderIndex: dict):
-        '''Method to load datasets from dataloaderIndex and use them depending on the specified criterion (e.g. "order", "merge)'''
-        # TODO: Load all datasets from dataloaderIndex and use them depending on the specified criterion (e.g. "order", "merge)
-        
-        raise NotImplementedError('Method not implemented yet.')
+        Args:
+            dataloaderIndex (DataloaderIndex): An instance of DataloaderIndex that provides
+                                               the training and validation dataloaders.
+        """
+        self.trainingDataloader = dataloaderIndex.getTrainLoader()
+        self.validationDataloader = dataloaderIndex.getValidationLoader()
 
-    def GetTracedModel(self):
-        
+    def getTracedModel(self):
         raise NotImplementedError('Method not implemented yet.')
 
     def trainModel():

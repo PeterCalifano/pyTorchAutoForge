@@ -1,8 +1,8 @@
 # Import modules
 import torch
 import pyTorchAutoForge
-
-from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManagerConfig, ModelTrainingManager
+from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManagerConfig, ModelTrainingManager, TaskType
+from torchvision import models
 
 def main():
     print('\n ------------------ TEST: ModelTrainingManagerConfig and ModelTrainingManager instantiation ------------------')
@@ -19,15 +19,26 @@ def main():
     device = pyTorchAutoForge.GetDevice()
     exportTracedModel = True
 
+
+    model = models.resnet18(weights=None).to(device)
+
     # Define model training manager config  (dataclass init)
     initial_lr = 1E-4
+    lossFcn = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=True)
 
-    trainerConfig = ModelTrainingManagerConfig(initial_lr=initial_lr)
-    print(trainerConfig)
+    trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION, initial_lr=initial_lr)
+    print("\nModelTrainingManagerConfig instance:", trainerConfig)
 
-    # Define model training manager
-    modelTrainingManager = ModelTrainingManager(trainerConfig)
+    print("\nNames of all attributes in ModelTrainingManagerConfig instance:", ModelTrainingManagerConfig.getConfigParamsNames())
 
+    print("\nDict of ModelTrainingManagerConfig instance:",
+          trainerConfig.getConfigDict())
+
+    # Define model training manager instance
+    trainer = ModelTrainingManager(
+        model=model, lossFcn=lossFcn, config=trainerConfig)
+    print("\nModelTrainingManager instance:", trainer)
 
 
 if __name__ == '__main__':
