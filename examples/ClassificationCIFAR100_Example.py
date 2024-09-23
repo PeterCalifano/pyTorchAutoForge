@@ -54,15 +54,15 @@ def main():
         validation_dataset, batch_size=64, shuffle=False)
 
     # %% Define loss function and optimizer
-    initial_lr = 1E-4
-
+    initial_lr = 1E-3
+    numOfEpochs = 50
     lossFcn = nn.CrossEntropyLoss()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=True)
 
     # Define model training manager config  (dataclass init)
     trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
-        initial_lr=initial_lr, lr_scheduler=None, optimizer=optimizer)
+        initial_lr=initial_lr, lr_scheduler=None, optimizer=optimizer, num_of_epochs=numOfEpochs)
     print("\nModelTrainingManagerConfig instance:", trainerConfig)
 
     print("\nDict of ModelTrainingManagerConfig instance:", trainerConfig.getConfigDict())

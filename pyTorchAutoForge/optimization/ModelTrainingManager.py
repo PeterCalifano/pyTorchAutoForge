@@ -420,8 +420,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
 
                 if self.mlflow_logging:
-                    mlflow.log_metric('train_loss', self.currentTrainingLoss)
-                    mlflow.log_metric('validation_loss', self.currentValidationLoss)
+                    mlflow.log_metric('train_loss', self.currentTrainingLoss, step=self.currentEpoch)
+                    mlflow.log_metric('validation_loss', self.currentValidationLoss, step=self.currentEpoch)
 
                 # "Early stopping" strategy implementation
                 if self.checkForEarlyStop(noNewBestCounter):
