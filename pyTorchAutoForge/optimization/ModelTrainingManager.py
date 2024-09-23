@@ -40,7 +40,7 @@ class TaskType(Enum):
 # 3) Main training logbook to store all data to be used for model selection and hyperparameter tuning, this should be "per project"
 # 4) Training mode: k-fold cross validation leveraging scikit-learn
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class ModelTrainingManagerConfig():
     '''Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.'''
 
@@ -106,7 +106,7 @@ class ModelTrainingManagerConfig():
         # Call load_from_dict() method
         return cls.load_from_dict(configDict)
 
-    @classmethod
+    @classmethod # Why did I defined this class instead of using the __init__ method for dataclasses?
     def load_from_dict(cls, configDict: dict) -> 'ModelTrainingManagerConfig':
         """
         Load configuration parameters from a dictionary and return an instance of the class. If attribute is not present, default/already assigned value is used unless required.
@@ -143,10 +143,10 @@ class ModelTrainingManagerConfig():
         # Return instance of class with attributes defined from dictionary
         return cls(**initArgs)
 
-    @staticmethod
-    def getConfigParamsNames(cls) -> list:
+    @classmethod
+    def getConfigParamsNames(self) -> list:
         '''Method to return the names of all parameters in the configuration class'''
-        return [f.name for f in fields(cls)]
+        return [f.name for f in fields(self)]
     
 
 
