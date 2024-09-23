@@ -26,10 +26,17 @@ from enum import Enum
 import torch.optim as optim
 
 
+class TaskType(Enum):
+    '''Enum class to define task types for training and validation'''
+    CLASSIFICATION = 'classification'
+    REGRESSION = 'regression'
+    CUSTOM = 'custom'
+
+
 # %% Training and validation manager class - 22-06-2024 (WIP)
 # TODO: Features to include:
 # 1) Multi-process/multi-threading support for training and validation of multiple models in parallel
-# 2) Logging of all relevat options and results to file (either csv or text from std output)
+# 2) Logging of all relevat config and results to file (either csv or text from std output)
 # 3) Main training logbook to store all data to be used for model selection and hyperparameter tuning, this should be "per project"
 # 4) Training mode: k-fold cross validation leveraging scikit-learn
 
@@ -45,11 +52,31 @@ class ModelTrainingManagerConfig():
     # Define default optimizer as Adam
     optimizer: Any = torch.optim.Adam
 
+    # Define default device
+    device: str = GetDevice()  # Default device is GPU if available
+
+    def __copy__(self) -> 'ModelTrainingManagerConfig':
+        """
+        Create a shallow copy of the ModelTrainingManagerConfig instance.
+
+        Returns:
+            ModelTrainingManagerConfig: A new instance of ModelTrainingManagerConfig with the same configuration.
+        """
+        return ModelTrainingManagerConfig(**self.getConfigDict())
+
     # DEVNOTE: dataclass generates __init__() automatically
     # Same goes for __repr()__ for printing and __eq()__ for equality check methods
 
     def getConfigDict(self) -> dict:
-        '''Method to return the dataclass as dictionary'''
+        """
+        Returns the configuration of the model training manager as a dictionary.
+
+        This method converts the instance attributes of the model training manager
+        into a dictionary format using the `asdict` function.
+
+        Returns:
+            dict: A dictionary containing the attributes of the model training manager.
+        """
         return asdict(self)
 
     # def display(self) -> None:
@@ -61,6 +88,10 @@ class ModelTrainingManagerConfig():
         '''Method to load configuration parameters from a yaml file containing configuration dictionary'''
 
         if isinstance(yamlFile, str):
+            # Check if file exists
+            if not os.path.isfile(yamlFile):
+                raise FileNotFoundError(f"File not found: {yamlFile}")
+            
             with open(yamlFile, 'r') as file:
 
                 # TODO: VALIDATE SCHEMA
@@ -70,7 +101,6 @@ class ModelTrainingManagerConfig():
         else:
 
             # TODO: VALIDATE SCHEMA
-
             configDict = yaml.safe_load(yamlFile)
 
         # Call load_from_dict() method
@@ -78,7 +108,18 @@ class ModelTrainingManagerConfig():
 
     @classmethod
     def load_from_dict(cls, configDict: dict) -> 'ModelTrainingManagerConfig':
-        '''Method to load configuration parameters from a dictionary'''
+        """
+        Load configuration parameters from a dictionary and return an instance of the class. If attribute is not present, default/already assigned value is used unless required.
+
+        Args:
+            configDict (dict): A dictionary containing configuration parameters.
+
+        Returns:
+            ModelTrainingManagerConfig: An instance of the class with attributes defined from the dictionary.
+
+        Raises:
+            ValueError: If the configuration dictionary is missing any required fields.
+        """
 
         # Get all field names from the class
         fieldNames = {f.name for f in fields(cls)}
@@ -106,72 +147,83 @@ class ModelTrainingManagerConfig():
     def getConfigParamsNames(cls) -> list:
         '''Method to return the names of all parameters in the configuration class'''
         return [f.name for f in fields(cls)]
+    
+
 
 # %% ModelTrainingManager class - 24-07-2024
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    '''Class to manage training and validation of PyTorch models using specified datasets and loss functions.'''
+    def __init__(self, model: Union[nn.Module], lossFcn: nn.Module, config: Union[ModelTrainingManagerConfig, dict, str], optimizer: Union[optim.Optimizer, int, None] = None) -> None:
+        """
+        Initializes the ModelTrainingManager class.
 
-    def __init__(self, model: nn.Module, lossFcn: nn.Module, options: Union[ModelTrainingManagerConfig, dict, str],
-                 optimizer: Union[optim.Optimizer, int, None] = None) -> None:
-        '''Constructor for TrainAndValidationManager class. Initializes model, loss function, optimizer and training/validation options.'''
+        Parameters:
+        model (nn.Module): The neural network model to be trained.
+        lossFcn (nn.Module): The loss function to be used during training.
+        config (Union[ModelTrainingManagerConfig, dict, str]): Configuration config for training. Can be a ModelTrainingManagerConfig instance, a dictionary, or a path to a YAML file.
+        optimizer (Union[optim.Optimizer, int, None], optional): The optimizer to be used for training. Can be an instance of torch.optim.Optimizer, an integer (0 for SGD, 1 for Adam), or None. Defaults to None.
 
-        if isinstance(options, str):
+        Raises:
+        ValueError: If the optimizer is not an instance of torch.optim.Optimizer or an integer representing the optimizer type, or if the optimizer ID is not recognized.
+        """
+
+        # Load configuration parameters from config
+        if isinstance(config, str):
             # Initialize ModelTrainingManagerConfig base instance from yaml file
-            super().load_from_yaml(options)
+            super().load_from_yaml(config)
 
-        elif isinstance(options, dict):
+        elif isinstance(config, dict):
             # Initialize ModelTrainingManagerConfig base instance from dictionary
-            super().load_from_dict(options)
+            super().load_from_dict(config)
 
-        elif isinstance(options, ModelTrainingManagerConfig):
+        elif isinstance(config, ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
-            raise NotImplementedError(
-                'Construction from ModelTrainingManagerConfig instance not supported yet.')
+            super().__copy__(config)  # Call init of parent class for shallow copy
 
-        # Define ModelTrainingManager attributes
+
+        # Define ModelTrainingManager-specific attributes
         self.model = model
         self.lossFcn = lossFcn
 
-        # Optimizer --> # TODO: check how to modify learning rate and momentum while training
-        if isinstance(optimizer, optim.Optimizer):
-            self.optimizer = optimizer
-
-        elif isinstance(optimizer, int):
-            if optimizer == 0:
-                self.optimizer = torch.optim.SGD(
-                    self.model.parameters(), lr=self.initial_lr, momentum=self.momentumValue)
-
-            elif optimizer == 1:
-                self.optimizer = torch.optim.Adam(
-                    self.model.parameters(), lr=self.learnRate)
+        # Handle override of optimizer inherited from ModelTrainingManagerConfig
+        if optimizer is not None:
+            if isinstance(optimizer, optim.Optimizer):
+                self.optimizer = optimizer
+            elif isinstance(optimizer, int):
+                if optimizer == 0:
+                    self.optimizer = torch.optim.SGD(
+                        self.model.parameters(), lr=self.initial_lr, momentum=self.momentumValue)
+                elif optimizer == 1:
+                    self.optimizer = torch.optim.Adam(
+                        self.model.parameters(), lr=self.learnRate)
+                else:
+                    raise ValueError(
+                        'Optimizer ID not recognized. Use either 0 for SGD or 1 for Adam.')
             else:
                 raise ValueError(
-                    'Optimizer ID not recognized. Use either 0 for SGD or 1 for Adam.')
+                    'Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
 
-        elif optimizer is None:
-            self.optimizer = optimizer(
-                self.model.parameters(), lr=self.initial_lr)
-
-        else:
-            raise ValueError(
-                'Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
-
-        # Define training and validation options
 
     def LoadDatasets(self, dataloaderIndex: dict):
         '''Method to load datasets from dataloaderIndex and use them depending on the specified criterion (e.g. "order", "merge)'''
         # TODO: Load all datasets from dataloaderIndex and use them depending on the specified criterion (e.g. "order", "merge)
-        pass
+        
+        raise NotImplementedError('Method not implemented yet.')
 
     def GetTracedModel(self):
-        pass
+        
+        raise NotImplementedError('Method not implemented yet.')
 
+    def trainModel():
+        '''Method to train the model using the specified datasets and loss function'''
+        raise NotImplementedError('Method not implemented yet.')
+    
+    def validateModel():
+        '''Method to validate the model using the specified datasets and loss function'''
+        raise NotImplementedError('Method not implemented yet.')
 
-class TaskType(Enum):
-    '''Enum class to define task types for training and validation'''
-    CLASSIFICATION = 'classification'
-    REGRESSION = 'regression'
-    CUSTOM = 'custom'
+    def trainAndValidate():
+        '''Method to train and validate the model using the specified datasets and loss function'''
+        raise NotImplementedError('Method not implemented yet.')
 
 
 # LEGACY FUNCTIONS - 18/09/2024
@@ -249,8 +301,6 @@ def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
 
 # %% Function to validate model using dataset and specified loss function - 04-05-2024
 # Updated by PC 04-06-2024
-
-
 def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDevice(), taskType: str = 'classification') -> Union[float, dict]:
     '''Function to validate model using dataset and specified loss function'''
     # Get size of dataset (How many samples are in the dataset)
@@ -389,15 +439,15 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
 
 # %% TRAINING and VALIDATION template function - 04-06-2024
 
-def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lossFcn: nn.Module, optimizer, options: dict = {}):
+def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lossFcn: nn.Module, optimizer, config: dict = {}):
     # NOTE: is the default dictionary considered as "single" object or does python perform a merge of the fields?
 
-    # TODO: For merging of options: https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
-    # if options is None:
-    #    options = {}
+    # TODO: For merging of config: https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
+    # if config is None:
+    #    config = {}
     #
-    # Merge user-provided options with default options
-    # combined_options = {**default_options, **options}
+    # Merge user-provided config with default config
+    # combined_options = {**default_options, **config}
     # Now use combined_options in the function
     # taskType = combined_options['taskType']
     # device = combined_options['device']
@@ -410,38 +460,38 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
     # loss_log_name = combined_options['lossLogName']
     # epoch_start = combined_options['epochStart']
 
-    # Setup options from input dictionary
+    # Setup config from input dictionary
     # NOTE: Classification is not developed (July, 2024)
-    taskType = options.get('taskType', 'regression')
-    device = options.get('device', GetDevice())
-    numOfEpochs = options.get('epochs', 10)
-    enableSave = options.get('saveCheckpoints', True)
-    checkpointDir = options.get('checkpointsOutDir', './checkpoints')
-    modelName = options.get('modelName', 'trainedModel')
-    lossLogName = options.get('lossLogName', 'Loss_value')
-    epochStart = options.get('epochStart', 0)
+    taskType = config.get('taskType', 'regression')
+    device = config.get('device', GetDevice())
+    numOfEpochs = config.get('epochs', 10)
+    enableSave = config.get('saveCheckpoints', True)
+    checkpointDir = config.get('checkpointsOutDir', './checkpoints')
+    modelName = config.get('modelName', 'trainedModel')
+    lossLogName = config.get('lossLogName', 'Loss_value')
+    epochStart = config.get('epochStart', 0)
 
-    swa_scheduler = options.get('swa_scheduler', None)
-    swa_model = options.get('swa_model', None)
-    swa_start_epoch = options.get('swa_start_epoch', 15)
+    swa_scheduler = config.get('swa_scheduler', None)
+    swa_model = config.get('swa_model', None)
+    swa_start_epoch = config.get('swa_start_epoch', 15)
 
     child_run = None
     child_run_name = None
     parent_run = mlflow.active_run()
     parent_run_name = parent_run.info.run_name
 
-    lr_scheduler = options.get('lr_scheduler', None)
+    lr_scheduler = config.get('lr_scheduler', None)
     # Default early stopping for regression: "minimize" direction
-    # early_stopper = options.get('early_stopper', early_stopping=EarlyStopping(monitor="lossValue", patience=5, verbose=True, mode="min"))
-    early_stopper = options.get('early_stopper', None)
+    # early_stopper = config.get('early_stopper', early_stopping=EarlyStopping(monitor="lossValue", patience=5, verbose=True, mode="min"))
+    early_stopper = config.get('early_stopper', None)
 
     # Get Torch dataloaders
     trainingDataset = dataloaderIndex.getTrainLoader()
     validationDataset = dataloaderIndex.getValidationLoader()
 
     # Configure Tensorboard
-    # if 'logDirectory' in options.keys():
-    #    logDirectory = options['logDirectory']
+    # if 'logDirectory' in config.keys():
+    #    logDirectory = config['logDirectory']
     # else:
     #    currentTime = datetime.datetime.now()
     #    formattedTimestamp = currentTime.strftime('%d-%m-%Y_%H-%M') # Format time stamp as day, month, year, hour and minute
@@ -452,11 +502,11 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
     # tensorBoardWriter = ConfigTensorboardSession(logDirectory, portNum=tensorBoardPortNum)
 
     # If training is being restarted, attempt to load model
-    if options['loadCheckpoint'] == True:
+    if config['loadCheckpoint'] == True:
         raise NotImplementedError(
             'Training restart from checkpoint REMOVED. Not updated with mlflow yet.')
         model = LoadModelAtCheckpoint(
-            model, options['checkpointsInDir'], modelName, epochStart)
+            model, config['checkpointsInDir'], modelName, epochStart)
 
     # Move model to device if possible (check memory)
     try:
@@ -620,7 +670,7 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
             #    mlflow.end_run(status='KILLED')
             #    print('Early stopping triggered at epoch: {epochID}'.format(epochID=epochID))
             #    break
-            # earlyStopping(validationLossHistory[epochID], model, bestModelData, options)
+            # earlyStopping(validationLossHistory[epochID], model, bestModelData, config)
     if swa_model != None and epochID >= swa_start_epoch:
         # End nested child run
         mlflow.end_run(status='FINISHED')

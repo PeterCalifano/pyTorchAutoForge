@@ -10,12 +10,18 @@ from torchvision import datasets  # Import vision default datasets from torchvis
 from torchvision import transforms
 import mlflow
 
-from pyTorchAutoForge.optimization import ModelTrainingManager
+from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConfig
 from pyTorchAutoForge.datasets import DataloaderIndex
 import pyTorchAutoForge.optimization as optim
 import torchvision.models as models
 
+from pyTorchAutoForge.utils import GetDevice
+
+
 def main():
+
+    # NOTE: seems that mlflow is not using server location
+
     # Set mlflow experiment
     mlflow.set_experiment('ImageClassificationCIFAR100_Example')
 
@@ -24,11 +30,14 @@ def main():
     model = models.resnet18(weights=None)
     print(model)
 
+    device = GetDevice()
+
     # Therefore, let's modify the last layer! (Named fc)
     numInputFeatures = model.fc.in_features  # Same as what the model uses
     numOutClasses = 100  # Selected by user
-    model.fc = nn.Linear(in_features=numInputFeatures,
-                         out_features=numOutClasses, bias=True)  # 100 classes in our case
+    model.fc = (nn.Linear(in_features=numInputFeatures,
+                          out_features=numOutClasses, bias=True))  # 100 classes in our case
+    model.to(device)
     print(model)  # Check last layer now
 
     # %% Load CIFAR100 dataset from torchvision
@@ -52,9 +61,19 @@ def main():
     lossFcn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=True)
 
-    #trainerConfig = ModelTrainingManager.ModelTrainingManagerConfig(initial_lr=initial_lr, lr_scheduler=None)
+    # Define model training manager config  (dataclass init)
+    trainerConfig = ModelTrainingManagerConfig(
+        initial_lr=initial_lr, lr_scheduler=None, optimizer=optimizer)
+    print("ModelTrainingManagerConfig instance:", trainerConfig)
 
+    # Define model training manager instance
+    trainer = ModelTrainingManager(trainerConfig)
+    print("ModelTrainingManager instance:", trainer)
+
+    # Define dataloader index for training
     dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
+
+    exit(0)
 
     # Perform training and validation of model
     optim.TrainAndValidateModel(dataloaderIndex, model, lossFcn, optimizer)
