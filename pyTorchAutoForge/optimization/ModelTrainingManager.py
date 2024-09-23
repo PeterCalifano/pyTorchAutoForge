@@ -52,7 +52,8 @@ class ModelTrainingManagerConfig():
     # Optimization strategy
     num_of_epochs: int = 10  # Number of epochs for training
     keep_best: bool = True  # Keep best model during training
-    
+    enable_early_stop: bool = False  # Enable early stopping
+
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
     eval_example: bool = False  # Evaluate example input during training

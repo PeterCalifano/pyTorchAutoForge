@@ -51,7 +51,8 @@ trainerSettings:
 
     keep_best: True # DEFAULT: True (keep and save best model if changed wrt previous best)
     eval_example: False # DEFAULT: False (evaluate example input/output after each epoch)
-
+    
+    enable_early_stop: False # DEFAULT: True
     early_stopping:
       patience: 5
       min_delta: 0.001
