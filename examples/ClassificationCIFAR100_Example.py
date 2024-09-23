@@ -59,6 +59,7 @@ def main():
     initial_lr = 1E-4
 
     lossFcn = nn.CrossEntropyLoss()
+    
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=True)
 
     # Define model training manager config  (dataclass init)
@@ -74,15 +75,13 @@ def main():
 
     # Define dataloader index for training
     dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
+    trainer.setDataloaders(dataloaderIndex) # Set dataloaders for training and validation
 
     # Perform training and validation of model
-    optim.TrainAndValidateModel(dataloaderIndex, model, lossFcn, optimizer)
+    #optim.TrainAndValidateModel(dataloaderIndex, model, lossFcn, optimizer)
+    trainer.trainAndValidate()
 
     # TODO: Update customTorchTool to support training of models for classification
-
-    with mlflow.start_run() as mlflow_run:
-        print('Start run: {name}'.format(name=mlflow_run.info.run_name))
-        mlflow.end_run()
 
 
 if __name__ == '__main__':

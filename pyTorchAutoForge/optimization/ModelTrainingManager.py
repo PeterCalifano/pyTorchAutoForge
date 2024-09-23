@@ -16,6 +16,7 @@ from dataclasses import dataclass, asdict, fields, Field, MISSING
 from pyTorchAutoForge.datasets import DataloaderIndex
 from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
 from pyTorchAutoForge.api.torch import SaveTorchModel
+from pyTorchAutoForge.optimization import CustomLossFcn
 
 # import datetime
 import yaml
@@ -48,13 +49,22 @@ class ModelTrainingManagerConfig():
     tasktype: TaskType # Task type for training and validation --> How to enforce the definition of this?
 
     # FIELDS with DEFAULTS
-    initial_lr: float = 1e-4
+    # Optimization strategy
+    num_of_epochs: int = 10  # Number of epochs for training
+    keep_best: bool = True  # Keep best model during training
+    
+    # Logging
+    mlflow_logging: bool = True  # Enable MLFlow logging
+
+    # Optimization parameters
     lr_scheduler: Any = None 
+    initial_lr: float = 1e-4
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
     optimizer: Any = torch.optim.Adam # optimizer class
+    
+    # Hardware settings
     device: str = GetDevice()  # Default device is GPU if available
-    mlflow_logging: bool = True  # Enable MLFlow logging
-    num_of_epochs: int = 10  # Number of epochs for training
+
 
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
@@ -153,13 +163,13 @@ class ModelTrainingManagerConfig():
 
 # %% ModelTrainingManager class - 24-07-2024
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module], config: Union[ModelTrainingManagerConfig, dict, str], optimizer: Union[optim.Optimizer, int, None] = None, dataLoaderIndex: Optional[DataloaderIndex] = None) -> None:
+    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn], config: Union[ModelTrainingManagerConfig, dict, str], optimizer: Union[optim.Optimizer, int, None] = None, dataLoaderIndex: Optional[DataloaderIndex] = None) -> None:
         """
         Initializes the ModelTrainingManager class.
 
         Parameters:
         model (nn.Module): The neural network model to be trained.
-        lossFcn (nn.Module): The loss function to be used during training.
+        lossFcn (Union[nn.Module, CustomLossFcn]): The loss function to be used during training.
         config (Union[ModelTrainingManagerConfig, dict, str]): Configuration config for training. Can be a ModelTrainingManagerConfig instance, a dictionary, or a path to a YAML file.
         optimizer (Union[optim.Optimizer, int, None], optional): The optimizer to be used for training. Can be an instance of torch.optim.Optimizer, an integer (0 for SGD, 1 for Adam), or None. Defaults to None.
 
@@ -295,9 +305,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         
         self.model.eval()
         validationLoss = 0.0  # Accumulation variables
-        batchMaxLoss = 0
-
-        validationData = {}  # Dictionary to store validation data
+        # batchMaxLoss = 0
+        # validationData = {}  # Dictionary to store validation data
 
         # Backup the original batch size (TODO: TBC if it is useful)
         original_dataloader = self.validationDataloader
@@ -314,7 +323,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                 num_workers=0
                                 )
         
-        lossTerms = {}
         numberOfBatches = len(tmpdataloader)
         
         with torch.no_grad():
@@ -345,7 +353,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         return validationLoss
     
     def trainAndValidate(self):
-        '''Method to train and validate the model using the specified datasets and loss function'''
+        """_summary_
+
+        Raises:
+            NotImplementedError: _description_
+        """
+        self.startMlflowRun()
 
         for epoch_num in range(self.num_of_epochs):
 
@@ -367,9 +380,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 mlflow.log_metric('validation_loss', self.currentValidationLoss)
 
             # Execute post-epoch operations
-            if self.eval_example:
-                #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
-                raise NotImplementedError('Example evaluation feature not implemented yet.')
+            self.updateLerningRate()  # Update learning rate if scheduler is provided
+            self.evalExample()        # Evaluate example if enabled
 
             # "Keep best" strategy implementation
             if self.keep_best:
@@ -394,7 +406,24 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.mlflow_logging:
             mlflow.end_run(status='FINISHED')
 
-                
+    def evalExample(self):
+        if self.evalExample:
+            #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
+            #if self.mlflow_logging: # TBC, not sure it is useful
+            #    # Log example input to mlflow
+            #    mlflow.log_???('example_input', exampleInput)
+
+            raise NotImplementedError('Example evaluation feature not implemented yet.')
+
+    def updateLerningRate(self):
+        if self.lr_scheduler is not None:
+            # Perform step of learning rate scheduler if provided
+            self.lr_scheduler.step()
+            print('\nLearning rate changed: ${prev_lr} --> ${current_lr}\n'.format(prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()) )
+
+            # Update current learning rate
+            self.current_lr = self.lr_scheduler.get_last_lr()
+
     def checkForEarlyStop(self, counter: int) -> bool:
         """
         Checks if the early stopping criteria have been met.
@@ -437,8 +466,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.currentMlflowRun = mlflow.active_run()
             print(('Started new mlflow run %{active_run}.').format(
                 active_run=self.currentMlflowRun.info.run_name))
-        else:
-            Warning('MLFlow logging is disabled. No run started.')
+            
+            # Log configuration parameters
+            ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames().sort()        
+            mlflow.log_params({key: getattr(self, key) for key in ModelTrainerConfigParamsNames})
+        
+        #else:
+        #    Warning('MLFlow logging is disabled. No run started.')
 
         
 
