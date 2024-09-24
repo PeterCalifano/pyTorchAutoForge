@@ -58,7 +58,8 @@ def main():
     numOfEpochs = 50
     lossFcn = nn.CrossEntropyLoss()
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=True)
+    fused = True if device is "cuda" else False
+    optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=fused)
 
     # Define model training manager config  (dataclass init)
     trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
@@ -71,6 +72,7 @@ def main():
     trainer = ModelTrainingManager(model=model, lossFcn=lossFcn, config=trainerConfig)
     print("\nModelTrainingManager instance:", trainer)
 
+    print(trainer.model == model)
     # Define dataloader index for training
     dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
     trainer.setDataloaders(dataloaderIndex) # Set dataloaders for training and validation
