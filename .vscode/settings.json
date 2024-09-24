@@ -1,4 +1,6 @@
 {
     "python.terminal.executeInFileDir": true,
-    "python.analysis.typeCheckingMode": "off"
+    "python.analysis.typeCheckingMode": "off",
+    "python.testing.pytestEnabled": false,
+    "python.analysis.diagnosticMode": "workspace",
 }
