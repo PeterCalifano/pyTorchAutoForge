@@ -435,10 +435,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
                 self.evalExample()        # Evaluate example if enabled
 
-                # Update stats if new best model found (independently of keep_best flag)
-                if self.currentValidationLoss is None:
+                if self.currentValidationLoss is None: # At epoch 0, set initial validation loss
                     self.currentValidationLoss = tmpValidLoss
                 
+                # Update stats if new best model found (independently of keep_best flag)
                 if tmpValidLoss <= self.currentValidationLoss:
                     self.bestEpoch = epoch_num
                     self.bestValidationLoss = tmpValidLoss
@@ -446,12 +446,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 else:
                     noNewBestCounter += 1
 
-                # "Keep best" strategy implementation
+                # "Keep best" strategy implementation (trainer will output the best overall model at cycle end)
                 if self.keep_best:
                     if tmpValidLoss <= self.currentValidationLoss:
-                        self.currentTrainingLoss = tmpTrainLoss
-                        self.currentValidationLoss = tmpValidLoss
                         self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
+                
+                # Update current training and validation loss values
+                self.currentTrainingLoss = tmpTrainLoss
+                self.currentValidationLoss = tmpValidLoss
 
                 if self.mlflow_logging:
                     mlflow.log_metric('train_loss', self.currentTrainingLoss, step=self.currentEpoch)

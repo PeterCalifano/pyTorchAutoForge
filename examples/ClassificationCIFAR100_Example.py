@@ -55,7 +55,7 @@ def main():
 
     # %% Define loss function and optimizer
     initial_lr = 1E-3
-    numOfEpochs = 15
+    numOfEpochs = 5
     lossFcn = nn.CrossEntropyLoss()
 
     fused = True if device == "cuda:0" else False
@@ -79,17 +79,16 @@ def main():
     trainer.setDataloaders(dataloaderIndex) # Set dataloaders for training and validation
 
     # Perform training and validation of model
+    trainer.trainAndValidate()
 
     # CHECK: versus TrainAndValidateModel
-    model2 = copy.deepcopy(model).to(device)
-    optimizer2 = torch.optim.Adam(model2.parameters(), lr=initial_lr, fused=fused)
+    #model2 = copy.deepcopy(model).to(device)
+    #optimizer2 = torch.optim.Adam(model2.parameters(), lr=initial_lr, fused=fused)
+    #for epoch in range(numOfEpochs):
+    #    print(f"Epoch TEST: {epoch}/{numOfEpochs-1}")
+    #    TrainModel(dataloaderIndex.getTrainLoader(), model2, lossFcn, optimizer2, 0)
+    #    ValidateModel(dataloaderIndex.getValidationLoader(), model2, lossFcn)
 
-    for epoch in range(numOfEpochs):
-        print(f"Epoch TEST: {epoch}/{numOfEpochs-1}")
-        TrainModel(dataloaderIndex.getTrainLoader(), model2, lossFcn, optimizer2, 0)
-        ValidateModel(dataloaderIndex.getValidationLoader(), model2, lossFcn)
-
-    trainer.trainAndValidate()
 
     for param1, param2 in zip(model.parameters(), trainer.model.parameters()):
         if not(torch.equal(param1, param2)) or not(param1 is param2):
