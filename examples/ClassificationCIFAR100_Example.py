@@ -25,7 +25,7 @@ def main():
 
     # Get model backbone from torchvision
     # All models in torchvision.models for classification are trained on ImageNet, thus have 1000 classes as output
-    model = models.resnet18(weights=False)  # Load pretrained weights
+    model = models.resnet101(weights=False)  # Load pretrained weights
     print(model)
 
     device = GetDevice()
@@ -55,7 +55,7 @@ def main():
 
     # %% Define loss function and optimizer
     initial_lr = 1E-4
-    numOfEpochs = 20
+    numOfEpochs = 100
     lossFcn = nn.CrossEntropyLoss()
 
     fused = True if device == "cuda:0" else False
@@ -71,7 +71,7 @@ def main():
     print("\nDict of ModelTrainingManagerConfig instance:", trainerConfig.getConfigDict())
     
     # Define model training manager instance
-    trainer = ModelTrainingManager(model=model, lossFcn=lossFcn, config=trainerConfig, optimizer=torch.optim.Adam)
+    trainer = ModelTrainingManager(model=model, lossFcn=lossFcn, config=trainerConfig)
     print("\nModelTrainingManager instance:", trainer)
 
     # Define dataloader index for training

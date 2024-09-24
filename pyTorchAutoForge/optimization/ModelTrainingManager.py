@@ -319,6 +319,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # TODO: implement management of SWA model
             #if swa_model is not None and epochID >= swa_start_epoch:
+        
 
         # DEBUG: 
         #print(f"\n\nDEBUG: Model parameters before and after optimizer step:")
