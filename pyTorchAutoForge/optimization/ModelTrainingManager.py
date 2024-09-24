@@ -215,13 +215,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if optimizer is not None:
             if isinstance(optimizer, optim.Optimizer):
                 self.reinstantiate_optimizer()
-            elif isinstance(optimizer, int) or issubclass(optimizer, torch.optim.Optimizer):
+            elif isinstance(optimizer, int) or issubclass(optimizer, optim.Optimizer):
                 self.define_optimizer(optimizer)
             else:
-                raise ValueError(
-                    'Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
+                raise ValueError('Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
         else:
-            if isinstance(self.optimizer, torch.optim.Optimizer):
+            if isinstance(self.optimizer, optim.Optimizer):
                 # Redefine optimizer class as workaround for weird python behavior (no update applied to model)
                 self.reinstantiate_optimizer()
             else: 
@@ -240,16 +239,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         Raises:
         ValueError: If the optimizer ID is not recognized (i.e., not 0 or 1).
         """
-        if optimizer == 0 or optimizer.__class__ == torch.optim.SGD:
+        if optimizer == 0 or optimizer == torch.optim.SGD:
             self.optimizer = torch.optim.SGD(
                 self.model.parameters(), lr=self.initial_lr, momentum=self.momentumValue)
-        elif optimizer == 1 or optimizer.__class__ == torch.optim.Adam:
+        elif optimizer == 1 or optimizer == torch.optim.Adam:
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.initial_lr)
-        else:
-            raise ValueError(
-                'Optimizer not recognized. Use either 0 for SGD or 1 for Adam. Else, specify a torch.optim.Optimizer class, e.g., torch.optim.Adam.')                    
-
+            
     def reinstantiate_optimizer(self):
         """
         Reinstantiates the optimizer with the same hyperparameters but with the current model parameters.

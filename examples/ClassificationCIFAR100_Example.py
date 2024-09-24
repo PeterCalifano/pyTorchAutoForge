@@ -71,7 +71,7 @@ def main():
     print("\nDict of ModelTrainingManagerConfig instance:", trainerConfig.getConfigDict())
     
     # Define model training manager instance
-    trainer = ModelTrainingManager(model=model, lossFcn=lossFcn, config=trainerConfig, optimizer=0)
+    trainer = ModelTrainingManager(model=model, lossFcn=lossFcn, config=trainerConfig, optimizer=torch.optim.Adam)
     print("\nModelTrainingManager instance:", trainer)
 
     # Define dataloader index for training
