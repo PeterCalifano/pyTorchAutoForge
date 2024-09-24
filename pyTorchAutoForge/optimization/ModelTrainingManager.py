@@ -337,7 +337,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.validationDataloader is None:
             raise ValueError('No validation dataloader provided.')
         
-
         self.model.eval()
         validationLossVal = 0.0  # Accumulation variables
         # batchMaxLoss = 0
@@ -376,6 +375,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Perform FORWARD PASS
                     predVal = self.model(X)  # Evaluate model at input
 
+                    # Evaluate loss function to get loss value dictionary
+                    validationLossDict = self.lossFcn(predVal, Y)
+                    validationLossVal += validationLossDict.get('lossValue') if isinstance(validationLossDict, dict) else validationLossDict.item()
+
                     # Evaluate how many correct predictions (assuming CrossEntropyLoss)
                     correctPredictions += (predVal.argmax(1) == Y).type(torch.float).sum().item()
 
@@ -404,7 +407,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 print(f"\n\tValidation: regression average loss: {validationLossVal:>4f}\n")
 
                 return validationLossVal
-    
+            
+            else:
+                raise NotImplementedError('Custom task type not implemented yet.')
+            
     def trainAndValidate(self):
         """_summary_
 
