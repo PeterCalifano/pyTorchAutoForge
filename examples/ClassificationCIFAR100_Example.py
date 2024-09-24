@@ -54,8 +54,8 @@ def main():
         validation_dataset, batch_size=64, shuffle=False)
 
     # %% Define loss function and optimizer
-    initial_lr = 1E-4
-    numOfEpochs = 100
+    initial_lr = 1E-3
+    numOfEpochs = 15
     lossFcn = nn.CrossEntropyLoss()
 
     fused = True if device == "cuda:0" else False
@@ -85,7 +85,7 @@ def main():
     optimizer2 = torch.optim.Adam(model2.parameters(), lr=initial_lr, fused=fused)
 
     for epoch in range(numOfEpochs):
-        print(f"Epoch TEST: {epoch+1}/{numOfEpochs}")
+        print(f"Epoch TEST: {epoch}/{numOfEpochs-1}")
         TrainModel(dataloaderIndex.getTrainLoader(), model2, lossFcn, optimizer2, 0)
         ValidateModel(dataloaderIndex.getValidationLoader(), model2, lossFcn)
 

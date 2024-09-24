@@ -214,19 +214,19 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         # Handle override of optimizer inherited from ModelTrainingManagerConfig
         if optimizer is not None:
             if isinstance(optimizer, optim.Optimizer):
-                self.reinstantiate_optimizer()
+                self.reinstantiate_optimizer_()
             elif isinstance(optimizer, int) or issubclass(optimizer, optim.Optimizer):
-                self.define_optimizer(optimizer)
+                self.define_optimizer_(optimizer)
             else:
                 raise ValueError('Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
         else:
             if isinstance(self.optimizer, optim.Optimizer):
                 # Redefine optimizer class as workaround for weird python behavior (no update applied to model)
-                self.reinstantiate_optimizer()
+                self.reinstantiate_optimizer_()
             else: 
                 raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
 
-    def define_optimizer(self, optimizer: Union[optim.Optimizer, int]) -> None:
+    def define_optimizer_(self, optimizer: Union[optim.Optimizer, int]) -> None:
         """
         Define and set the optimizer for the model training.
 
@@ -246,7 +246,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.initial_lr)
             
-    def reinstantiate_optimizer(self):
+    def reinstantiate_optimizer_(self):
         """
         Reinstantiates the optimizer with the same hyperparameters but with the current model parameters.
         """
@@ -280,7 +280,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
         
         running_loss = 0.0
-        prev_model = copy.deepcopy(self.model)
+        #prev_model = copy.deepcopy(self.model)
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
 
             # Get input and labels and move to target device memory
@@ -398,7 +398,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     validationLossDict = self.lossFcn(predVal, Y)
 
                     # Get loss value from dictionary
-                    validationLossVal += validationLossDict.get('lossValue') if isinstance(validationLossDict, dict) else validationLossDict
+                    validationLossVal += validationLossDict.get('lossValue') if isinstance(validationLossDict, dict) else validationLossDict.item()
 
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
                 print(f"\n\tValidation: regression average loss: {validationLossVal:>4f}\n")
@@ -415,7 +415,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         try:
             for epoch_num in range(self.num_of_epochs):
 
-                print(f"\nTraining epoch: {epoch_num}/{self.num_of_epochs}:")
+                print(f"\nTraining epoch: {epoch_num+1}/{self.num_of_epochs}:")
                 # Update current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
@@ -450,6 +450,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if self.keep_best:
                     if tmpValidLoss <= self.currentValidationLoss:
                         self.currentTrainingLoss = tmpTrainLoss
+                        self.currentValidationLoss = tmpValidLoss
                         self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
 
                 if self.mlflow_logging:
