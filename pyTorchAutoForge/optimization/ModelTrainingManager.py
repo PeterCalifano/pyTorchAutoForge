@@ -319,13 +319,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # TODO: implement management of SWA model
             #if swa_model is not None and epochID >= swa_start_epoch:
-        
 
         # DEBUG: 
-        print(f"\n\nDEBUG: Model parameters before and after optimizer step:")
-        for param1, param2 in zip(prev_model.parameters(), self.model.parameters()):
-            if torch.equal(param1, param2) or param1 is param2:
-                raise ValueError("Model parameters are the same after 1 epoch.")
+        #print(f"\n\nDEBUG: Model parameters before and after optimizer step:")
+        #for param1, param2 in zip(prev_model.parameters(), self.model.parameters()):
+        #    if torch.equal(param1, param2) or param1 is param2:
+        #        raise ValueError("Model parameters are the same after 1 epoch.")
 
         # Post epoch operations
         self.currentEpoch += 1
