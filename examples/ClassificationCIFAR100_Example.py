@@ -21,7 +21,7 @@ def main():
     # NOTE: seems that mlflow is not using server location
 
     # Set mlflow experiment
-    mlflow.set_experiment('ImageClassificationCIFAR100_Example_TEST')
+    mlflow.set_experiment('ImageClassificationCIFAR100_Example')
 
     # Get model backbone from torchvision
     # All models in torchvision.models for classification are trained on ImageNet, thus have 1000 classes as output
@@ -55,7 +55,7 @@ def main():
 
     # %% Define loss function and optimizer
     initial_lr = 1E-3
-    numOfEpochs = 5
+    numOfEpochs = 50
     lossFcn = nn.CrossEntropyLoss()
 
     fused = True if device == "cuda:0" else False
@@ -67,7 +67,6 @@ def main():
     
     # DEVNOTE: TODO, add check on optimizer from ModelTrainingManagerConfig. It must be of optimizer type
     print("\nModelTrainingManagerConfig instance:", trainerConfig)
-
     print("\nDict of ModelTrainingManagerConfig instance:", trainerConfig.getConfigDict())
     
     # Define model training manager instance
