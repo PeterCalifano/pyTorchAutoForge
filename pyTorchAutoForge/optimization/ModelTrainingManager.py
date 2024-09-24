@@ -190,8 +190,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         elif isinstance(config, ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
             super().__init__(**config.getConfigDict())  # Call init of parent class for shallow copy
-
-
+            
         # Initialize ModelTrainingManager-specific attributes
         self.model = (model).to(self.device)
         self.bestModel = None
@@ -215,20 +214,50 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         # Handle override of optimizer inherited from ModelTrainingManagerConfig
         if optimizer is not None:
             if isinstance(optimizer, optim.Optimizer):
-                self.optimizer = optimizer
-            elif isinstance(optimizer, int):
-                if optimizer == 0:
-                    self.optimizer = torch.optim.SGD(
-                        self.model.parameters(), lr=self.initial_lr, momentum=self.momentumValue)
-                elif optimizer == 1:
-                    self.optimizer = torch.optim.Adam(
-                        self.model.parameters(), lr=self.learnRate)
-                else:
-                    raise ValueError(
-                        'Optimizer ID not recognized. Use either 0 for SGD or 1 for Adam.')
+                self.reinstantiate_optimizer()
+            elif isinstance(optimizer, int) or issubclass(optimizer, torch.optim.Optimizer):
+                self.define_optimizer(optimizer)
             else:
                 raise ValueError(
                     'Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
+        else:
+            if isinstance(self.optimizer, torch.optim.Optimizer):
+                # Redefine optimizer class as workaround for weird python behavior (no update applied to model)
+                self.reinstantiate_optimizer()
+            else: 
+                raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
+
+    def define_optimizer(self, optimizer: Union[optim.Optimizer, int]) -> None:
+        """
+        Define and set the optimizer for the model training.
+
+        Parameters:
+        optimizer (Union[torch.optim.Optimizer, int]): The optimizer to be used for training. 
+            It can be an instance of a PyTorch optimizer or an integer identifier.
+            - If 0 or torch.optim.SGD, the Stochastic Gradient Descent (SGD) optimizer will be used.
+            - If 1 or torch.optim.Adam, the Adam optimizer will be used.
+
+        Raises:
+        ValueError: If the optimizer ID is not recognized (i.e., not 0 or 1).
+        """
+        if optimizer == 0 or optimizer.__class__ == torch.optim.SGD:
+            self.optimizer = torch.optim.SGD(
+                self.model.parameters(), lr=self.initial_lr, momentum=self.momentumValue)
+        elif optimizer == 1 or optimizer.__class__ == torch.optim.Adam:
+            self.optimizer = torch.optim.Adam(
+                self.model.parameters(), lr=self.initial_lr)
+        else:
+            raise ValueError(
+                'Optimizer not recognized. Use either 0 for SGD or 1 for Adam. Else, specify a torch.optim.Optimizer class, e.g., torch.optim.Adam.')                    
+
+    def reinstantiate_optimizer(self):
+        """
+        Reinstantiates the optimizer with the same hyperparameters but with the current model parameters.
+        """
+        optim_class = self.optimizer.__class__
+        optim_params = self.optimizer.param_groups[0]
+        optimizer_hyperparams = {key: value for key, value in optim_params.items() if key != 'params'}
+        self.optimizer = optim_class(self.model.parameters(), **optimizer_hyperparams)
 
     def setDataloaders(self, dataloaderIndex: DataloaderIndex) -> None:
         """
@@ -255,7 +284,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
         
         running_loss = 0.0
-
+        prev_model = copy.deepcopy(self.model)
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
 
             # Get input and labels and move to target device memory
@@ -271,18 +300,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Get loss value from dictionary
             trainLossVal = trainLossDict.get('lossValue') if isinstance(trainLossDict, dict) else trainLossDict
 
-
-            # Print status bar for current epoch
-            running_loss += trainLossVal
-
             # TODO: here one may log intermediate metrics at each update
             # if self.mlflow_logging:
             #     mlflow.log_metrics()
 
+            # Update running value of loss for status bar at current epoch
+            running_loss += trainLossVal.item()
+
             # Perform BACKWARD PASS to update parameters
+            self.optimizer.zero_grad()  # Reset gradients for next iteration
             trainLossVal.backward()     # Compute gradients
             self.optimizer.step()       # Apply gradients from the loss
-            self.optimizer.zero_grad()  # Reset gradients for next iteration
             self.numOfUpdates += 1
 
             # Calculate progress
@@ -296,6 +324,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # TODO: implement management of SWA model
             #if swa_model is not None and epochID >= swa_start_epoch:
         
+
+        # DEBUG: 
+        print(f"\n\nDEBUG: Model parameters before and after optimizer step:")
+        for param1, param2 in zip(prev_model.parameters(), self.model.parameters()):
+            if torch.equal(param1, param2) or param1 is param2:
+                raise ValueError("Model parameters are the same after 1 epoch.")
+
         # Post epoch operations
         self.currentEpoch += 1
 
@@ -306,6 +341,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.validationDataloader is None:
             raise ValueError('No validation dataloader provided.')
         
+
         self.model.eval()
         validationLossVal = 0.0  # Accumulation variables
         # batchMaxLoss = 0
@@ -327,7 +363,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                 )
         
         numberOfBatches = len(tmpdataloader)
-        
+        dataset_size = len(tmpdataloader.dataset)
+
         with torch.no_grad():
             if self.tasktype == TaskType.CLASSIFICATION:
 
@@ -347,7 +384,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     correctPredictions += (predVal.argmax(1) == Y).type(torch.float).sum().item()
 
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
-                correctPredictions /= tmpdataloader.batch_size  # Compute percentage of correct classifications over batch size
+                correctPredictions /= dataset_size    # Compute percentage of correct classifications over dataset size
                 print(f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {validationLossVal:>4f}\n")
 
                 return validationLossVal, correctPredictions
@@ -438,6 +475,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.mlflow_logging:
             mlflow.end_run(status='FINISHED')
 
+
     def evalExample(self):
         if self.eval_example:
             #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
@@ -501,7 +539,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             
             # Log configuration parameters
             ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()      
-            print("DEBUG:", ModelTrainerConfigParamsNames)
+            #print("DEBUG:", ModelTrainerConfigParamsNames)
             mlflow.log_params({key: getattr(self, key) for key in ModelTrainerConfigParamsNames})
         
         #else:
@@ -710,7 +748,7 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
         validationLoss /= numberOfBatches  # Compute batch size normalized loss value
         correctOuputs /= size  # Compute percentage of correct classifications over batch size
         print(
-            f"\n VALIDATION ((Classification) Accuracy: {(100*correctOuputs):>0.2f}%, Avg loss: {validationLoss:>8f} \n")
+            f"\n VALIDATION (Classification) Accuracy: {(100*correctOuputs):>0.2f}%, Avg loss: {validationLoss:>8f} \n")
 
     elif taskType.lower() == 'regression':
         # print('TODO')
