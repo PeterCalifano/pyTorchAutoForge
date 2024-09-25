@@ -10,7 +10,7 @@ sudo apt install python3.11 python3.11-venv # Install python3-venv
 cd ../.. # Go to the root directory of the project
 python3.11 -m venv .venvTorch # Create virtual environment
 source .venvTorch/bin/activate # Activate virtual environment
-pip install -r requirements.txt --require-virtualenv # Install dependencies
+pip install -r $SCRIPT_DIR/requirements.txt --require-virtualenv # Install dependencies
 pip install $SCRIPT_DIR --require-virtualenv # Install the package
 cd $SCRIPT_DIR
 
