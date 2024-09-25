@@ -469,10 +469,16 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if self.checkForEarlyStop(noNewBestCounter):
                     break
         except Exception as e:
-            print(f"Error during training and validation cycle: {e}")
-            traceback.print_exc()
-            if self.mlflow_logging:
-                mlflow.end_run(status='FAILED')
+
+            if e is KeyboardInterrupt:
+                print('ModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
+                if self.mlflow_logging:
+                    mlflow.end_run(status='KILLED')
+            else:
+                print(f"Error during training and validation cycle: {e}")
+                traceback.print_exc()
+                if self.mlflow_logging:
+                    mlflow.end_run(status='FAILED')
 
         
         # Post-training operations
