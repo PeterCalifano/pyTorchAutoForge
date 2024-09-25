@@ -453,6 +453,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     noNewBestCounter += 1
 
                 # "Keep best" strategy implementation (trainer will output the best overall model at cycle end)
+                # DEVNOTE: this could go into a separate method
                 if self.keep_best:
                     if tmpValidLoss <= self.currentValidationLoss:
                         self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
@@ -466,8 +467,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     mlflow.log_metric('validation_loss', self.currentValidationLoss, step=self.currentEpoch)
 
                 # "Early stopping" strategy implementation
-                if self.checkForEarlyStop(noNewBestCounter):
+                if self.checkForEarlyStop(noNewBestCounter): 
                     break
+
         except Exception as e:
 
             if e is KeyboardInterrupt:
@@ -517,7 +519,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         if self.enable_early_stop:
             if counter >= self.early_stop_patience:
-                print('Early stopping criteria met.')
+                print('Early stopping criteria met: ModelTrainingManager execution stop. Run marked as KILLED.')
                 returnValue = True
                 if self.mlflow_logging:
                     mlflow.end_run(status='KILLED')
@@ -781,8 +783,8 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
 
 
 # %% TRAINING and VALIDATION template function - 04-06-2024
-
 def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lossFcn: nn.Module, optimizer, config: dict = {}):
+    '''Function to train and validate a model using specified dataloaders and loss function'''
     # NOTE: is the default dictionary considered as "single" object or does python perform a merge of the fields?
 
     # TODO: For merging of config: https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
