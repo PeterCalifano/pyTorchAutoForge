@@ -12,6 +12,7 @@ Welcome to pyTorchAutoForge's documentation!
 
 .. TODO: Add all modules here explicitly (ask GPT)
 
+.. API modules
 .. automodule:: pyTorchAutoForge.api.torch.torchModulesIO
    :members:
    :undoc-members:
@@ -22,6 +23,7 @@ Welcome to pyTorchAutoForge's documentation!
    :undoc-members:
    :show-inheritance:
 
+.. Datasets module
 .. automodule:: pyTorchAutoForge.datasets
    :members:
    :undoc-members:
