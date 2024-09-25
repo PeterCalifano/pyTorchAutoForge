@@ -439,7 +439,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # Execute post-epoch operations
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
-                self.evalExample()        # Evaluate example if enabled
+                examplePrediction, exampleLoss = self.evalExample()        # Evaluate example if enabled
 
                 if self.currentValidationLoss is None: # At epoch 0, set initial validation loss
                     self.currentValidationLoss = tmpValidLoss
@@ -489,14 +489,31 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             mlflow.end_run(status='FINISHED')
 
 
-    def evalExample(self):
+    def evalExample(self) -> Union[torch.Tensor, None]:
         if self.eval_example:
             #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
             #if self.mlflow_logging: # TBC, not sure it is useful
             #    # Log example input to mlflow
             #    mlflow.log_???('example_input', exampleInput)
+            with torch.no_grad():
+                examplePair = next(iter(self.validationDataloader))[0]
 
-            raise NotImplementedError('Example evaluation feature not implemented yet.')
+                X = examplePair[0].to(self.device)
+                Y = examplePair[1].to(self.device)
+
+                # Perform FORWARD PASS
+                examplePredictions = self.model(X)  # Evaluate model at input
+
+                # Compute loss for each input separately                
+                outLossVar = self.lossFcn(examplePredictions, Y)
+                
+            # TODO (TBC): log example in mlflow?
+            if self.mlflow_logging:
+                print('TBC')
+
+            return examplePredictions, outLossVar
+        else:
+            return None, None
 
     def updateLerningRate(self):
         if self.lr_scheduler is not None:
