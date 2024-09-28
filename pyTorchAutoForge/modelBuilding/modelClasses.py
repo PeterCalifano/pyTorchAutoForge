@@ -185,6 +185,7 @@ class TemplateDeepNet(torchModel):
         self.outChannelsSizes = outChannelsSizes
         self.useBatchNorm = useBatchNorm
 
+        self.num_layers = len(self.outChannelsSizes)
 
         # Model architecture
         self.layers = nn.ModuleList()
