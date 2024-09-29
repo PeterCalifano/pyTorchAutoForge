@@ -53,6 +53,8 @@ class ModelTrainingManagerConfig():
     num_of_epochs: int = 10  # Number of epochs for training
     keep_best: bool = True  # Keep best model during training
     enable_early_stop: bool = False  # Enable early stopping
+    checkpointDir = "./checkpoints"  # Directory to save model checkpoints
+    modelName = "trained_model"      # Name of the model to be saved
 
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
@@ -469,6 +471,19 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # "Early stopping" strategy implementation
                 if self.checkForEarlyStop(noNewBestCounter): 
                     break
+            
+            # Model saving code
+            modelToSave = (self.bestModel if self.bestModel is not None else self.model).to('cpu')
+            if self.keep_best:
+                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
+            
+            if not (os.path.isdir(self.checkpointDir)):
+                os.mkdir(self.checkpointDir)
+
+            exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)  # Get single input sample for model saving
+
+            modelSaveName = os.path.join(self.checkpointDir, self.modelName + '.pth')
+            SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=exampleInput, targetDevice=device)
 
         except Exception as e:
 
