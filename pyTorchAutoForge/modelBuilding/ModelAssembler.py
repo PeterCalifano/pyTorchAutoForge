@@ -19,3 +19,12 @@ model_assembly = nn.Sequential(*[model, model2])
 print(model_assembly)
 exit(0)
 """
+
+from  pyTorchAutoForge import torchModel
+
+class ModelAssembler():
+    def __init__(self) -> None:
+        super().__init__()
+        # TODO
+
+        

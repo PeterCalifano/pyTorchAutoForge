@@ -511,6 +511,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if self.mlflow_logging:
                 print('TBC')
 
+            formatted_predictions = [f"{sample:4.04f}" for sample in examplePredictions.reshape(-1).tolist()]
+            print("Sample prediction: ", formatted_predictions, " with loss: ", outLossVar.item())
+
             return examplePredictions, outLossVar
         else:
             return None, None
