@@ -486,7 +486,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if not (os.path.isdir(self.checkpointDir)):
                 os.mkdir(self.checkpointDir)
 
-            exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)  # Get single input sample for model saving
+            exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)  # Get single input sample for model saving
 
             modelSaveName = os.path.join(self.checkpointDir, self.modelName + '.pth')
             SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=exampleInput, targetDevice='cpu')
