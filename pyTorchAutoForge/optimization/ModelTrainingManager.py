@@ -254,10 +254,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """
         optim_class = self.optimizer.__class__
         optim_params = self.optimizer.param_groups[0]
-        optimizer_hyperparams = {key: value for key, value in optim_params.items() if key != 'params'}
+        optimizer_hyperparams = {key: value for key, value in optim_params.items() if ((key != 'params') and (key != 'initial_lr'))}
         self.optimizer = optim_class(self.model.parameters(), **optimizer_hyperparams)
 
         if self.lr_scheduler is not None:
+            for param_group in self.optimizer.param_groups:
+                param_group['initial_lr'] = self.optimizer.param_groups[0]['lr']
+
             self.lr_scheduler.optimizer = self.optimizer
         
     def setDataloaders(self, dataloaderIndex: DataloaderIndex) -> None:
