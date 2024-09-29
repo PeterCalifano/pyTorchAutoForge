@@ -257,6 +257,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         optimizer_hyperparams = {key: value for key, value in optim_params.items() if key != 'params'}
         self.optimizer = optim_class(self.model.parameters(), **optimizer_hyperparams)
 
+        if self.lr_scheduler is not None:
+            self.lr_scheduler.optimizer = self.optimizer
+        
     def setDataloaders(self, dataloaderIndex: DataloaderIndex) -> None:
         """
         Sets the training and validation dataloaders using the provided DataloaderIndex.
@@ -483,7 +486,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)  # Get single input sample for model saving
 
             modelSaveName = os.path.join(self.checkpointDir, self.modelName + '.pth')
-            SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=exampleInput, targetDevice=device)
+            SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=exampleInput, targetDevice='cpu')
 
         except Exception as e:
 
