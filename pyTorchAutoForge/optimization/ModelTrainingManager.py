@@ -517,7 +517,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             #    # Log example input to mlflow
             #    mlflow.log_???('example_input', exampleInput)
             with torch.no_grad():
-                examplePair = next(iter(self.validationDataloader))[0]
+                examplePair = next(iter(self.validationDataloader))
 
                 X = examplePair[0].to(self.device)
                 Y = examplePair[1].to(self.device)
