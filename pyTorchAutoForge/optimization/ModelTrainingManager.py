@@ -556,7 +556,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if self.mlflow_logging:
                 print('TBC')
 
-            print(f"\tAverage prediction errors with {samples_counter} samples: ",  average_prediction_err, "\n\tAverage loss: ", average_loss)
+            print(f"\tAverage prediction errors with {samples_counter} samples: ",  
+                  average_prediction_err, "\n\tAverage loss: ", average_loss)
+            
 
             #return examplePredictions, outLossVar
         #else:
