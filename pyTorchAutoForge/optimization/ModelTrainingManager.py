@@ -482,13 +482,19 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             modelToSave = (self.bestModel if self.bestModel is not None else self.model).to('cpu')
             if self.keep_best:
                 print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
-            
+
+
             if not (os.path.isdir(self.checkpointDir)):
                 os.mkdir(self.checkpointDir)
 
             examplePair = next(iter(self.validationDataloader))
-            modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_{self.bestEpoch}")
+            modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"epoch_{self.bestEpoch}")
             SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=examplePair[0], targetDevice='cpu')
+
+            # Post-training operations
+            print('Training and validation cycle completed.')
+            if self.mlflow_logging:
+                mlflow.end_run(status='FINISHED')
 
         except Exception as e:
 
@@ -503,10 +509,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     mlflow.end_run(status='FAILED')
 
         
-        # Post-training operations
-        print('Training and validation cycle completed.')
-        if self.mlflow_logging:
-            mlflow.end_run(status='FINISHED')
+
 
 
     def evalExample(self) -> Union[torch.Tensor, None]:
