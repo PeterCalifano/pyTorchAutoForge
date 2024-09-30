@@ -447,7 +447,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # Execute post-epoch operations
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
-                examplePrediction, exampleLoss = self.evalExample()        # Evaluate example if enabled
+                self.evalExample()        # Evaluate example if enabled
 
                 if self.currentValidationLoss is None: # At epoch 0, set initial validation loss
                     self.currentValidationLoss = tmpValidLoss
