@@ -7,3 +7,4 @@ Custom library based on raw PyTorch to automate DNN development, tracking and de
 3) Activate the virtual environment using `source <your_venv_name>/bin/activate` on Linux 
 4) Install the requirements using `pip install -r requirements.txt`
 5) Install the package using `pip install .` in the root folder of the repository
+Custom library based on raw PyTorch to automate DNN and SNN development, tracking and deployment, tightly integrated with MLflow and Optuna.
