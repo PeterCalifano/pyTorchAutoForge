@@ -158,7 +158,7 @@ class TemplateConvNet(torchModel):
                 val = layer(val)
 
         # Output layer
-        predictedPixCorrection = self.DenseOutput(val)
+        predictedPixCorrection = val
 
         return predictedPixCorrection
 
@@ -238,6 +238,6 @@ class TemplateDeepNet(torchModel):
                 val = layer(val)
 
         # Output layer
-        prediction = self.DenseOutput(val)
+        prediction = val
 
         return prediction
