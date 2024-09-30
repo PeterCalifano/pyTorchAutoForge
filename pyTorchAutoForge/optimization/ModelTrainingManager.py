@@ -568,7 +568,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.lr_scheduler is not None:
             # Perform step of learning rate scheduler if provided
             self.lr_scheduler.step()
-            print('\nLearning rate changed: ${prev_lr} --> ${current_lr}\n'.format(prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()) )
+            print('\nLearning rate changed: ${prev_lr} --> ${current_lr}\n'.format(
+                prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()) )
 
             # Update current learning rate
             self.current_lr = self.lr_scheduler.get_last_lr()
