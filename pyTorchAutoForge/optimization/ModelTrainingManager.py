@@ -534,10 +534,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     if average_prediction_err == None:
-                        average_prediction_err = (examplePredictions - Y)
+                        average_prediction_err = torch.sum(
+                            torch.abs(examplePredictions - Y), dim=0)
                     else:
                         # Sum predictions
-                        average_prediction_err += (examplePredictions - Y)
+                        average_prediction_err += torch.sum(
+                            torch.abs(examplePredictions - Y), dim=0)
 
                     # Compute loss for each input separately                
                     outLossVar = self.lossFcn(examplePredictions, Y)
@@ -553,11 +555,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 average_loss /= num_samples
                 
             # TODO (TBC): log example in mlflow?
-            if self.mlflow_logging:
-                print('TBC')
+            #if self.mlflow_logging:
+            #    print('TBC')
 
-            print(f"\tAverage prediction errors with {samples_counter} samples: ",  
-                  average_prediction_err, "\n\tAverage loss: ", average_loss)
+            print(f"\tAverage prediction errors with {samples_counter} samples: \n",
+                  average_prediction_err, "\n\n\tCorresponding average loss: ", average_loss)
             
 
             #return examplePredictions, outLossVar
@@ -567,8 +569,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
     def updateLerningRate(self):
         if self.lr_scheduler is not None:
             # Perform step of learning rate scheduler if provided
+            self.optimizer.zero_grad()  # Reset gradients for safety  
             self.lr_scheduler.step()
-            print('\nLearning rate changed: ${prev_lr} --> ${current_lr}\n'.format(
+            print('\nLearning rate changed: {prev_lr} --> {current_lr}\n'.format(
                 prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()) )
 
             # Update current learning rate
