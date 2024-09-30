@@ -534,12 +534,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     if average_prediction_err == None:
-                        average_prediction_err = torch.sum(
-                            torch.abs(examplePredictions - Y), dim=0)
+                        average_prediction_err = torch.sum( torch.abs(examplePredictions - Y), dim=0)
                     else:
                         # Sum predictions
-                        average_prediction_err += torch.sum(
-                            torch.abs(examplePredictions - Y), dim=0)
+                        average_prediction_err += torch.sum( torch.abs(examplePredictions - Y), dim=0)
 
                     # Compute loss for each input separately                
                     outLossVar = self.lossFcn(examplePredictions, Y)
