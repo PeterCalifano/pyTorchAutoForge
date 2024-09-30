@@ -483,7 +483,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if self.keep_best:
                 print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
 
-
             if not (os.path.isdir(self.checkpointDir)):
                 os.mkdir(self.checkpointDir)
 
@@ -491,6 +490,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"epoch_{self.bestEpoch}")
             SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=examplePair[0], targetDevice='cpu')
 
+            if self.mlflow_logging:
+                    mlflow.log_param('model_checkpoint_epoch', self.bestEpoch)
+            
             # Post-training operations
             print('Training and validation cycle completed.')
             if self.mlflow_logging:
