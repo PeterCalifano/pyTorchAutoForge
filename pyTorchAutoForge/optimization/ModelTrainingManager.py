@@ -511,34 +511,56 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     mlflow.end_run(status='FAILED')
 
 
-    def evalExample(self) -> Union[torch.Tensor, None]:
+    def evalExample(self, num_samples: int = 64) -> Union[torch.Tensor, None]:
         if self.eval_example:
             #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
             #if self.mlflow_logging: # TBC, not sure it is useful
             #    # Log example input to mlflow
             #    mlflow.log_???('example_input', exampleInput)
+            
             with torch.no_grad():
-                examplePair = next(iter(self.validationDataloader))
+                samples_counter = 0
+                average_loss = 0.0
+                average_prediction_err = None
 
-                X = examplePair[0].to(self.device)
-                Y = examplePair[1].to(self.device)
+                while samples_counter < num_samples:
+                    examplePair = next(iter(self.validationDataloader)) # Note that this returns a batch of size given by the dataloader
 
-                # Perform FORWARD PASS
-                examplePredictions = self.model(X)  # Evaluate model at input
+                    X = examplePair[0].to(self.device)
+                    Y = examplePair[1].to(self.device)
 
-                # Compute loss for each input separately                
-                outLossVar = self.lossFcn(examplePredictions, Y)
+                    # Perform FORWARD PASS
+                    examplePredictions = self.model(X)  # Evaluate model at input
+
+                    # TODO add support for custom error function. Currently assumes difference between prediction and target
+                    if average_prediction_err == None:
+                        average_prediction_err = (examplePredictions - Y)
+                    else:
+                        # Sum predictions
+                        average_prediction_err += (examplePredictions - Y)
+
+                    # Compute loss for each input separately                
+                    outLossVar = self.lossFcn(examplePredictions, Y)
+
+                    # Compute running average of loss
+                    average_loss += outLossVar.item()
+                    
+                    # Count samples 
+                    samples_counter += X.size(0)
+
+                # Compute average prediction over all samples
+                average_prediction_err /= num_samples
+                average_loss /= num_samples
                 
             # TODO (TBC): log example in mlflow?
             if self.mlflow_logging:
                 print('TBC')
 
-            formatted_predictions = [f"{sample:4.04f}" for sample in examplePredictions.reshape(-1).tolist()]
-            print("Sample prediction: ", formatted_predictions, " with loss: ", outLossVar.item())
+            print(f"\tAverage prediction errors with {samples_counter} samples: ",  average_prediction_err, "\n\tAverage loss: ", average_loss)
 
-            return examplePredictions, outLossVar
-        else:
-            return None, None
+            #return examplePredictions, outLossVar
+        #else:
+            #return None, None
 
     def updateLerningRate(self):
         if self.lr_scheduler is not None:
