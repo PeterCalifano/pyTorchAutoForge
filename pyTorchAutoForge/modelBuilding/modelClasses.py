@@ -104,9 +104,6 @@ class TemplateConvNet(torchModel):
             # Update input size for next layer
             input_size = self.outChannelsSizes[i]
 
-        # Output layer
-        self.DenseOutput = nn.Linear(self.outChannelsSizes[-1], 2, bias=True)
-
         # Initialize weights of layers
         self.__initialize_weights__()
 
@@ -209,9 +206,6 @@ class TemplateDeepNet(torchModel):
 
             # Update input size for next layer
             input_size = self.outChannelsSizes[i]
-
-        # Output layer
-        self.DenseOutput = nn.Linear(self.outChannelsSizes[-1], 2, bias=True)
 
         # Initialize weights of layers
         self.__initialize_weights__()
