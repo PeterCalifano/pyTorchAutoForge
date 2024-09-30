@@ -557,7 +557,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             #    print('TBC')
 
             print(f"\tAverage prediction errors with {samples_counter} samples: \n",
-                  average_prediction_err, "\n\n\tCorresponding average loss: ", average_loss)
+                  "\t",average_prediction_err, "\n\n\tCorresponding average loss: ", average_loss)
             
 
             #return examplePredictions, outLossVar
