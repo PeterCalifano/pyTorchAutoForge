@@ -498,7 +498,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         except Exception as e:
 
-            if e is KeyboardInterrupt:
+            if isinstance(e, KeyboardInterrupt):
                 print('ModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
                 if self.mlflow_logging:
                     mlflow.end_run(status='KILLED')
@@ -507,9 +507,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 traceback.print_exc()
                 if self.mlflow_logging:
                     mlflow.end_run(status='FAILED')
-
-        
-
 
 
     def evalExample(self) -> Union[torch.Tensor, None]:
