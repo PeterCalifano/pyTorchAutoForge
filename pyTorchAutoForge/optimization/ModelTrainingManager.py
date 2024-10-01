@@ -488,7 +488,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 os.mkdir(self.checkpointDir)
 
             examplePair = next(iter(self.validationDataloader))
-            modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"epoch_{self.bestEpoch}")
+            modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
             SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=examplePair[0], targetDevice='cpu')
 
             if self.mlflow_logging:
