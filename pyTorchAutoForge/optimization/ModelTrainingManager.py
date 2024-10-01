@@ -451,9 +451,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 if self.currentValidationLoss is None: # At epoch 0, set initial validation loss
                     self.currentValidationLoss = tmpValidLoss
+                    self.bestValidationLoss = tmpValidLoss
                 
                 # Update stats if new best model found (independently of keep_best flag)
-                if tmpValidLoss <= self.currentValidationLoss:
+                if tmpValidLoss <= self.bestValidationLoss:
                     self.bestEpoch = epoch_num
                     self.bestValidationLoss = tmpValidLoss
                     noNewBestCounter = 0
@@ -463,7 +464,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # "Keep best" strategy implementation (trainer will output the best overall model at cycle end)
                 # DEVNOTE: this could go into a separate method
                 if self.keep_best:
-                    if tmpValidLoss <= self.currentValidationLoss:
+                    if tmpValidLoss <= self.bestValidationLoss:
                         self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
                 
                 # Update current training and validation loss values
