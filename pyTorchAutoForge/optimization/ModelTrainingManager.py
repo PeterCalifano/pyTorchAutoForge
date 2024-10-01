@@ -618,7 +618,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.currentMlflowRun = mlflow.active_run()
             print(('\nStarted new mlflow run witn name: {active_run}.').format(
                 active_run=self.currentMlflowRun.info.run_name))
-            
+
+            # Set model name from mlflow run
+            self.modelName = self.currentMlflowRun.info.run_name
+
             # Log configuration parameters
             ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()      
             #print("DEBUG:", ModelTrainerConfigParamsNames)
