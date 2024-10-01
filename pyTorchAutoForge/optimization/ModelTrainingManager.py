@@ -336,9 +336,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         #    if torch.equal(param1, param2) or param1 is param2:
         #        raise ValueError("Model parameters are the same after 1 epoch.")
 
-        # Post epoch operations
-        self.currentEpoch += 1
-
         return running_loss / current_batch
 
     def validateModel_(self):
@@ -479,7 +476,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # "Early stopping" strategy implementation
                 if self.checkForEarlyStop(noNewBestCounter): 
                     break
-            
+                    
+                # Post epoch operations
+                self.currentEpoch += 1
+                
             # Model saving code
             modelToSave = (self.bestModel if self.bestModel is not None else self.model).to('cpu')
             if self.keep_best:
