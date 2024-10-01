@@ -53,12 +53,13 @@ class ModelTrainingManagerConfig():
     num_of_epochs: int = 10  # Number of epochs for training
     keep_best: bool = True  # Keep best model during training
     enable_early_stop: bool = False  # Enable early stopping
-    checkpointDir = "./checkpoints"  # Directory to save model checkpoints
-    modelName = "trained_model"      # Name of the model to be saved
+    enable_batch_accumulation: bool = False  # Enable batch accumulation
 
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
     eval_example: bool = False  # Evaluate example input during training
+    checkpointDir = "./checkpoints"  # Directory to save model checkpoints
+    modelName = "trained_model"      # Name of the model to be saved
 
     # Optimization parameters
     lr_scheduler: Any = None 
@@ -446,8 +447,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     tmpValidLoss = tmpValidLoss[0]
 
                 # Execute post-epoch operations
-                self.updateLerningRate()  # Update learning rate if scheduler is provided
                 self.evalExample()        # Evaluate example if enabled
+                self.updateLerningRate()  # Update learning rate if scheduler is provided
 
                 if self.currentValidationLoss is None: # At epoch 0, set initial validation loss
                     self.currentValidationLoss = tmpValidLoss
