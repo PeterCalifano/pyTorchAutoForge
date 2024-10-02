@@ -549,9 +549,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Find worst prediction error in batch
                     if worst_prediction_err == None:
-                        worst_prediction_err = torch.max( prediction_errors, dim=0).detach().tolist() 
+                        worst_prediction_err = torch.max( prediction_errors, dim=0) 
                     else: 
-                        worst_prediction_err_new = torch.max( prediction_errors, dim=0).detach().tolist() 
+                        worst_prediction_err_new = torch.max( prediction_errors, dim=0)
 
                         for i in range(len(worst_prediction_err)):
                             if worst_prediction_err_new[i] >= worst_prediction_err[i]:
@@ -631,7 +631,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()
 
                 # Find max prediction error over all samples
-                worst_prediction_err = torch.max( prediction_errors, dim=0).detach().tolist() 
+                worst_prediction_err = torch.max( prediction_errors, dim=0)
 
                 # Compute average prediction over all samples
                 average_prediction_err = torch.mean( prediction_errors, dim=0)
