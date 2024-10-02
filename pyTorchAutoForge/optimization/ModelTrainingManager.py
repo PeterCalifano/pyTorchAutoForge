@@ -445,7 +445,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # Execute post-epoch operations
                 self.evalExample()        # Evaluate example if enabled
-                self.updateLerningRate()  # Update learning rate if scheduler is provided
 
                 if self.currentValidationLoss is None: # At epoch 0, set initial validation loss
                     self.currentValidationLoss = tmpValidLoss
@@ -480,6 +479,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     break
                 
                 # Post epoch operations
+                self.updateLerningRate()  # Update learning rate if scheduler is provided
                 self.currentEpoch += 1
 
             # Model saving code
@@ -563,8 +563,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             #    print('TBC')
 
             print(f"\tAverage prediction errors with {samples_counter} samples: \n",
-                  "\t",average_prediction_err, "\n\n\tCorresponding average loss: ", average_loss)
-            print(f"\tWorst prediction errors per component: \n", worst_prediction_err)
+                  "\t\t",average_prediction_err, "\n\n\tCorresponding average loss: ", average_loss)
+            print(f"\tWorst prediction errors per component: \n\t\t", worst_prediction_err)
 
             #return examplePredictions, outLossVar
         #else:
@@ -573,7 +573,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
     def evalBestAccuracy(self):
         self.bestModel.to(self.device)
         self.bestModel.eval()
-        
+
         # Backup the original batch size (TODO: TBC if it is useful)
         original_dataloader = self.validationDataloader
                 
