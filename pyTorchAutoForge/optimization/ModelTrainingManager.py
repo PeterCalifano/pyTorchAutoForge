@@ -526,6 +526,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 samples_counter = 0
                 average_loss = 0.0
                 average_prediction_err = None
+                worst_prediction_err = None
 
                 while samples_counter < num_samples:
                     examplePair = next(iter(self.validationDataloader)) # Note that this returns a batch of size given by the dataloader
@@ -537,11 +538,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     examplePredictions = self.model(X)  # Evaluate model at input
 
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
+                    prediction_errors = torch.abs(examplePredictions - Y)
                     if average_prediction_err == None:
-                        average_prediction_err = torch.sum( torch.abs(examplePredictions - Y), dim=0)
+                        average_prediction_err = torch.sum( prediction_errors)
                     else:
                         # Sum predictions
-                        average_prediction_err += torch.sum( torch.abs(examplePredictions - Y), dim=0)
+                        average_prediction_err += torch.sum( prediction_errors)
+
+                    # Find worst prediction error in batch
+                    if worst_prediction_err == None:
+                        worst_prediction_err = torch.max( prediction_errors, dim=0).detach().tolist() 
+                    else: 
+                        worst_prediction_err_new = torch.max( prediction_errors, dim=0).detach().tolist() 
+
+                        for i in range(len(worst_prediction_err)):
+                            if worst_prediction_err_new[i] >= worst_prediction_err[i]:
+                                worst_prediction_err[i] = worst_prediction_err_new[i]
 
                     # Compute loss for each input separately                
                     outLossVar = self.lossFcn(examplePredictions, Y)
@@ -562,7 +574,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             print(f"\tAverage prediction errors with {samples_counter} samples: \n",
                   "\t",average_prediction_err, "\n\n\tCorresponding average loss: ", average_loss)
-            
+            print(f"\tWorst prediction errors per component: \n", worst_prediction_err)
 
             #return examplePredictions, outLossVar
         #else:
