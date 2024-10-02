@@ -571,7 +571,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             #return None, None
 
     def evalBestAccuracy(self):
+        self.bestModel.to(self.device)
         self.bestModel.eval()
+        
         # Backup the original batch size (TODO: TBC if it is useful)
         original_dataloader = self.validationDataloader
                 
