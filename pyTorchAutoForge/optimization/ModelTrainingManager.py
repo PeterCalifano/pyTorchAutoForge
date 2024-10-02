@@ -610,7 +610,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             average_prediction_err = None
             worst_prediction_err = None
             num_samples = dataset_size
-            num_of_batches = len(tmpdataloader)
 
             if self.tasktype == TaskType.REGRESSION:
                 
