@@ -583,8 +583,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         #else:
             #return None, None
 
-
-
     def evalModelAccuracy(self):
         self.model.eval()
         
@@ -604,6 +602,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                 )
         
         dataset_size = len(tmpdataloader.dataset)   
+        stats = {}
 
         with torch.no_grad():
             average_loss = 0.0
@@ -626,34 +625,30 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     prediction_errors = torch.abs(predVal - Y)
+                    prediction_errors = torch.cat([prediction_errors, predVal - Y], dim=1)
 
                     # Get loss value from dictionary
                     average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()
 
-                    if average_prediction_err == None:
-                        average_prediction_err = torch.sum( prediction_errors)
-                    else:
-                        # Sum prediction errors
-                        average_prediction_err += torch.sum( prediction_errors)
-
-                    # Find worst prediction error in batch
-                    if worst_prediction_err == None:
-                        worst_prediction_err = torch.max( prediction_errors, dim=0).detach().tolist() 
-                    else: 
-                        worst_prediction_err_new = torch.max( prediction_errors, dim=0).detach().tolist() 
-
-                        for i in range(len(worst_prediction_err)):
-                            if worst_prediction_err_new[i] >= worst_prediction_err[i]:
-                                worst_prediction_err[i] = worst_prediction_err_new[i]
+                # Find max prediction error over all samples
+                worst_prediction_err = torch.max( prediction_errors, dim=0).detach().tolist() 
 
                 # Compute average prediction over all samples
-                average_prediction_err /= num_samples
+                average_prediction_err = torch.mean( prediction_errors, dim=0)
+                median_prediction_err = torch.median( prediction_errors, dim=0)
                 average_loss /= num_samples    
 
                 print(f"\n\tAccuracy evaluation: regression average loss: {average_loss:>4f}\n")
-                print(f"\tAverage prediction errors with {num_samples} samples: \n","\t",average_prediction_err)
-                print(f"\tWorst prediction errors per component: \n", worst_prediction_err)
+                print(f"\tPrediction errors with {num_samples} samples: \n","\t Average:",average_prediction_err,
+                      "\n\t Median:", median_prediction_err, "\n\t Max:", worst_prediction_err)
+                
+                # Pack data into dict
+                stats['prediction_err'] = prediction_errors.to('cpu').numpy()
+                stats['average_prediction_err'] = average_prediction_err.to('cpu').numpy()
+                stats['median_prediction_err'] = median_prediction_err.to('cpu').numpy()
+                stats['worst_prediction_err'] = worst_prediction_err.to('cpu').numpy()
 
+                return stats
             else:
                 raise NotImplementedError('Task type not implemented yet.')
 
