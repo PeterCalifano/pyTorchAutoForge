@@ -28,23 +28,28 @@ from torch import nn
 class MultiHeadAdapter():
     def __init__(self, numOfHeads: int, headModels:Union[nn.Module, torchModel, nn.ModuleList, nn.ModuleDict]) -> "MultiHeadAdapter":
         self.numOfHeads = numOfHeads
-        self.headList = []
+        self.headList = nn.ModuleDict()
         self.headNames = None
 
         if isinstance(headModels, nn.ModuleList):
             self.headList = headModels
             for i in range(numOfHeads):
                 self.headNames.append(f"head_{i}")
+
         elif isinstance(headModels, nn.ModuleDict):
             self.headList = headModels.values()
             self.headNames = headModels.keys()
+
         elif isinstance(headModels, (nn.Module, torchModel)):
             self.headList = [headModels]
             self.headNames = ["head_0"]
         
     def forward(self, Xfeatures):
         return [head(Xfeatures) for head in self.headList]
-        
+
+    def to(self, device):
+        for head in self.headList:
+            head.to(device)
 
 class ModelAssembler():
     def __init__(self) -> None:
