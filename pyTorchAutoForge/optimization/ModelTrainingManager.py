@@ -516,6 +516,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
 
     def evalExample(self, num_samples: int = 64) -> Union[torch.Tensor, None]:
+        self.model.eval()
         if self.eval_example:
             #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
             #if self.mlflow_logging: # TBC, not sure it is useful
@@ -527,6 +528,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 average_loss = 0.0
                 average_prediction_err = None
                 worst_prediction_err = None
+                num_of_batches = 0
 
                 while samples_counter < num_samples:
                     examplePair = next(iter(self.validationDataloader)) # Note that this returns a batch of size given by the dataloader
@@ -561,12 +563,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Compute running average of loss
                     average_loss += outLossVar.item()
                     
-                    # Count samples 
+                    # Count samples and batches
                     samples_counter += X.size(0)
+                    num_of_batches += 1
 
                 # Compute average prediction over all samples
                 average_prediction_err /= num_samples
-                average_loss /= num_samples
+                average_loss /= num_of_batches
                 
             # TODO (TBC): log example in mlflow?
             #if self.mlflow_logging:
@@ -579,6 +582,81 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             #return examplePredictions, outLossVar
         #else:
             #return None, None
+
+
+
+    def evalModelAccuracy(self):
+        self.model.eval()
+        
+        # Backup the original batch size (TODO: TBC if it is useful)
+        original_dataloader = self.validationDataloader
+                
+        # Temporarily initialize a new dataloader for validation (heuristic)
+        newBathSizeTmp = 2 * self.validationDataloader.batch_size # TBC how to set this value
+
+        tmpdataloader = DataLoader(
+                                original_dataloader.dataset, 
+                                batch_size=newBathSizeTmp, 
+                                shuffle=False, 
+                                drop_last=False, 
+                                pin_memory=True,
+                                num_workers=0
+                                )
+        
+        dataset_size = len(tmpdataloader.dataset)   
+
+        with torch.no_grad():
+            average_loss = 0.0
+            average_prediction_err = None
+            worst_prediction_err = None
+            num_samples = dataset_size
+            num_of_batches = len(tmpdataloader)
+
+            if self.tasktype == TaskType.REGRESSION:
+                
+                for X, Y in tmpdataloader:
+                    # Get input and labels and move to target device memory
+                    X, Y = X.to(self.device), Y.to(self.device)
+
+                    # Perform FORWARD PASS
+                    predVal = self.model(X)  # Evaluate model at input
+
+                    # Evaluate loss function to get loss value dictionary
+                    if self.lossFcn is None:
+                        raise ValueError('Loss function not provided for regression task.')
+                    
+                    # TODO add support for custom error function. Currently assumes difference between prediction and target
+                    prediction_errors = torch.abs(predVal - Y)
+
+                    # Get loss value from dictionary
+                    average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()
+
+                    if average_prediction_err == None:
+                        average_prediction_err = torch.sum( prediction_errors)
+                    else:
+                        # Sum prediction errors
+                        average_prediction_err += torch.sum( prediction_errors)
+
+                    # Find worst prediction error in batch
+                    if worst_prediction_err == None:
+                        worst_prediction_err = torch.max( prediction_errors, dim=0).detach().tolist() 
+                    else: 
+                        worst_prediction_err_new = torch.max( prediction_errors, dim=0).detach().tolist() 
+
+                        for i in range(len(worst_prediction_err)):
+                            if worst_prediction_err_new[i] >= worst_prediction_err[i]:
+                                worst_prediction_err[i] = worst_prediction_err_new[i]
+
+                # Compute average prediction over all samples
+                average_prediction_err /= num_samples
+                average_loss /= num_samples    
+
+                print(f"\n\tAccuracy evaluation: regression average loss: {average_loss:>4f}\n")
+                print(f"\tAverage prediction errors with {num_samples} samples: \n","\t",average_prediction_err)
+                print(f"\tWorst prediction errors per component: \n", worst_prediction_err)
+
+            else:
+                raise NotImplementedError('Task type not implemented yet.')
 
     def updateLerningRate(self):
         if self.lr_scheduler is not None:
