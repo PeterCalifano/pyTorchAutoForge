@@ -509,8 +509,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         except Exception as e:
 
-            print(f"Error during training and validation cycle: {e}")
-            traceback.print_exc()
+            max_chars = 500  # Define the max length you want to print
+            print(f"Error during training and validation cycle: {str(e)[:max_chars]}...")
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
 
@@ -1103,8 +1103,7 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
 
             exampleInput = GetSamplesFromDataset(validationDataset, 1)[0][0].reshape(
                 1, -1)  # Get single input sample for model saving
-            modelSaveName = os.path.join(
-                checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
+            modelSaveName = os.path.join( checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
             SaveTorchModel(model, modelSaveName, saveAsTraced=True,
                            exampleInput=exampleInput, targetDevice=device)
 
