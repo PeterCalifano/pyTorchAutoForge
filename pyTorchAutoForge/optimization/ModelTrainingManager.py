@@ -473,10 +473,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     mlflow.log_metric('train_loss', self.currentTrainingLoss, step=self.currentEpoch)
                     mlflow.log_metric('validation_loss', self.currentValidationLoss, step=self.currentEpoch)
 
+                print('\tCurrent best at epoch {best_epoch}, validation loss: {best_loss}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
+
                 # "Early stopping" strategy implementation
                 if self.checkForEarlyStop(noNewBestCounter): 
                     break
-                    
+                
                 # Post epoch operations
                 self.currentEpoch += 1
 
@@ -500,7 +502,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if self.mlflow_logging:
                 mlflow.end_run(status='FINISHED')
 
-        except KeyboardInterrupt
+        except KeyboardInterrupt:
             print('ModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
