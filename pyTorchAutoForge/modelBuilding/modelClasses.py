@@ -17,6 +17,9 @@ class torchModel(torch.nn.Module):
 
     def saveCheckpoint(self):
         SaveTorchModel() # To do: first input must be the model itself (traced or not)
+
+    def loadCheckpoint(self):
+        LoadTorchModel()
 #############################################################################################################################################
 
 
