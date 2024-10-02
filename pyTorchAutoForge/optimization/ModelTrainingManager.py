@@ -540,7 +540,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     examplePredictions = self.model(X)  # Evaluate model at input
 
                     prediction_errors = torch.abs(examplePredictions - Y)
-                    prediction_errors = torch.cat([prediction_errors, examplePredictions - Y], dim=0)
+                    prediction_errors = torch.cat([prediction_errors, torch.abs(examplePredictions - Y)], dim=0)
 
                     # Compute loss for each input separately                
                     outLossVar = self.lossFcn(examplePredictions, Y)
@@ -556,6 +556,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 average_prediction_err = torch.mean( prediction_errors, dim=0)
                 average_prediction_err /= num_samples
                 average_loss /= num_of_batches
+
+                worst_prediction_err = torch.max( prediction_errors, dim=0)
                 
             # TODO (TBC): log example in mlflow?
             #if self.mlflow_logging:
@@ -610,7 +612,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     prediction_errors = torch.abs(predVal - Y)
-                    prediction_errors = torch.cat([prediction_errors, predVal - Y], dim=0)
+                    prediction_errors = torch.cat([prediction_errors, torch.abs(predVal - Y)], dim=0)
 
                     # Get loss value from dictionary
                     average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()
