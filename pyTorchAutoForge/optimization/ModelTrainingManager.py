@@ -632,9 +632,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 
                 # Pack data into dict
                 stats['prediction_err'] = prediction_errors.to('cpu').numpy()
-                stats['average_prediction_err'] = average_prediction_err.numpy()
-                stats['median_prediction_err'] = median_prediction_err.numpy()
-                stats['worst_prediction_err'] = worst_prediction_err.numpy()
+                stats['prediction_err'] = prediction_errors.to('cpu').numpy()
+                stats['average_prediction_err'] = average_prediction_err.to('cpu').numpy()
+                stats['median_prediction_err'] = median_prediction_err.to('cpu').numpy()
+                stats['worst_prediction_err'] = worst_prediction_err.to('cpu').numpy()
 
                 return stats
             else:
