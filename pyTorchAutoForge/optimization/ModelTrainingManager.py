@@ -539,30 +539,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Perform FORWARD PASS
                     examplePredictions = self.model(X)  # Evaluate model at input
 
-                    # TODO add support for custom error function. Currently assumes difference between prediction and target
                     prediction_errors = torch.abs(examplePredictions - Y)
-                    if average_prediction_err == None:
-                        average_prediction_err = torch.sum( prediction_errors)
-                    else:
-                        # Sum predictions
-                        average_prediction_err += torch.sum( prediction_errors)
-
-                    # Find worst prediction error in batch
-                    if worst_prediction_err == None:
-                        worst_prediction_err = torch.max( prediction_errors, dim=0) 
-                    else: 
-                        worst_prediction_err_new = torch.max( prediction_errors, dim=0)
-
-                        for i in range(len(worst_prediction_err)):
-                            if worst_prediction_err_new[i] >= worst_prediction_err[i]:
-                                worst_prediction_err[i] = worst_prediction_err_new[i]
+                    prediction_errors = torch.cat([prediction_errors, examplePredictions - Y], dim=0)
 
                     # Compute loss for each input separately                
                     outLossVar = self.lossFcn(examplePredictions, Y)
 
                     # Compute running average of loss
                     average_loss += outLossVar.item()
-                    
+
                     # Count samples and batches
                     samples_counter += X.size(0)
                     num_of_batches += 1
@@ -583,9 +568,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         #else:
             #return None, None
 
-    def evalModelAccuracy(self):
-        self.model.eval()
-        
+    def evalBestAccuracy(self):
+        self.bestModel.eval()
         # Backup the original batch size (TODO: TBC if it is useful)
         original_dataloader = self.validationDataloader
                 
@@ -617,7 +601,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform FORWARD PASS
-                    predVal = self.model(X)  # Evaluate model at input
+                    predVal = self.bestModel(X)  # Evaluate model at input
 
                     # Evaluate loss function to get loss value dictionary
                     if self.lossFcn is None:
@@ -625,17 +609,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     prediction_errors = torch.abs(predVal - Y)
-                    prediction_errors = torch.cat([prediction_errors, predVal - Y], dim=1)
+                    prediction_errors = torch.cat([prediction_errors, predVal - Y], dim=0)
 
                     # Get loss value from dictionary
                     average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()
 
                 # Find max prediction error over all samples
-                worst_prediction_err = torch.max( prediction_errors, dim=0)
+                worst_prediction_err, _ = torch.max( prediction_errors, dim=0)
 
                 # Compute average prediction over all samples
                 average_prediction_err = torch.mean( prediction_errors, dim=0)
-                median_prediction_err = torch.median( prediction_errors, dim=0)
+                median_prediction_err, _ = torch.median( prediction_errors, dim=0)
                 average_loss /= num_samples    
 
                 print(f"\n\tAccuracy evaluation: regression average loss: {average_loss:>4f}\n")
@@ -644,9 +628,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 
                 # Pack data into dict
                 stats['prediction_err'] = prediction_errors.to('cpu').numpy()
-                stats['average_prediction_err'] = average_prediction_err.to('cpu').numpy()
-                stats['median_prediction_err'] = median_prediction_err.to('cpu').numpy()
-                stats['worst_prediction_err'] = worst_prediction_err.to('cpu').numpy()
+                stats['average_prediction_err'] = average_prediction_err.numpy()
+                stats['median_prediction_err'] = median_prediction_err.numpy()
+                stats['worst_prediction_err'] = worst_prediction_err.numpy()
 
                 return stats
             else:
