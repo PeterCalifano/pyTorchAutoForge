@@ -13,6 +13,10 @@ def SaveTorchModel(model: torch.nn.Module, modelName: str = "trainedModel", save
     else:
         extension = '.pth'
 
+    if exampleInput is not None:
+        exampleInput = exampleInput.detach()
+        exampleInput.requires_grad = False
+        
     # Format target device string to remove ':' from name
     targetDeviceName = targetDevice
     targetDeviceName = targetDeviceName.replace(':', '')
