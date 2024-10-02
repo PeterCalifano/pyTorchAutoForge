@@ -493,7 +493,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             with torch.no_grad():
                 examplePair = next(iter(self.validationDataloader))
                 modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
-                SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=examplePair[0], targetDevice=self.device)
+                SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=False, exampleInput=examplePair[0], targetDevice=self.device)
 
             if self.mlflow_logging:
                     mlflow.log_param('model_checkpoint_epoch', self.bestEpoch)
