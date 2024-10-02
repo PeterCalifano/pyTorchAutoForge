@@ -553,6 +553,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     num_of_batches += 1
 
                 # Compute average prediction over all samples
+                average_prediction_err = torch.mean( prediction_errors, dim=0)
                 average_prediction_err /= num_samples
                 average_loss /= num_of_batches
                 

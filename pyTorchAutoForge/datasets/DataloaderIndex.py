@@ -24,7 +24,7 @@ class DataloaderIndex:
 
         if validLoader is None:
             # Perform random splitting of training data to get validation dataset
-            print('No validation dataset provided: training dataset automatically split with ratio 80/20')
+            print(f'No validation dataset provided: training dataset automatically split with ratio {split_ratio}')
             trainingSize = int(split_ratio * len(trainLoader.dataset))
             validationSize = len(trainLoader.dataset) - trainingSize
 
