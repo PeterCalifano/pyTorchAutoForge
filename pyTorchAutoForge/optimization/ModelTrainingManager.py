@@ -490,9 +490,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if not (os.path.isdir(self.checkpointDir)):
                 os.mkdir(self.checkpointDir)
 
-            examplePair = next(iter(self.validationDataloader))
-            modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
-            SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=examplePair[0], targetDevice='cpu')
+            with torch.no_grad():
+                examplePair = next(iter(self.validationDataloader))
+                modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
+                SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=True, exampleInput=examplePair[0], targetDevice=self.device)
 
             if self.mlflow_logging:
                     mlflow.log_param('model_checkpoint_epoch', self.bestEpoch)
