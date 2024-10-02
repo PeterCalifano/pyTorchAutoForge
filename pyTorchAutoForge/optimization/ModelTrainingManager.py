@@ -479,7 +479,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     
                 # Post epoch operations
                 self.currentEpoch += 1
-                
+
             # Model saving code
             modelToSave = (self.bestModel if self.bestModel is not None else self.model).to('cpu')
             if self.keep_best:
@@ -500,17 +500,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if self.mlflow_logging:
                 mlflow.end_run(status='FINISHED')
 
+        except KeyboardInterrupt
+            print('ModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
+            if self.mlflow_logging:
+                mlflow.end_run(status='KILLED')
+
         except Exception as e:
 
-            if isinstance(e, KeyboardInterrupt):
-                print('ModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
-                if self.mlflow_logging:
-                    mlflow.end_run(status='KILLED')
-            else:
-                print(f"Error during training and validation cycle: {e}")
-                traceback.print_exc()
-                if self.mlflow_logging:
-                    mlflow.end_run(status='FAILED')
+            print(f"Error during training and validation cycle: {e}")
+            traceback.print_exc()
+            if self.mlflow_logging:
+                mlflow.end_run(status='FAILED')
 
 
     def evalExample(self, num_samples: int = 64) -> Union[torch.Tensor, None]:
