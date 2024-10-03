@@ -47,6 +47,7 @@ class ModelTrainingManagerConfig():
 
     # REQUIRED fields
     tasktype: TaskType # Task type for training and validation --> How to enforce the definition of this?
+    batch_size: int
 
     # FIELDS with DEFAULTS
     # Optimization strategy
@@ -66,7 +67,7 @@ class ModelTrainingManagerConfig():
     initial_lr: float = 1e-4
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
     optimizer: Any = torch.optim.Adam # optimizer class
-    
+
     # Hardware settings
     device: str = GetDevice()  # Default device is GPU if available
 
@@ -530,6 +531,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 average_prediction_err = None
                 worst_prediction_err = None
                 num_of_batches = 0
+                prediction_errors = None
 
                 while samples_counter < num_samples:
                     examplePair = next(iter(self.validationDataloader)) # Note that this returns a batch of size given by the dataloader
@@ -539,13 +541,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Perform FORWARD PASS
                     examplePredictions = self.model(X)  # Evaluate model at input
-
-
+                    
                     if examplePredictions.shape != Y.shape:
-                        Y = Y[:, examplePredictions.size(1)] # Attempt to match shapes
-                        
-                    prediction_errors = torch.abs(examplePredictions - Y)
-                    prediction_errors = torch.cat([prediction_errors, torch.abs(examplePredictions - Y)], dim=0)
+                        # Attempt to match shapes
+                        Y = Y[:, examplePredictions.size(1)]
+
+                    if prediction_errors is None:
+                        prediction_errors = torch.abs(examplePredictions - Y)
+                    else:
+                        prediction_errors = torch.cat([prediction_errors, torch.abs(examplePredictions - Y)], dim=0)
 
                     # Compute loss for each input separately                
                     outLossVar = self.lossFcn(examplePredictions, Y)
@@ -602,6 +606,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             average_prediction_err = None
             worst_prediction_err = None
             num_samples = dataset_size
+            prediction_errors = None
 
             if self.tasktype == TaskType.REGRESSION:
                 
@@ -620,8 +625,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         Y = Y[:, predVal.size(1)] # Attempt to match shapes
 
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
-                    prediction_errors = torch.abs(predVal - Y)
-                    prediction_errors = torch.cat([prediction_errors, torch.abs(predVal - Y)], dim=0)
+                    if prediction_errors is None:
+                        prediction_errors = torch.abs(predVal - Y)                    
+                    else:
+                        prediction_errors = torch.cat([prediction_errors, torch.abs(predVal - Y)], dim=0)
 
                     # Get loss value from dictionary
                     average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()

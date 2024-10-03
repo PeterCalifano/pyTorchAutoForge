@@ -7,6 +7,39 @@ from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel
 import numpy as np
 import os, copy
 
+
+class HyperParamOptimManagerConfig():
+
+    def __init__(self) -> None:
+        # Suggested by Copilot:
+        self.studyName = 'OptunaStudy'
+        self.numOfTrials = 100
+        self.numOfEpochs = 10
+        self.lossFcn = None
+        self.optimizer = None
+        self.dataloaderIndex = {}
+        self.model = None
+        self.options = {}
+
+        self.mlflowTrackingURI = 'http://localhost:5000'
+        self.mlflowExperimentName = 'DefaultExperiment'
+        self.mlflowRunName = 'OptunaRun'
+        self.mlflowTags = {}
+        self.mlflowParams = {}
+
+
+class HyperParamOptimManager(HyperParamOptimManagerConfig):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def optimizeHyperParams(self):
+        pass
+
+    def runTrial_(self):
+        '''Run for study for hyperparameter'''
+        pass
+
+
 # %% New version of TrainAndValidateModel with MLFlow logging specifically design for Optuna studies - 11-07-2024
 def TrainAndValidateModelForOptunaOptim(trial, dataloaderIndex: dict, model: nn.Module, lossFcn: nn.Module, optimizer, options: dict = {}):
     '''Training and validation loop for PyTorch models with MLFlow logging for Optuna optimization studies'''
