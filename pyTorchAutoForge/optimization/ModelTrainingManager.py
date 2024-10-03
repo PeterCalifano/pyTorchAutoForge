@@ -544,7 +544,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     
                     if examplePredictions.shape != Y.shape:
                         # Attempt to match shapes
-                        Y = Y[:, examplePredictions.size(1)]
+                        Y = Y[:, 0:examplePredictions.size(1)]
 
                     if prediction_errors is None:
                         prediction_errors = torch.abs(examplePredictions - Y)
@@ -622,7 +622,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         raise ValueError('Loss function not provided for regression task.')
                     
                     if predVal.shape != Y.shape:
-                        Y = Y[:, predVal.size(1)] # Attempt to match shapes
+                        Y = Y[:, 0:predVal.size(1)] # Attempt to match shapes
 
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     if prediction_errors is None:
