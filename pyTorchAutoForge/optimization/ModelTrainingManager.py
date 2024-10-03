@@ -530,6 +530,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 average_prediction_err = None
                 worst_prediction_err = None
                 num_of_batches = 0
+                prediction_errors = None
 
                 while samples_counter < num_samples:
                     examplePair = next(iter(self.validationDataloader)) # Note that this returns a batch of size given by the dataloader
@@ -540,7 +541,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Perform FORWARD PASS
                     examplePredictions = self.model(X)  # Evaluate model at input
 
-                    prediction_errors = torch.abs(examplePredictions - Y)
+                    if prediction_errors is None:
+                        prediction_errors = torch.abs(examplePredictions - Y)
                     prediction_errors = torch.cat([prediction_errors, torch.abs(examplePredictions - Y)], dim=0)
 
                     # Compute loss for each input separately                
@@ -598,6 +600,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             average_prediction_err = None
             worst_prediction_err = None
             num_samples = dataset_size
+            prediction_errors = None
 
             if self.tasktype == TaskType.REGRESSION:
                 
@@ -613,7 +616,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         raise ValueError('Loss function not provided for regression task.')
                     
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
-                    prediction_errors = torch.abs(predVal - Y)
+                    if prediction_errors is None:
+                        prediction_errors = torch.abs(predVal - Y)                    
                     prediction_errors = torch.cat([prediction_errors, torch.abs(predVal - Y)], dim=0)
 
                     # Get loss value from dictionary
