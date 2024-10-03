@@ -540,6 +540,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Perform FORWARD PASS
                     examplePredictions = self.model(X)  # Evaluate model at input
 
+
+                    if examplePredictions.shape != Y.shape:
+                        Y = Y[:, examplePredictions.size(1)] # Attempt to match shapes
+                        
                     prediction_errors = torch.abs(examplePredictions - Y)
                     prediction_errors = torch.cat([prediction_errors, torch.abs(examplePredictions - Y)], dim=0)
 
@@ -612,6 +616,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     if self.lossFcn is None:
                         raise ValueError('Loss function not provided for regression task.')
                     
+                    if predVal.shape != Y.shape:
+                        Y = Y[:, predVal.size(1)] # Attempt to match shapes
+
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     prediction_errors = torch.abs(predVal - Y)
                     prediction_errors = torch.cat([prediction_errors, torch.abs(predVal - Y)], dim=0)
