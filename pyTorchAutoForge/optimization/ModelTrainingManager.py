@@ -47,6 +47,7 @@ class ModelTrainingManagerConfig():
 
     # REQUIRED fields
     tasktype: TaskType # Task type for training and validation --> How to enforce the definition of this?
+    batch_size: int
 
     # FIELDS with DEFAULTS
     # Optimization strategy
@@ -66,7 +67,6 @@ class ModelTrainingManagerConfig():
     initial_lr: float = 1e-4
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
     optimizer: Any = torch.optim.Adam # optimizer class
-    batch_size: int
 
     # Hardware settings
     device: str = GetDevice()  # Default device is GPU if available
