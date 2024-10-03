@@ -543,7 +543,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     if prediction_errors is None:
                         prediction_errors = torch.abs(examplePredictions - Y)
-                    prediction_errors = torch.cat([prediction_errors, torch.abs(examplePredictions - Y)], dim=0)
+                    else:
+                        prediction_errors = torch.cat([prediction_errors, torch.abs(examplePredictions - Y)], dim=0)
 
                     # Compute loss for each input separately                
                     outLossVar = self.lossFcn(examplePredictions, Y)
@@ -618,7 +619,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     if prediction_errors is None:
                         prediction_errors = torch.abs(predVal - Y)                    
-                    prediction_errors = torch.cat([prediction_errors, torch.abs(predVal - Y)], dim=0)
+                    else:
+                        prediction_errors = torch.cat([prediction_errors, torch.abs(predVal - Y)], dim=0)
 
                     # Get loss value from dictionary
                     average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()
