@@ -547,9 +547,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         Y = Y[:, 0:examplePredictions.size(1)]
 
                     if prediction_errors is None:
-                        prediction_errors = torch.abs(examplePredictions - Y)
+                        prediction_errors = examplePredictions - Y
                     else:
-                        prediction_errors = torch.cat([prediction_errors, torch.abs(examplePredictions - Y)], dim=0)
+                        prediction_errors = torch.cat([prediction_errors, examplePredictions - Y], dim=0)
 
                     # Compute loss for each input separately                
                     outLossVar = self.lossFcn(examplePredictions, Y)
@@ -562,10 +562,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     num_of_batches += 1
 
                 # Compute average prediction over all samples
-                average_prediction_err = torch.mean( prediction_errors, dim=0)
+                average_prediction_err = torch.mean( torch.abs(prediction_errors), dim=0)
                 average_loss /= num_of_batches
 
-                worst_prediction_err, _ = torch.max( prediction_errors, dim=0)
+                worst_prediction_err, _ = torch.max( torch.abs(prediction_errors), dim=0)
 
             # TODO (TBC): log example in mlflow?
             #if self.mlflow_logging:
@@ -626,19 +626,19 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     if prediction_errors is None:
-                        prediction_errors = torch.abs(predVal - Y)                    
+                        prediction_errors = predVal - Y                  
                     else:
-                        prediction_errors = torch.cat([prediction_errors, torch.abs(predVal - Y)], dim=0)
+                        prediction_errors = torch.cat([prediction_errors, predVal - Y], dim=0)
 
                     # Get loss value from dictionary
                     average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()
 
                 # Find max prediction error over all samples
-                worst_prediction_err, _ = torch.max( prediction_errors, dim=0)
+                worst_prediction_err, _ = torch.max( torch.abs(prediction_errors), dim=0)
 
                 # Compute average prediction over all samples
-                average_prediction_err = torch.mean( prediction_errors, dim=0)
-                median_prediction_err, _ = torch.median( prediction_errors, dim=0)
+                average_prediction_err = torch.mean( torch.abs(prediction_errors), dim=0)
+                median_prediction_err, _ = torch.median( torch.abs(prediction_errors), dim=0)
                 average_loss /= num_samples    
 
                 print(f"\n\tAccuracy evaluation: regression average loss: {average_loss:>4f}\n")
@@ -646,7 +646,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                       "\n\t Median:", median_prediction_err, "\n\t Max:", worst_prediction_err)
                 
                 # Pack data into dict
-                stats['prediction_err'] = prediction_errors.to('cpu').numpy()
                 stats['prediction_err'] = prediction_errors.to('cpu').numpy()
                 stats['average_prediction_err'] = average_prediction_err.to('cpu').numpy()
                 stats['median_prediction_err'] = median_prediction_err.to('cpu').numpy()
