@@ -6,7 +6,7 @@
 
 from typing import Optional, Any, Union, IO
 import torch
-import mlflow
+import mlflow, optuna
 import os, sys, traceback
 from torch import nn
 import numpy as np
@@ -71,6 +71,8 @@ class ModelTrainingManagerConfig():
     # Hardware settings
     device: str = GetDevice()  # Default device is GPU if available
 
+    # OPTUNA MODE options
+    trial: Any = None  # Optuna trial object
 
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
@@ -215,6 +217,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.paramsToLogDict = None
         if paramsToLogDict is not None:
             self.paramsToLogDict = paramsToLogDict
+
+        # OPTUNA parameters
+        if self.trial is not None:
+            self.OPTUNA_MODE = True
+        else:
+            self.OPTUNA_MODE = False
 
         # Initialize dataloaders if provided
         if dataLoaderIndex is not None:
@@ -449,6 +457,16 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if isinstance(tmpValidLoss, tuple):
                     tmpValidLoss = tmpValidLoss[0]
 
+                # Optuna functionalities
+                # Report validation loss to Optuna pruner
+                if self.OPTUNA_MODE == True:
+                    # Compute average between training and validation loss
+                    optuna_loss = (tmpTrainLoss + tmpValidLoss) / 2
+                    self.trial.report(optuna_loss, step=epoch_num)
+
+                    if self.trial.should_prune():
+                        raise optuna.TrialPruned()
+
                 # Execute post-epoch operations
                 self.evalExample()        # Evaluate example if enabled
 
@@ -520,6 +538,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             print(f"Error during training and validation cycle: {str(e)[:max_chars]}...")
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
+
+        except optuna.TrialPruned:
+            # Optuna trial kill raised 
+            if self.mlflow_logging:
+                mlflow.end_run(status='KILLED')
 
 
     def evalExample(self, num_samples: int = 64) -> Union[torch.Tensor, None]:
