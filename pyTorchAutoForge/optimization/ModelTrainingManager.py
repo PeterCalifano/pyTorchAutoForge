@@ -466,9 +466,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     if self.trial.should_prune():
                         raise optuna.TrialPruned()
-
-                # Execute post-epoch operations
-                self.evalExample()        # Evaluate example if enabled
+                else:
+                    # Execute post-epoch operations
+                    self.evalExample()        # Evaluate example if enabled
 
                 if self.currentValidationLoss is None: # At epoch 0, set initial validation loss
                     self.currentValidationLoss = tmpValidLoss
@@ -499,8 +499,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 print('\tCurrent best at epoch {best_epoch}, validation loss: {best_loss}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
 
                 # "Early stopping" strategy implementation
-                if self.checkForEarlyStop(noNewBestCounter): 
-                    break
+                if self.OPTUNA_MODE == False:
+                    if self.checkForEarlyStop(noNewBestCounter): 
+                        break
                 
                 # Post epoch operations
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
