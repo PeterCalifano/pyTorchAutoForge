@@ -59,8 +59,8 @@ class ModelTrainingManagerConfig():
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
     eval_example: bool = False  # Evaluate example input during training
-    checkpointDir = "./checkpoints"  # Directory to save model checkpoints
-    modelName = "trained_model"      # Name of the model to be saved
+    checkpointDir: str = "./checkpoints"  # Directory to save model checkpoints
+    modelName: str = "trained_model"      # Name of the model to be saved
 
     # Optimization parameters
     lr_scheduler: Any = None 
