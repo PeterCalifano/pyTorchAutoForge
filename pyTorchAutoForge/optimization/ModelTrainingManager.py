@@ -169,7 +169,8 @@ class ModelTrainingManagerConfig():
 
 # %% ModelTrainingManager class - 24-07-2024
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn], config: Union[ModelTrainingManagerConfig, dict, str], optimizer: Union[optim.Optimizer, int, None] = None, dataLoaderIndex: Optional[DataloaderIndex] = None) -> None:
+    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn], config: Union[ModelTrainingManagerConfig, dict, str], 
+                 optimizer: Union[optim.Optimizer, int, None] = None, dataLoaderIndex: Optional[DataloaderIndex] = None, paramsToLogDict: dict = None) -> None:
         """
         Initializes the ModelTrainingManager class.
 
@@ -210,6 +211,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.currentMlflowRun = mlflow.active_run() # Returns None if no active run
 
         self.current_lr = self.initial_lr
+
+        self.paramsToLogDict = None
+        if paramsToLogDict is not None:
+            self.paramsToLogDict = paramsToLogDict
 
         # Initialize dataloaders if provided
         if dataLoaderIndex is not None:
@@ -716,7 +721,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()      
             #print("DEBUG:", ModelTrainerConfigParamsNames)
             mlflow.log_params({key: getattr(self, key) for key in ModelTrainerConfigParamsNames})
-        
+
+            # Log additional parameters if provided
+            if self.paramsToLogDict is not None:
+                mlflow.log_params(self.paramsToLogDict, synchronous=False)
         #else:
         #    Warning('MLFlow logging is disabled. No run started.')
 
