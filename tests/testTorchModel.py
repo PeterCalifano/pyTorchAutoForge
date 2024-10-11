@@ -5,7 +5,6 @@ from pyTorchAutoForge.modelBuilding import torchModel
 
 
 
-
 def main():
     pass
 

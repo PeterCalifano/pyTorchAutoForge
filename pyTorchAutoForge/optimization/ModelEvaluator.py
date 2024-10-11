@@ -64,7 +64,7 @@ class ModelEvaluator():
         # Allocate torch tensors to store errors
         residuals = torch.zeros(dataset_size, sample[1].shape[1])
                              
-        # Perform model evaluation on each batch
+        # Perform model evaluation on all batches
         with torch.no_grad():
 
             for X, Y in tmpdataloader:
