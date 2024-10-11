@@ -19,8 +19,8 @@ model_assembly = nn.Sequential(*[model, model2])
 print(model_assembly)
 exit(0)
 """
-
-from  pyTorchAutoForge import torchModel
+from pyTorchAutoForge.utils import GetDevice 
+from pyTorchAutoForge import torchModel
 from typing import Union
 from torch import nn
 
@@ -51,9 +51,58 @@ class MultiHeadAdapter():
         for head in self.headList:
             head.to(device)
 
-class ModelAssembler():
-    def __init__(self) -> None:
-        super().__init__()
-        # TODO
+# DEVNOTE: python features to use:
+#class MyClass:
+#    def __init__(self, *args: Union[int, float, str]) -> None:
+#        for i, arg in enumerate(args):
+#            setattr(self, f'attribute_{i}', arg)
+#    
+#    def display_attributes(self):
+#        # Just an example to show the attributes
+#        for attr, value in self.__dict__.items():
+#            print(f"{attr}: {value}")
+
+# DEVNOTE: try to make it a subclass of nn.Module
+class ModelAssembler(nn.Module):
+    # DEVNOTE: behaviour for each type is TBC
+    def __init__(self, device:str = GetDevice(),  *args: Union[torchModel, nn.Module, nn.ModuleList, nn.ModuleList]) -> "ModelAssembler":
+        super(self).__init__()
+
+        for idModule, module in enumerate(args):
+            
+            # Process each moduel according to instance type
+            if isinstance(module, nn.Module):
+                module_name = module.__class__.__name__
+                setattr(self, f'{module_name}_{idModule}', module)
+
+            elif isinstance(module, nn.ModuleList):
+                module_name = f"moduleList_{idModule}" # Note: no way of getting the name of the module list
+
+            elif isinstance(module, nn.ModuleDict):
+
+                # Unpack the module dict and assign to the model
+                for key, module in module.items():
+                    module_name = f"{key}_{idModule}" 
+                    setattr(self, module_name, module)
+            else:
+                raise TypeError(f"Module type {type(module)} is not supported")
+        return self
+
+    def forward(self, X):
+        pass # TODO --> Optional
+
+    def getModelAsModule(self):
+        
+        # Pack all modules into a nn.ModuleDict
+        model = nn.ModuleDict()
+
+        for module_name, module in self.__dict__.items():
+            model[module_name] = module
+
+        return model
+
 
         
+
+        
+
