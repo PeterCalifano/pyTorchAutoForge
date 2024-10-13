@@ -20,9 +20,10 @@ class ResultsPlotterConfig():
 class ResultsPlotter():
     def __init__(self, stats: dict = None, backend_module_: backend_module = backend_module.SEABORN, 
                  config: ResultsPlotterConfig = None) -> None:
-        
-        self.stats = stats if not None else {} # Shallow copy
+
+        self.loaded_stats = stats
         self.backend_module = backend_module_
+        self.stats = None
 
         # Assign all config attributes dynamically
         if config is None:
@@ -32,7 +33,7 @@ class ResultsPlotter():
         for key, value in vars(config).items():
             setattr(self, key, value)
     
-    def histPredictionErrors(self, entriesNames: list = None, units: list = None,
+    def histPredictionErrors(self, stats: dict = None, entriesNames: list = None, units: list = None,
                              unit_scalings: dict = None, colours: list = None, num_of_bins: int = 100) -> None:
         """
         Method to plot histogram of prediction errors per component without absolute value. EvaluateRegressor() must be called first.
@@ -46,9 +47,15 @@ class ResultsPlotter():
         assert (len(entriesNames) == len(units) if entriesNames is not None else True)
 
         # DATA: Check if stats dictionary is empty
-        if self.stats == {}:
+        if stats == None:
+            self.stats == self.loaded_stats
+
+        if self.stats == None:
             print('Return: empty stats dictionary')
             return
+        elif not(isinstance(self.stats, dict)):
+            raise TypeError("Invalid stats input provided: must be a dictionary.")
+        
         
         if 'prediction_err' in self.stats:
             prediction_errors = self.stats['prediction_err']
