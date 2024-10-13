@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from enum import Enum
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, field 
+
 
 class backend_module(Enum):
     MATPLOTLIB = "Use matplotlib for plotting",
@@ -11,9 +12,9 @@ class backend_module(Enum):
 @dataclass
 class ResultsPlotterConfig():
     save_figs: bool = False
-    unit_scalings: dict = {}    
+    unit_scalings: dict = field(default_factory=dict)
     num_of_bins: int = 100
-    colours: list = []
+    colours: list = field(default_factory=list)
     units: list = None
     entriesNames: list = None
 

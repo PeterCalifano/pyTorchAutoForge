@@ -15,7 +15,7 @@ from pyTorchAutoForge.optimization import CustomLossFcn
 
 from typing import Callable, Optional
 import torch.optim as optim
-from ResultsPlotter import ResultsPlotter
+from pyTorchAutoForge.evaluation import ResultsPlotter
 
 @dataclass
 class ModelEvaluatorConfig():
