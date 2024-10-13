@@ -460,7 +460,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # Optuna functionalities
                 # Report validation loss to Optuna pruner
                 if self.OPTUNA_MODE == True:
-                    # Compute average between training and validation loss
+                    # Compute average between training and validation loss // TODO: verify feasibility of using the same obj function as sampler
                     optuna_loss = (tmpTrainLoss + tmpValidLoss) / 2
                     self.trial.report(optuna_loss, step=epoch_num)
 
