@@ -529,21 +529,23 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 mlflow.end_run(status='FINISHED')
 
         except KeyboardInterrupt:
-            print('ModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
+            print('\nModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
+            if self.mlflow_logging:
+                mlflow.end_run(status='KILLED')
+
+        except optuna.TrialPruned:
+            # Optuna trial kill raised 
+            print('\nnModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.')
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
 
         except Exception as e:
-
             max_chars = 500  # Define the max length you want to print
-            print(f"Error during training and validation cycle: {str(e)[:max_chars]}...")
+            print(f"\nError during training and validation cycle: {str(e)[:max_chars]}...")
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
 
-        except optuna.TrialPruned:
-            # Optuna trial kill raised 
-            if self.mlflow_logging:
-                mlflow.end_run(status='KILLED')
+
 
 
     def evalExample(self, num_samples: int = 64) -> Union[torch.Tensor, None]:
