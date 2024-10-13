@@ -18,6 +18,23 @@ class ResultsPlotterConfig():
     entriesNames: list = None
 
 class ResultsPlotter():
+    """
+    ResultsPlotter is a class for plotting the results of prediction errors using different backends like Matplotlib or Seaborn.
+    Attributes:
+        loaded_stats (dict): Dictionary containing the loaded statistics.
+        backend_module (backend_module): The backend module to use for plotting (e.g., Matplotlib or Seaborn).
+        stats (dict): Dictionary containing the statistics to be plotted.
+        units (list): List of units for each entry.
+        colours (list): List of colours for each entry.
+        entriesNames (list): List of names for each entry.
+        unit_scalings (dict): Dictionary containing scaling factors for each entry.
+        save_figs (bool): Flag to indicate whether to save the figures.
+    Methods:
+        __init__(stats: dict = None, backend_module_: backend_module = backend_module.SEABORN, config: ResultsPlotterConfig = None) -> None:
+            Initializes the ResultsPlotter with the given statistics, backend module, and configuration.
+        histPredictionErrors(stats: dict = None, entriesNames: list = None, units: list = None, unit_scalings: dict = None, colours: list = None, num_of_bins: int = 100) -> None:
+            Plots a histogram of prediction errors per component without absolute value. Requires EvaluateRegressor() to be called first and matplotlib to work in Interactive Mode.
+    """
     def __init__(self, stats: dict = None, backend_module_: backend_module = backend_module.SEABORN, 
                  config: ResultsPlotterConfig = None) -> None:
 
@@ -140,4 +157,6 @@ class ResultsPlotter():
             # SAVING: Save figure if required
             if self.save_figs:
                 plt.savefig("prediction_errors_" + entryName + ".png")
+            else:
+                plt.show()
 

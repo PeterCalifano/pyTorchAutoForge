@@ -13,12 +13,9 @@ from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding, GetSamplesF
 from pyTorchAutoForge.api.torch import SaveTorchModel
 from pyTorchAutoForge.optimization import CustomLossFcn
 
-
-from typing import Callable
-
-# Key class to use tensorboard with PyTorch. VSCode will automatically ask if you want to load tensorboard in the current session.
+from typing import Callable, Optional
 import torch.optim as optim
-
+from ResultsPlotter import ResultsPlotter
 
 @dataclass
 class ModelEvaluatorConfig():
@@ -27,9 +24,19 @@ class ModelEvaluatorConfig():
 
 
 class ModelEvaluator():
-
+    """_summary_
+    """
     def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn],
-                 dataLoaderIndex: DataloaderIndex, evalFunction: Callable = None) -> None:
+                 dataLoaderIndex: DataloaderIndex, evalFunction: Callable = None, 
+                 plotter: Optional[ResultsPlotter] = None) -> None:
+        """_summary_
+
+        Args:
+            model (Union[nn.Module]): _description_
+            lossFcn (Union[nn.Module, CustomLossFcn]): _description_
+            dataLoaderIndex (DataloaderIndex): _description_
+            evalFunction (Callable, optional): _description_. Defaults to None.
+        """
 
         self.model = model
         self.lossFcn = lossFcn
@@ -38,7 +45,10 @@ class ModelEvaluator():
         self.evalFunction = evalFunction
         self.device = GetDevice()
 
-    def EvaluateRegressor(self) -> dict:
+        self.stats = {}
+        self.plotter = plotter
+
+    def evaluateRegressor(self) -> dict:
         '''DEVNOTE: loss function averaging assumes that the batch_loss is not an average but a sum of losses'''
         self.model.eval()
 
@@ -110,14 +120,14 @@ class ModelEvaluator():
             maxResiduals = torch.max(torch.abs(residuals), dim=0)
 
         # Pack data into dict
-        stats = {}
-        stats['prediction_err'] = residuals.to('cpu').numpy()
-        stats['average_prediction_err'] = avgResiduals.to('cpu').numpy()
-        stats['median_prediction_err'] = medianResiduals.to('cpu').numpy()
-        stats['max_prediction_err'] = maxResiduals.to('cpu').numpy()
+        self.stats = {}
+        self.stats['prediction_err'] = residuals.to('cpu').numpy()
+        self.stats['average_prediction_err'] = avgResiduals.to('cpu').numpy()
+        self.stats['median_prediction_err'] = medianResiduals.to('cpu').numpy()
+        self.stats['max_prediction_err'] = maxResiduals.to('cpu').numpy()
 
         if self.lossFcn is not None:
-            stats['avg_loss'] = avg_loss
+            self.stats['avg_loss'] = avg_loss
 
         # Print statistics
         print('Avg residuals: ', avgResiduals)
@@ -125,4 +135,15 @@ class ModelEvaluator():
         print('Median residuals: ', medianResiduals)
         print('Max residuals: ', maxResiduals)
 
-        return stats
+        return self.stats
+
+    def plotResults(self) -> None:
+        if self.plotter is not None:
+            self.plotter.histPredictionErrors(self.stats)
+        
+
+    
+
+
+
+
