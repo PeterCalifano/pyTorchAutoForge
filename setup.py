@@ -1,5 +1,5 @@
 '''Module setup file created by PeterC - 06/30/2024.
-Major update for release version: 09/17/2024'''
+Major update for release version: 09/17/2024 (v0.1)'''
 from setuptools import setup, find_packages
 
 import getpass
@@ -17,7 +17,7 @@ if "ele" in username or "pilo" in username:
 
 setup(
     name='pyTorchAutoForge',
-    version='0.1',
+    version='0.2',
     packages=find_packages(),
     install_requires=[
         "torch==2.2.1",

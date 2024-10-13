@@ -5,6 +5,8 @@ from .optimization import *
 from .modelBuilding import *
 from .hparamsOptim import *
 from .api import *
+from .evaluation import *
+from .datasets import *
 
 import os
 import importlib
