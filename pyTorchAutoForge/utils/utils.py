@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 # GetDevice:
 def GetDevice():
     '''Function to get working device. Used by most modules of pyTorchAutoForge'''
+    # TODO: improve method by adding selection of GPU for multi-GPU systems
     device = ("cuda:0"
               if torch.cuda.is_available()
               else "mps"
