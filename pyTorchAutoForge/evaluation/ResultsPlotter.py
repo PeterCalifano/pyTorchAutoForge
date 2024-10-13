@@ -25,11 +25,13 @@ class ResultsPlotter():
         self.backend_module = backend_module_
 
         # Assign all config attributes dynamically
-        if config is not None:
-            for key, value in vars(config).items():
-                setattr(self, key, value)
+        if config is None:
+            # Define default values
+            config = ResultsPlotterConfig()
 
-
+        for key, value in vars(config).items():
+            setattr(self, key, value)
+    
     def histPredictionErrors(self, entriesNames: list = None, units: list = None,
                              unit_scalings: dict = None, colours: list = None, num_of_bins: int = 100) -> None:
         """
@@ -56,15 +58,18 @@ class ResultsPlotter():
 
         num_of_entry = min(prediction_errors.shape) # Assumes that the number of entries is always smaller that the number of samples
 
-
         # COLOURS: Check that number of colours is equal to number of entries
-
         if colours != None:
-            if len(colours) < num_of_entry:
+            override_condition = len(colours) < num_of_entry if colours != None else False and len(self.colours) < num_of_entry
+
+            if override_condition:
                 Warning( "Overriding colours: number of colours specified not matching number of entries.")
-                colours = []
+                colours = None
         
-        if colours is None:
+        if colours == None and self.colours != None and not(override_condition):
+            colours = self.colours
+
+        elif colours == None and self.colours == None or override_condition:
             if self.backend_module == backend_module.MATPLOTLIB:
                 # Get colour palette from matplotlib
                 colours = plt.cm.get_cmap('viridis', num_of_entry)
@@ -74,6 +79,7 @@ class ResultsPlotter():
                 colours = sns.color_palette("husl", num_of_entry)
             else:
                 raise ValueError("Invalid backend module selected.")
+            
 
 
         # PLOT: Plotting loop per component
