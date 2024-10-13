@@ -38,25 +38,31 @@ class ResultsPlotter():
         Method to plot histogram of prediction errors per component without absolute value. EvaluateRegressor() must be called first.
         Requires matplotlib to work in Interactive Mode.
         """
+
+        if units == None and self.units != None:
+            units = self.units
+
         assert (units is not None if entriesNames is not None else True)
         assert (len(entriesNames) == len(units) if entriesNames is not None else True)
 
+        # DATA: Check if stats dictionary is empty
         if self.stats == {}:
             print('Return: empty stats dictionary')
             return
-
+        
         if 'prediction_err' in self.stats:
             prediction_errors = self.stats['prediction_err']
         else:
             print('Return: "prediction_err" key not found in stats dictionary')
             return
-
+        
         if 'average_prediction_err' in self.stats:
             avg_errors = self.stats['average_prediction_err']
         else:
             avg_errors = None
 
-        num_of_entry = min(prediction_errors.shape) # Assumes that the number of entries is always smaller that the number of samples
+        # Assumes that the number of entries is always smaller that the number of samples
+        num_of_entry = min(prediction_errors.shape) 
 
         # COLOURS: Check that number of colours is equal to number of entries
         if colours != None:
@@ -69,7 +75,7 @@ class ResultsPlotter():
         if colours == None and self.colours != None and not(override_condition):
             colours = self.colours
 
-        elif colours == None and self.colours == None or override_condition:
+        elif (colours == None and self.colours == None) or override_condition:
             if self.backend_module == backend_module.MATPLOTLIB:
                 # Get colour palette from matplotlib
                 colours = plt.cm.get_cmap('viridis', num_of_entry)
@@ -81,19 +87,22 @@ class ResultsPlotter():
                 raise ValueError("Invalid backend module selected.")
             
 
-
         # PLOT: Plotting loop per component
         for idEntry in np.arange(num_of_entry):
             
             # ENTRY NAME: Check if entry name is provided
             if entriesNames != None:
                 entryName = entriesNames[idEntry]
+            elif self.entriesNames != None:
+                entryName = self.entriesNames[idEntry]
             else:
                 entryName = "Component " + str(idEntry)
 
             # SCALING: Check if scaling required
             if unit_scalings != None and entryName in unit_scalings:
                 unit_scaler = unit_scalings[entryName]
+            elif self.unit_scalings != None and entryName in self.unit_scalings:
+                unit_scaler = self.unit_scalings[entryName]
             else:
                 unit_scaler = 1.0
 
@@ -117,7 +126,7 @@ class ResultsPlotter():
                             color=colours[idEntry], linestyle='--', linewidth=1, 
                             label=f'Mean: {avg_errors[idEntry]:.2f}')
 
-            plt.xlabel("Error [{unit}]".format(unit=units[idEntry] if entriesNames is not None else "N/D"))
+            plt.xlabel("Error [{unit}]".format(unit=units[idEntry] if entriesNames != None else "N/D"))
             plt.ylabel("# Samples")
             plt.grid()
 
