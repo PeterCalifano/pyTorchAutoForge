@@ -49,7 +49,6 @@ def ExportTorchModelToONNx(model: torch.nn.Module, dummyInputSample: torch.tenso
 
     return modelONNx, convertedModel
 
-
 def LoadTorchModelFromONNx(dummyInputSample: torch.tensor, onnxExportPath: str = '.', onnxSaveName: str = 'trainedModelONNx', modelID: int = 0):
     
     # Define filename of the exported model
