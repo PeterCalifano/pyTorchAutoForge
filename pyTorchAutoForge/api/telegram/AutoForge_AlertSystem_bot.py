@@ -6,8 +6,6 @@ from telegram import Bot
 import json
 
 
-
-
 class AutoForgeAlertSystemBot(Bot):
     def __init__(self, token: str = None, chat_id: str = None) -> "AutoForgeAlertSystemBot":
         
