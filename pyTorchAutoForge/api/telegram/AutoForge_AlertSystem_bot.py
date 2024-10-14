@@ -5,22 +5,25 @@
 from telegram import Bot
 import json
 
+def GetDefaultBotToken() -> str:
+    with open('bot_token_private.json') as file:
+        data = json.load(file)
+        return data['token']
+
+def GetDefaultChatID() -> str:
+    with open('bot_token_private.json') as file:
+        data = json.load(file)
+        return data['chat_id']
 
 class AutoForgeAlertSystemBot(Bot):
-    def __init__(self, token: str = None, chat_id: str = None) -> "AutoForgeAlertSystemBot":
-        
-        if token is None and chat_id is None:
-            with open('pyTorchAutoForge/api/telegram/telegram_bot_token.json') as file:
-                data = json.load(file)
-                token = data['token']
-                chat_id = data['chat_id']
 
-        self.token = token
-        self.chat_id = chat_id
-
+    def __init__(self, token: str = GetDefaultBotToken(), chat_id: str = GetDefaultChatID()) -> "AutoForgeAlertSystemBot":
         if token is None:
             raise ValueError("Token is required to create a bot instance")
         super().__init__(token=token)
+
+        self.chat_id_ = chat_id # DEVNOTE: not working, but not sure why?
+
     
     def sendMessage(self, text_string: str) -> bool:
         if self.chat_id is None:
@@ -34,7 +37,7 @@ class AutoForgeAlertSystemBot(Bot):
 if __name__ == "__main__":
 
     # Replace with your bot's token and chat ID
-    with open('pyTorchAutoForge/api/telegram/telegram_bot_token.json') as file:
+    with open('bot_token_private.json') as file:
         data = json.load(file)
         token = data['token']
         chat_id = data['chat_id']
