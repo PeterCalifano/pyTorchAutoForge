@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../vbn-ai-dart"
+		},
+		{
+			"path": "../operative/operative-develop"
 		}
 	],
 	"settings": {}
