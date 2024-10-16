@@ -6,8 +6,11 @@
 
 from typing import Optional, Any, Union, IO
 import torch
-import mlflow, optuna
-import os, sys, traceback
+import mlflow
+import optuna
+import os
+import sys
+import traceback
 from torch import nn
 import numpy as np
 from torch.utils.data import DataLoader
@@ -46,7 +49,8 @@ class ModelTrainingManagerConfig():
     '''Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.'''
 
     # REQUIRED fields
-    tasktype: TaskType # Task type for training and validation --> How to enforce the definition of this?
+    # Task type for training and validation --> How to enforce the definition of this?
+    tasktype: TaskType
     batch_size: int
 
     # FIELDS with DEFAULTS
@@ -63,10 +67,10 @@ class ModelTrainingManagerConfig():
     modelName: str = "trained_model"      # Name of the model to be saved
 
     # Optimization parameters
-    lr_scheduler: Any = None 
+    lr_scheduler: Any = None
     initial_lr: float = 1e-4
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
-    optimizer: Any = torch.optim.Adam # optimizer class
+    optimizer: Any = torch.optim.Adam  # optimizer class
 
     # Hardware settings
     device: str = GetDevice()  # Default device is GPU if available
@@ -82,7 +86,7 @@ class ModelTrainingManagerConfig():
             ModelTrainingManagerConfig: A new instance of ModelTrainingManagerConfig with the same configuration.
         """
         return self.__init__(**instanceToCopy.getConfigDict())
-    
+
     # DEVNOTE: dataclass generates __init__() automatically
     # Same goes for __repr()__ for printing and __eq()__ for equality check methods
 
@@ -110,7 +114,7 @@ class ModelTrainingManagerConfig():
             # Check if file exists
             if not os.path.isfile(yamlFile):
                 raise FileNotFoundError(f"File not found: {yamlFile}")
-            
+
             with open(yamlFile, 'r') as file:
 
                 # TODO: VALIDATE SCHEMA
@@ -125,7 +129,7 @@ class ModelTrainingManagerConfig():
         # Call load_from_dict() method
         return cls.load_from_dict(configDict)
 
-    @classmethod # Why did I defined this class instead of using the __init__ method for dataclasses?
+    @classmethod  # Why did I defined this class instead of using the __init__ method for dataclasses?
     def load_from_dict(cls, configDict: dict) -> 'ModelTrainingManagerConfig':
         """
         Load configuration parameters from a dictionary and return an instance of the class. If attribute is not present, default/already assigned value is used unless required.
@@ -166,12 +170,11 @@ class ModelTrainingManagerConfig():
     def getConfigParamsNames(self) -> list:
         '''Method to return the names of all parameters in the configuration class'''
         return [f.name for f in fields(self)]
-    
 
 
 # %% ModelTrainingManager class - 24-07-2024
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn], config: Union[ModelTrainingManagerConfig, dict, str], 
+    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn], config: Union[ModelTrainingManagerConfig, dict, str],
                  optimizer: Union[optim.Optimizer, int, None] = None, dataLoaderIndex: Optional[DataloaderIndex] = None, paramsToLogDict: dict = None) -> None:
         """
         Initializes the ModelTrainingManager class.
@@ -192,12 +195,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         elif isinstance(config, dict):
             # Initialize ModelTrainingManagerConfig base instance from dictionary
-            super().load_from_dict(config) # This method only copies the attributes present in the dictionary, which may be a subset.
+            # This method only copies the attributes present in the dictionary, which may be a subset.
+            super().load_from_dict(config)
 
         elif isinstance(config, ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
-            super().__init__(**config.getConfigDict())  # Call init of parent class for shallow copy
-            
+            # Call init of parent class for shallow copy
+            super().__init__(**config.getConfigDict())
+
         # Initialize ModelTrainingManager-specific attributes
         self.model = (model).to(self.device)
         self.bestModel = None
@@ -210,7 +215,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         self.currentTrainingLoss = None
         self.currentValidationLoss = None
-        self.currentMlflowRun = mlflow.active_run() # Returns None if no active run
+        self.currentMlflowRun = mlflow.active_run()  # Returns None if no active run
 
         self.current_lr = self.initial_lr
 
@@ -235,13 +240,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             elif isinstance(optimizer, int) or issubclass(optimizer, optim.Optimizer):
                 self.define_optimizer_(optimizer)
             else:
-                raise ValueError('Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
+                raise ValueError(
+                    'Optimizer must be either an instance of torch.optim.Optimizer or an integer representing the optimizer type.')
         else:
             if isinstance(self.optimizer, optim.Optimizer):
                 # Redefine optimizer class as workaround for weird python behavior (no update applied to model)
                 self.reinstantiate_optimizer_()
-            else: 
-                raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
+            else:
+                raise ValueError(
+                    'Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
 
     def define_optimizer_(self, optimizer: Union[optim.Optimizer, int]) -> None:
         """
@@ -262,22 +269,24 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         elif optimizer == 1 or optimizer == torch.optim.Adam:
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.initial_lr)
-            
+
     def reinstantiate_optimizer_(self):
         """
         Reinstantiates the optimizer with the same hyperparameters but with the current model parameters.
         """
         optim_class = self.optimizer.__class__
         optim_params = self.optimizer.param_groups[0]
-        optimizer_hyperparams = {key: value for key, value in optim_params.items() if ((key != 'params') and (key != 'initial_lr'))}
-        self.optimizer = optim_class(self.model.parameters(), **optimizer_hyperparams)
+        optimizer_hyperparams = {key: value for key, value in optim_params.items() if (
+            (key != 'params') and (key != 'initial_lr'))}
+        self.optimizer = optim_class(
+            self.model.parameters(), **optimizer_hyperparams)
 
         if self.lr_scheduler is not None:
             for param_group in self.optimizer.param_groups:
                 param_group['initial_lr'] = self.optimizer.param_groups[0]['lr']
 
             self.lr_scheduler.optimizer = self.optimizer
-        
+
     def setDataloaders(self, dataloaderIndex: DataloaderIndex) -> None:
         """
         Sets the training and validation dataloaders using the provided DataloaderIndex.
@@ -295,29 +304,33 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
     def trainModelOneEpoch_(self):
         '''Method to train the model using the specified datasets and loss function. Not intended to be called as standalone.'''
-        
+
         if self.trainingDataloader is None:
             raise ValueError('No training dataloader provided.')
-        
+
         # Set model instance in training mode (mainly for dropout and batch normalization layers)
-        self.model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
-        
+        # Set model instance in training mode ("informing" backend that the training is going to start)
+        self.model.train()
+
         running_loss = 0.0
-        #prev_model = copy.deepcopy(self.model)
+        # prev_model = copy.deepcopy(self.model)
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
 
             # Get input and labels and move to target device memory
             # Define input, label pairs for target device
-            X, Y = X.to(self.device), Y.to(self.device) # DEVNOTE: TBD if this goes here or if to move dataloader to device
+            # DEVNOTE: TBD if this goes here or if to move dataloader to device
+            X, Y = X.to(self.device), Y.to(self.device)
 
             # Perform FORWARD PASS to get predictions
-            predVal = self.model(X)  # Evaluate model at input, calls forward() method
-            
+            # Evaluate model at input, calls forward() method
+            predVal = self.model(X)
+
             # Evaluate loss function to get loss value dictionary
             trainLossDict = self.lossFcn(predVal, Y)
 
             # Get loss value from dictionary
-            trainLossVal = trainLossDict.get('lossValue') if isinstance(trainLossDict, dict) else trainLossDict
+            trainLossVal = trainLossDict.get('lossValue') if isinstance(
+                trainLossDict, dict) else trainLossDict
 
             # TODO: here one may log intermediate metrics at each update
             # if self.mlflow_logging:
@@ -341,12 +354,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             sys.stdout.flush()
 
             # TODO: implement management of SWA model
-            #if swa_model is not None and epochID >= swa_start_epoch:
-        
+            # if swa_model is not None and epochID >= swa_start_epoch:
 
-        # DEBUG: 
-        #print(f"\n\nDEBUG: Model parameters before and after optimizer step:")
-        #for param1, param2 in zip(prev_model.parameters(), self.model.parameters()):
+        # DEBUG:
+        # print(f"\n\nDEBUG: Model parameters before and after optimizer step:")
+        # for param1, param2 in zip(prev_model.parameters(), self.model.parameters()):
         #    if torch.equal(param1, param2) or param1 is param2:
         #        raise ValueError("Model parameters are the same after 1 epoch.")
 
@@ -356,7 +368,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """Method to validate the model using the specified datasets and loss function. Not intended to be called as standalone."""
         if self.validationDataloader is None:
             raise ValueError('No validation dataloader provided.')
-        
+
         self.model.eval()
         validationLossVal = 0.0  # Accumulation variables
         # batchMaxLoss = 0
@@ -364,28 +376,29 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         # Backup the original batch size (TODO: TBC if it is useful)
         original_dataloader = self.validationDataloader
-                
+
         # Temporarily initialize a new dataloader for validation
-        newBathSizeTmp = 2 * self.validationDataloader.batch_size # TBC how to set this value
+        newBathSizeTmp = 2 * self.validationDataloader.batch_size  # TBC how to set this value
 
         tmpdataloader = DataLoader(
-                                original_dataloader.dataset, 
-                                batch_size=newBathSizeTmp, 
-                                shuffle=False, 
-                                drop_last=False, 
-                                pin_memory=True,
-                                num_workers=0
-                                )
-        
+            original_dataloader.dataset,
+            batch_size=newBathSizeTmp,
+            shuffle=False,
+            drop_last=False,
+            pin_memory=True,
+            num_workers=0
+        )
+
         numberOfBatches = len(tmpdataloader)
         dataset_size = len(tmpdataloader.dataset)
 
         with torch.no_grad():
             if self.tasktype == TaskType.CLASSIFICATION:
 
-                if not(isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
-                    raise NotImplementedError('Current classification validation function only supports nn.CrossEntropyLoss.')
-                
+                if not (isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
+                    raise NotImplementedError(
+                        'Current classification validation function only supports nn.CrossEntropyLoss.')
+
                 correctPredictions = 0
 
                 for X, Y in tmpdataloader:
@@ -397,19 +410,23 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Evaluate loss function to get loss value dictionary
                     validationLossDict = self.lossFcn(predVal, Y)
-                    validationLossVal += validationLossDict.get('lossValue') if isinstance(validationLossDict, dict) else validationLossDict.item()
+                    validationLossVal += validationLossDict.get('lossValue') if isinstance(
+                        validationLossDict, dict) else validationLossDict.item()
 
                     # Evaluate how many correct predictions (assuming CrossEntropyLoss)
-                    correctPredictions += (predVal.argmax(1) == Y).type(torch.float).sum().item()
+                    correctPredictions += (predVal.argmax(1)
+                                           == Y).type(torch.float).sum().item()
 
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
-                correctPredictions /= dataset_size    # Compute percentage of correct classifications over dataset size
-                print(f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {validationLossVal:>4f}\n")
+                # Compute percentage of correct classifications over dataset size
+                correctPredictions /= dataset_size
+                print(
+                    f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {validationLossVal:>4f}\n")
 
                 return validationLossVal, correctPredictions
 
             elif self.tasktype == TaskType.REGRESSION:
-                
+
                 for X, Y in tmpdataloader:
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
@@ -421,16 +438,19 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     validationLossDict = self.lossFcn(predVal, Y)
 
                     # Get loss value from dictionary
-                    validationLossVal += validationLossDict.get('lossValue') if isinstance(validationLossDict, dict) else validationLossDict.item()
+                    validationLossVal += validationLossDict.get('lossValue') if isinstance(
+                        validationLossDict, dict) else validationLossDict.item()
 
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
-                print(f"\n\tValidation: regression average loss: {validationLossVal:>4f}\n")
+                print(
+                    f"\n\tValidation: regression average loss: {validationLossVal:>4f}\n")
 
                 return validationLossVal
-            
+
             else:
-                raise NotImplementedError('Custom task type not implemented yet.')
-            
+                raise NotImplementedError(
+                    'Custom task type not implemented yet.')
+
     def trainAndValidate(self):
         """_summary_
 
@@ -446,10 +466,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
                 if self.mlflow_logging:
-                    mlflow.log_metric('lr', self.current_lr, step=self.currentEpoch)
+                    mlflow.log_metric('lr', self.current_lr,
+                                      step=self.currentEpoch)
 
                 # Perform training for one epoch
-                tmpTrainLoss = self.trainModelOneEpoch_()                
+                tmpTrainLoss = self.trainModelOneEpoch_()
 
                 # Perform validation at current epoch
                 tmpValidLoss = self.validateModel_()
@@ -470,10 +491,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Execute post-epoch operations
                     self.evalExample()        # Evaluate example if enabled
 
-                if self.currentValidationLoss is None: # At epoch 0, set initial validation loss
+                if self.currentValidationLoss is None:  # At epoch 0, set initial validation loss
                     self.currentValidationLoss = tmpValidLoss
                     self.bestValidationLoss = tmpValidLoss
-                
+
                 # Update stats if new best model found (independently of keep_best flag)
                 if tmpValidLoss <= self.bestValidationLoss:
                     self.bestEpoch = epoch_num
@@ -486,135 +507,176 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # DEVNOTE: this could go into a separate method
                 if self.keep_best:
                     if tmpValidLoss <= self.bestValidationLoss:
-                        self.bestModel = copy.deepcopy(self.model).to('cpu') # Transfer best model to CPU to avoid additional memory allocation on GPU
-                
+                        # Transfer best model to CPU to avoid additional memory allocation on GPU
+                        self.bestModel = copy.deepcopy(self.model).to('cpu')
+
                 # Update current training and validation loss values
                 self.currentTrainingLoss = tmpTrainLoss
                 self.currentValidationLoss = tmpValidLoss
 
                 if self.mlflow_logging:
-                    mlflow.log_metric('train_loss', self.currentTrainingLoss, step=self.currentEpoch)
-                    mlflow.log_metric('validation_loss', self.currentValidationLoss, step=self.currentEpoch)
+                    mlflow.log_metric(
+                        'train_loss', self.currentTrainingLoss, step=self.currentEpoch)
+                    mlflow.log_metric(
+                        'validation_loss', self.currentValidationLoss, step=self.currentEpoch)
 
-                print('\tCurrent best at epoch {best_epoch}, validation loss: {best_loss}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
+                print('\tCurrent best at epoch {best_epoch}, validation loss: {best_loss}'.format(
+                    best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
 
                 # "Early stopping" strategy implementation
                 if self.OPTUNA_MODE == False:
-                    if self.checkForEarlyStop(noNewBestCounter): 
+                    if self.checkForEarlyStop(noNewBestCounter):
                         break
-                
+
                 # Post epoch operations
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
                 self.currentEpoch += 1
 
             # Model saving code
-            modelToSave = (self.bestModel if self.bestModel is not None else self.model).to('cpu')
+            modelToSave = (
+                self.bestModel if self.bestModel is not None else self.model).to('cpu')
             if self.keep_best:
-                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
+                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss}'.format(
+                    best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
 
             if not (os.path.isdir(self.checkpointDir)):
                 os.mkdir(self.checkpointDir)
 
             with torch.no_grad():
                 examplePair = next(iter(self.validationDataloader))
-                modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
-                SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=False, exampleInput=examplePair[0], targetDevice=self.device)
+                modelSaveName = os.path.join(
+                    self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
+                SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=False,
+                               exampleInput=examplePair[0], targetDevice=self.device)
 
             if self.mlflow_logging:
-                    mlflow.log_param('model_checkpoint_epoch', self.bestEpoch)
-            
+                mlflow.log_param('model_checkpoint_epoch', self.bestEpoch)
+
             # Post-training operations
             print('Training and validation cycle completed.')
             if self.mlflow_logging:
                 mlflow.end_run(status='FINISHED')
 
         except KeyboardInterrupt:
-            print('\nModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
+            print(
+                '\nModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
 
         except optuna.TrialPruned:
-            # Optuna trial kill raised 
-            print('\nnModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.')
+            # Optuna trial kill raised
+            print(
+                '\nnModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.')
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
 
         except Exception as e:
             max_chars = 500  # Define the max length you want to print
-            print(f"\nError during training and validation cycle: {str(e)[:max_chars]}...")
+            print(
+                f"\nError during training and validation cycle: {str(e)[:max_chars]}...")
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
-
 
     def evalExample(self, num_samples: int = 64) -> Union[torch.Tensor, None]:
         # TODO Extend method distinguishing between regression and classification tasks
         self.model.eval()
         if self.eval_example:
-            #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
-            #if self.mlflow_logging: # TBC, not sure it is useful
+            # exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
+            # if self.mlflow_logging: # TBC, not sure it is useful
             #    # Log example input to mlflow
             #    mlflow.log_???('example_input', exampleInput)
-            
+
             with torch.no_grad():
+                average_loss = 0.0
+                num_of_batches = 0
+                samples_counter = 0
 
-                if self.tasktype == TaskType.REGRESSION:
-                    samples_counter = 0
-                    average_loss = 0.0
-                    average_prediction_err = None
-                    worst_prediction_err = None
-                    num_of_batches = 0
-                    prediction_errors = None
+                average_prediction_err = None
+                worst_prediction_err = None
+                prediction_errors = None
+                correctPredictions = 0
 
-                    while samples_counter < num_samples:
-                        examplePair = next(iter(self.validationDataloader)) # Note that this returns a batch of size given by the dataloader
+                while samples_counter < num_samples:
+                    # Note that this returns a batch of size given by the dataloader
+                    examplePair = next(iter(self.validationDataloader))
 
-                        X = examplePair[0].to(self.device)
-                        Y = examplePair[1].to(self.device)
+                    X = examplePair[0].to(self.device)
+                    Y = examplePair[1].to(self.device)
 
-                        # Perform FORWARD PASS
-                        examplePredictions = self.model(X)  # Evaluate model at input
+                    # Perform FORWARD PASS
+                    examplePredictions = self.model(
+                        X)  # Evaluate model at input
 
-                        if examplePredictions.shape != Y.shape:
-                            # Attempt to match shapes
-                            Y = Y[:, 0:examplePredictions.size(1)]
+                    if examplePredictions.shape != Y.shape:
+                        # Attempt to match shapes
+                        Y = Y[:, 0:examplePredictions.size(1)]
 
+                    # Task specific code
+                    if self.tasktype == TaskType.REGRESSION:
                         if prediction_errors is None:
                             prediction_errors = examplePredictions - Y
                         else:
-                            prediction_errors = torch.cat([prediction_errors, examplePredictions - Y], dim=0)
+                            prediction_errors = torch.cat(
+                                [prediction_errors, examplePredictions - Y], dim=0)
 
-                        # Compute loss for each input separately                
+                        # Compute loss for each input separately
                         outLossVar = self.lossFcn(examplePredictions, Y)
 
                         # Compute running average of loss
                         average_loss += outLossVar.item()
 
-                        # Count samples and batches
-                        samples_counter += X.size(0)
-                        num_of_batches += 1
+                    elif self.tasktype == TaskType.CLASSIFICATION:
+
+                        if not (isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
+                            raise NotImplementedError(
+                                'Current classification validation function only supports nn.CrossEntropyLoss.')
+
+                        validationLossDict = self.lossFcn(
+                            examplePredictions, Y)
+
+                        average_loss += validationLossDict.get('lossValue') if isinstance(
+                            validationLossDict, dict) else validationLossDict.item()  # This assumes a standard format of the output dictionary from custom loss
+
+                        # Evaluate how many correct predictions (assuming CrossEntropyLoss)
+                        correctPredictions += (examplePredictions.argmax(1)
+                                               == Y).type(torch.float).sum().item()
+
+                    else:
+                        raise TypeError('Invalid Task type.')
+
+                    # Count samples and batches
+                    samples_counter += X.size(0)
+                    num_of_batches += 1
+
+                if self.tasktype == TaskType.REGRESSION:
 
                     # Compute average prediction over all samples
-                    average_prediction_err = torch.mean( torch.abs(prediction_errors), dim=0)
+                    average_prediction_err = torch.mean(
+                        torch.abs(prediction_errors), dim=0)
                     average_loss /= num_of_batches
 
-                    worst_prediction_err, _ = torch.max( torch.abs(prediction_errors), dim=0)
+                    worst_prediction_err, _ = torch.max(
+                        torch.abs(prediction_errors), dim=0)
 
-                # TODO (TBC): log example in mlflow?
-                #if self.mlflow_logging:
-                #    print('TBC')
+                    # TODO (TBC): log example in mlflow?
+                    # if self.mlflow_logging:
+                    #    print('TBC')
 
                     print(f"\tAverage prediction errors with {samples_counter} samples: \n",
-                      "\t\t",average_prediction_err, "\n\tCorresponding average loss: ", average_loss)
+                          "\t\t", average_prediction_err, "\n\tCorresponding average loss: ", average_loss)
                     print(f"\n\n\tWorst prediction errors per component: \n\t\t", worst_prediction_err)
 
                 elif self.tasktype == TaskType.CLASSIFICATION:
-                    print('CLASSIFICATION type not implemented yet.')
-                    #raise NotImplementedError('CLASSIFICATION type not implemented yet.')
+
+                    average_loss /= num_of_batches  # Compute batch size normalized loss value
+
+                    # Compute percentage of correct classifications over dataset size
+                    correctPredictions /= samples_counter
+                    print( f"\n\tExample prediction with {samples_counter} samples: Classification accuracy:
+                        {(100*correctPredictions):> 0.2f} %, average loss: {average_loss:> 4f}\n")
+
                 else:
                     raise TypeError('Invalid Task type.')
-            #return examplePredictions, outLossVar
-        #else:
-            #return None, None
 
     def evalBestAccuracy(self):
         self.bestModel.to(self.device)
@@ -658,39 +720,49 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Evaluate loss function to get loss value dictionary
                     if self.lossFcn is None:
-                        raise ValueError('Loss function not provided for regression task.')
+                        raise ValueError(
+                            'Loss function not provided for regression task.')
 
                     if predVal.shape != Y.shape:
-                        Y = Y[:, 0:predVal.size(1)] # Attempt to match shapes
+                        Y = Y[:, 0:predVal.size(1)]  # Attempt to match shapes
 
                     # TODO add support for custom error function. Currently assumes difference between prediction and target
                     if prediction_errors is None:
-                        prediction_errors = predVal - Y                  
+                        prediction_errors = predVal - Y
                     else:
-                        prediction_errors = torch.cat([prediction_errors, predVal - Y], dim=0)
+                        prediction_errors = torch.cat(
+                            [prediction_errors, predVal - Y], dim=0)
 
                     # Get loss value from dictionary
-                    average_loss += torch.nn.functional.mse_loss(predVal, Y, reduction='sum').item()
+                    average_loss += torch.nn.functional.mse_loss(
+                        predVal, Y, reduction='sum').item()
 
                 # Find max prediction error over all samples
-                worst_prediction_err, _ = torch.max( torch.abs(prediction_errors), dim=0)
+                worst_prediction_err, _ = torch.max(
+                    torch.abs(prediction_errors), dim=0)
                 # Compute average prediction over all samples
-                average_prediction_err = torch.mean( torch.abs(prediction_errors), dim=0)
-                median_prediction_err, _ = torch.median( torch.abs(prediction_errors), dim=0)
-                average_loss /= num_samples    
+                average_prediction_err = torch.mean(
+                    torch.abs(prediction_errors), dim=0)
+                median_prediction_err, _ = torch.median(
+                    torch.abs(prediction_errors), dim=0)
+                average_loss /= num_samples
 
-                print(f"\n\tAccuracy evaluation: regression average loss: {average_loss:>4f}\n")
-                print(f"\tPrediction errors with {num_samples} samples: \n","\t Average:",average_prediction_err,
+                print(
+                    f"\n\tAccuracy evaluation: regression average loss: {average_loss:>4f}\n")
+                print(f"\tPrediction errors with {num_samples} samples: \n", "\t Average:", average_prediction_err,
                       "\n\t Median:", median_prediction_err, "\n\t Max:", worst_prediction_err)
 
                 # Pack data into dict
                 stats['prediction_err'] = prediction_errors.to('cpu').numpy()
-                stats['average_prediction_err'] = average_prediction_err.to('cpu').numpy()
-                stats['median_prediction_err'] = median_prediction_err.to('cpu').numpy()
-                stats['worst_prediction_err'] = worst_prediction_err.to('cpu').numpy()
+                stats['average_prediction_err'] = average_prediction_err.to(
+                    'cpu').numpy()
+                stats['median_prediction_err'] = median_prediction_err.to(
+                    'cpu').numpy()
+                stats['worst_prediction_err'] = worst_prediction_err.to(
+                    'cpu').numpy()
 
                 return stats
-            
+
             elif self.tasktype == TaskType.CLASSIFICATION:
 
                 if not (isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
@@ -707,7 +779,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     validationLossDict = self.lossFcn(predVal, Y)
                     average_loss += validationLossDict.get('lossValue') if isinstance(
                         validationLossDict, dict) else validationLossDict.item()
-                    
+
                     # Evaluate how many correct predictions (assuming CrossEntropyLoss)
                     correctPredictions += (predVal.argmax(1) ==
                                            Y).type(torch.float).sum().item()
@@ -716,7 +788,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # Compute percentage of correct classifications over dataset size
                 correctPredictions /= dataset_size
-                print( f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {average_loss:>4f}\n")
+                print(f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {average_loss:>4f}\n")
 
                 # Save results
                 stats['correct_predictions_fraction'] = correctPredictions
@@ -730,10 +802,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
     def updateLerningRate(self):
         if self.lr_scheduler is not None:
             # Perform step of learning rate scheduler if provided
-            self.optimizer.zero_grad()  # Reset gradients for safety  
+            self.optimizer.zero_grad()  # Reset gradients for safety
             self.lr_scheduler.step()
             print('\nLearning rate changed: {prev_lr} --> {current_lr}\n'.format(
-                prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()) )
+                prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()))
 
             # Update current learning rate
             self.current_lr = self.lr_scheduler.get_last_lr()
@@ -750,13 +822,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         if self.enable_early_stop:
             if counter >= self.early_stop_patience:
-                print('Early stopping criteria met: ModelTrainingManager execution stop. Run marked as KILLED.')
+                print(
+                    'Early stopping criteria met: ModelTrainingManager execution stop. Run marked as KILLED.')
                 returnValue = True
                 if self.mlflow_logging:
                     mlflow.end_run(status='KILLED')
 
         return returnValue
-    
+
     def startMlflowRun(self):
         """
         Starts a new MLflow run if MLflow logging is enabled.
@@ -785,21 +858,16 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.modelName = self.currentMlflowRun.info.run_name
 
             # Log configuration parameters
-            ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()      
-            #print("DEBUG:", ModelTrainerConfigParamsNames)
-            mlflow.log_params({key: getattr(self, key) for key in ModelTrainerConfigParamsNames})
+            ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()
+            # print("DEBUG:", ModelTrainerConfigParamsNames)
+            mlflow.log_params({key: getattr(self, key)
+                              for key in ModelTrainerConfigParamsNames})
 
             # Log additional parameters if provided
             if self.paramsToLogDict is not None:
                 mlflow.log_params(self.paramsToLogDict, synchronous=False)
-        #else:
+        # else:
         #    Warning('MLFlow logging is disabled. No run started.')
-
-        
-
-
-
-            
 
 
 # LEGACY FUNCTIONS - 18/09/2024
@@ -857,7 +925,7 @@ def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
             # print(f"Training loss value: {trainLoss:>7f}  [{currentStep:>5d}/{size:>5d}]")
             # if keys != []:
             #    print("\t",", ".join([f"{key}: {trainLossOut[key]:.4f}" for key in keys]))    # Update learning rate if scheduler is provided
-    
+
     # Perform step of SWA if enabled
     if swa_model is not None and epochID >= swa_start_epoch:
         # Update SWA model parameters
@@ -878,6 +946,8 @@ def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
 
 # %% Function to validate model using dataset and specified loss function - 04-05-2024
 # Updated by PC 04-06-2024
+
+
 def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDevice(), taskType: str = 'classification') -> Union[float, dict]:
     '''Function to validate model using dataset and specified loss function'''
     # Get size of dataset (How many samples are in the dataset)
@@ -916,13 +986,13 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
             round(0.5 * freeMem / estimated_memory_per_sample), 2048)
 
         dataloader = DataLoader(
-            dataloader.dataset, 
-            batch_size=newBathSizeTmp, 
-            shuffle=False, 
-            drop_last=False, 
+            dataloader.dataset,
+            batch_size=newBathSizeTmp,
+            shuffle=False,
+            drop_last=False,
             pin_memory=True,
             num_workers=0)
-        
+
         lossTerms = {}
         numberOfBatches = len(dataloader)
 
@@ -959,7 +1029,8 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
                 # Determine if prediction is correct and accumulate
                 # Explanation: get largest output logit (the predicted class) and compare to Y.
                 # Then convert to float and sum over the batch axis, which is not necessary if size is single prediction
-                correctOuputs += (predVal.argmax(1) == Y).type(torch.float).sum().item()
+                correctOuputs += (predVal.argmax(1) ==
+                                  Y).type(torch.float).sum().item()
 
             # elif taskType.lower() == 'regression':
             #    #print('TODO')
@@ -1117,7 +1188,8 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
     # TRAINING and VALIDATION LOOP
     for epochID in range(numOfEpochs):
 
-        print(f"\n\t\t\tTRAINING EPOCH: {epochID + epochStart} of {epochStart + numOfEpochs-1}\n-------------------------------")
+        print(
+            f"\n\t\t\tTRAINING EPOCH: {epochID + epochStart} of {epochStart + numOfEpochs-1}\n-------------------------------")
         # Do training over all batches
         trainLossHistory[epochID], numOfUpdatesForEpoch = TrainModel(trainingDataset, model, lossFcn, optimizer, epochID, device,
                                                                      taskType, lr_scheduler, swa_scheduler, swa_model, swa_start_epoch)
@@ -1192,7 +1264,8 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
 
             exampleInput = GetSamplesFromDataset(validationDataset, 1)[0][0].reshape(
                 1, -1)  # Get single input sample for model saving
-            modelSaveName = os.path.join( checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
+            modelSaveName = os.path.join(
+                checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
             SaveTorchModel(model, modelSaveName, saveAsTraced=True,
                            exampleInput=exampleInput, targetDevice=device)
 

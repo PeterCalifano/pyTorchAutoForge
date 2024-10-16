@@ -106,7 +106,7 @@ def main():
     NUM_OF_JOBS = 1
     objective_func = partial(objective, train_dataset=train_loader.dataset, validation_dataset=validation_loader.dataset, numOfEpochs=numOfEpochs)
 
-    optunaStudyObj.optimize( objective_func, n_trials=NUM_TRIALS,  timeout=1*3600, n_jobs=NUM_OF_JOBS)
+    optunaStudyObj.optimize( objective_func, n_trials=NUM_TRIALS,  timeout=2*3600, n_jobs=NUM_OF_JOBS)
 
     # Print the best trial
 
