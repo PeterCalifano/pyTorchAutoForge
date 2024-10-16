@@ -568,9 +568,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         except optuna.TrialPruned:
             # Optuna trial kill raised
-            print('\nnModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.')
+            print('\nModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.')
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
+            raise optuna.TrialPruned() # Re-raise exception to stop optuna trial --> this is required due to how optuna handles it.
 
         except Exception as e:
             max_chars = 500  # Define the max length you want to print
