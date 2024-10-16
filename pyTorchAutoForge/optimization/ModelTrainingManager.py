@@ -76,7 +76,7 @@ class ModelTrainingManagerConfig():
     device: str = GetDevice()  # Default device is GPU if available
 
     # OPTUNA MODE options
-    trial: Any = None  # Optuna trial object
+    trial: Any = None  # Optuna optuna_trial object
 
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
@@ -224,7 +224,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.paramsToLogDict = paramsToLogDict
 
         # OPTUNA parameters
-        if self.trial is not None:
+        if self.optuna_trial is not None:
             self.OPTUNA_MODE = True
         else:
             self.OPTUNA_MODE = False
@@ -483,9 +483,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if self.OPTUNA_MODE == True:
                     # Compute average between training and validation loss // TODO: verify feasibility of using the same obj function as sampler
                     optuna_loss = (tmpTrainLoss + tmpValidLoss) / 2
-                    self.trial.report(optuna_loss, step=epoch_num)
+                    self.optuna_trial.report(optuna_loss, step=epoch_num)
 
-                    if self.trial.should_prune():
+                    if epoch_num > 5:
+                        raise optuna.TrialPruned()
+
+                    if self.optuna_trial.should_prune():
                         raise optuna.TrialPruned()
                 else:
                     # Execute post-epoch operations
@@ -565,8 +568,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         except optuna.TrialPruned:
             # Optuna trial kill raised
-            print(
-                '\nnModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.')
+            print('\nnModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.')
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
 
@@ -672,8 +674,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Compute percentage of correct classifications over dataset size
                     correctPredictions /= samples_counter
-                    print( f"\n\tExample prediction with {samples_counter} samples: Classification accuracy:
-                        {(100*correctPredictions):> 0.2f} %, average loss: {average_loss:> 4f}\n")
+                    print(f"\n\tExample prediction with {samples_counter} samples: Classification accuracy:",
+                          f"{(100*correctPredictions):>0.2f} % , average loss: {average_loss:>4f}\n")
 
                 else:
                     raise TypeError('Invalid Task type.')

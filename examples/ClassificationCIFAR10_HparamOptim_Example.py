@@ -8,7 +8,8 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets  # Import vision default datasets from torchvision
 from torchvision import transforms
-import mlflow, optuna
+import mlflow
+import optuna
 
 from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConfig, TaskType, TrainModel, ValidateModel
 from pyTorchAutoForge.datasets import DataloaderIndex
@@ -18,6 +19,7 @@ from pyTorchAutoForge.utils import GetDevice
 from ClassificationCIFAR10_Example import DefineDataloaders, DefineModel, DefineOptimStrategy
 
 from functools import partial
+
 
 def objective(trial: optuna.Trial, train_dataset, validation_dataset, numOfEpochs):
 
@@ -30,31 +32,33 @@ def objective(trial: optuna.Trial, train_dataset, validation_dataset, numOfEpoch
     lossFcn, initial_lr = DefineOptimStrategy(trial)
 
     fused = True if device == "cuda:0" else False
-    optimizer = torch.optim.Adam( model.parameters(), lr=initial_lr, fused=fused)
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=initial_lr, fused=fused)
 
     # Define dataloaders
     batch_size = trial.suggest_int('batch_size', 32, 512)
 
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
-    
+
     validation_loader = DataLoader(validation_dataset,
-        batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
+                                   batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
     # Define dataloader index for training
-    dataloaderIndex = DataloaderIndex( train_loader, validLoader=validation_loader)  # Use split
+    dataloaderIndex = DataloaderIndex(
+        train_loader, validLoader=validation_loader)  # Use split
 
     with mlflow.start_run():
 
         # MLflow: log trial data
         mlflow.log_param('learning_rate', initial_lr)
         mlflow.log_param(f'Dense layer size', model.fc.in_features)
-                
+
         # Define model training manager config  (dataclass init)
         trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
-                                               initial_lr=initial_lr, lr_scheduler=None,
-                                               num_of_epochs=numOfEpochs, optimizer=optimizer,
-                                                batch_size=batch_size)
+                                                   initial_lr=initial_lr, lr_scheduler=None,
+                                                   num_of_epochs=numOfEpochs, optimizer=optimizer,
+                                                   batch_size=batch_size, optuna_trial=trial)
 
         # Define model training manager instance
         trainer = ModelTrainingManager(
@@ -76,10 +80,11 @@ def objective(trial: optuna.Trial, train_dataset, validation_dataset, numOfEpoch
 
     return average_loss
 
+
 def main():
 
     # Set mlflow experiment
-    studyName = 'ImageClassificationCIFAR10_HparamOptim_Example'
+    studyName = 'ImageClassificationCIFAR10_HparamOptim_Testing'
     mlflow.set_experiment(studyName)
 
     numOfEpochs = 25
@@ -92,7 +97,8 @@ def main():
     # ACHTUNG: number of startup trials if relevant in determining the performance of the sampler.
     # This is because it determines the initial distributions from which the sampler starts working, i.e. determines which clusters of hyperparameters are more likely sampled.
 
-    sampler = optuna.samplers.TPESampler(n_startup_trials=2, seed=10) # What does the multivariate option do?
+    # What does the multivariate option do?
+    sampler = optuna.samplers.TPESampler(n_startup_trials=2, seed=10)
     # sampler = optuna.samplers.GPSampler(n_startup_trials=25)
 
     optunaStudyObj = optuna.create_study(study_name=studyName,
@@ -104,9 +110,11 @@ def main():
 
     # RUN STUDY
     NUM_OF_JOBS = 1
-    objective_func = partial(objective, train_dataset=train_loader.dataset, validation_dataset=validation_loader.dataset, numOfEpochs=numOfEpochs)
+    objective_func = partial(objective, train_dataset=train_loader.dataset,
+                             validation_dataset=validation_loader.dataset, numOfEpochs=numOfEpochs)
 
-    optunaStudyObj.optimize( objective_func, n_trials=NUM_TRIALS,  timeout=2*3600, n_jobs=NUM_OF_JOBS)
+    optunaStudyObj.optimize(
+        objective_func, n_trials=NUM_TRIALS,  timeout=2*3600, n_jobs=NUM_OF_JOBS)
 
     # Print the best trial
 
@@ -122,6 +130,7 @@ def main():
     print('  Params: ')
     for key, value in trial.params.items():
         print('    {}: {}'.format(key, value))
+
 
 if __name__ == '__main__':
     main()
