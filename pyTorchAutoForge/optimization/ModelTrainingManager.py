@@ -485,9 +485,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     optuna_loss = (tmpTrainLoss + tmpValidLoss) / 2
                     self.optuna_trial.report(optuna_loss, step=epoch_num)
 
-                    if epoch_num > 5:
-                        raise optuna.TrialPruned()
-
                     if self.optuna_trial.should_prune():
                         raise optuna.TrialPruned()
                 else:
