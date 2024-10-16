@@ -465,10 +465,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # Update current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
+                
                 if self.mlflow_logging:
                     mlflow.log_metric('lr', self.current_lr,
                                       step=self.currentEpoch)
-
+                    
+                if self.mlflow_logging and self.OPTUNA_MODE:
+                    mlflow.log_param('optuna_trial_ID', self.optuna_trial.number)    
+                    
                 # Perform training for one epoch
                 tmpTrainLoss = self.trainModelOneEpoch_()
 
@@ -865,7 +869,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Log additional parameters if provided
             if self.paramsToLogDict is not None:
-                mlflow.log_params(self.paramsToLogDict, synchronous=False)
+                mlflow.log_params(self.paramsToLogDict, synchronous=True)
+
+            if self.OPTUNA_MODE:
+                mlflow.log_param('optuna_trial_ID', self.optuna_trial.number)
+                self.optuna_trial.set_user_attr('mlflow_name', self.modelName)
+                self.optuna_trial.set_user_attr('mlflow_ID', self.currentMlflowRun.info.run_id)
+
         # else:
         #    Warning('MLFlow logging is disabled. No run started.')
 
