@@ -65,7 +65,8 @@ def DefineOptimStrategy(trial:optuna.Trial = None):
     
     else:
         initial_lr = 1E-3
-        lossFcn = nn.CrossEntropyLoss()
+    
+    lossFcn = nn.CrossEntropyLoss()
 
     return lossFcn, initial_lr
 
@@ -83,15 +84,13 @@ def main():
 
     # %% Define loss function and optimizer
     lossFcn, initial_lr = DefineOptimStrategy()
-    numOfEpochs = 50
+    numOfEpochs = 25
 
     fused = True if device == "cuda:0" else False
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=fused)
 
     # Define dataloader index for training
-    train_loader, validation_loader = DefineDataloaders()
-    batch_size = train_loader.batch_size
-
+    train_loader, validation_loader = DefineDataloaders() # With defaul batch size
     dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
 
     # CHECK: versus TrainAndValidateModel
@@ -105,7 +104,7 @@ def main():
     trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
                                                initial_lr=initial_lr, lr_scheduler=None, 
                                                num_of_epochs=numOfEpochs, optimizer=optimizer,
-                                               batch_size=batch_size)
+                                               batch_size=train_loader.batch_size)
 
     # DEVNOTE: TODO, add check on optimizer from ModelTrainingManagerConfig. It must be of optimizer type
     print("\nModelTrainingManagerConfig instance:", trainerConfig)
@@ -126,7 +125,6 @@ def main():
     for param1, param2 in zip(model.parameters(), trainer.model.parameters()):
         if not(torch.equal(param1, param2)) or not(param1 is param2):
             raise ValueError("Model parameters are not the same. optimizer does not update trainer.model!")
-
 
 
 if __name__ == '__main__':
