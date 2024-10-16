@@ -84,7 +84,7 @@ def main():
 
     # %% Define loss function and optimizer
     lossFcn, initial_lr = DefineOptimStrategy()
-    numOfEpochs = 25
+    numOfEpochs = 20
 
     fused = True if device == "cuda:0" else False
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=fused)

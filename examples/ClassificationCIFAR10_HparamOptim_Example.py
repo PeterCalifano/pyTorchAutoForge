@@ -82,7 +82,7 @@ def main():
     studyName = 'ImageClassificationCIFAR10_HparamOptim_Example'
     mlflow.set_experiment(studyName)
 
-    numOfEpochs = 50
+    numOfEpochs = 25
     NUM_TRIALS = 10
 
     # Define dataloader index for training
@@ -92,7 +92,7 @@ def main():
     # ACHTUNG: number of startup trials if relevant in determining the performance of the sampler.
     # This is because it determines the initial distributions from which the sampler starts working, i.e. determines which clusters of hyperparameters are more likely sampled.
 
-    sampler = optuna.samplers.TPESampler(n_startup_trials=2)
+    sampler = optuna.samplers.TPESampler(n_startup_trials=2, seed=10) # What does the multivariate option do?
     # sampler = optuna.samplers.GPSampler(n_startup_trials=25)
 
     optunaStudyObj = optuna.create_study(study_name=studyName,
