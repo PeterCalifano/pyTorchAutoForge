@@ -1,4 +1,4 @@
-# Script implementing a classification example on CIFAR100 as exercise by PeterC, using pretrained models in torchvision - 19-09-2024
+# Script implementing a classification example on CIFAR10 as exercise by PeterC, using pretrained models in torchvision - 19-09-2024
 # Reference: https://pytorch.org/vision/0.9/models.html#classification
 
 # Import modules
@@ -8,7 +8,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets  # Import vision default datasets from torchvision
 from torchvision import transforms
-import mlflow, copy
+import mlflow, optuna, copy
 
 from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConfig, TaskType, TrainModel, ValidateModel
 from pyTorchAutoForge.datasets import DataloaderIndex
@@ -16,29 +16,25 @@ import torchvision.models as models
 
 from pyTorchAutoForge.utils import GetDevice
 
-def main():
 
-    # NOTE: seems that mlflow is not using server location
+def DefineModel(trial:optuna.Trial = None):
 
-    # Set mlflow experiment
-    mlflow.set_experiment('ImageClassificationCIFAR100_Example')
-
-    # Get model backbone from torchvision
-    # All models in torchvision.models for classification are trained on ImageNet, thus have 1000 classes as output
     model = models.resnet101(weights=False)  # Load pretrained weights
-    print(model)
-
-    device = GetDevice()
 
     # Therefore, let's modify the last layer! (Named fc)
-    numInputFeatures = model.fc.in_features  # Same as what the model uses
+    if trial is not None:
+        numInputFeatures = trial.suggest_int('numInputFeatures', 2, 1000)
+    else:
+        numInputFeatures = model.fc.in_features  # Same as what the model uses
+
     numOutClasses = 10  # Selected by user
     model.fc = (nn.Linear(in_features=numInputFeatures,
                           out_features=numOutClasses, bias=True))  # 100 classes in our case
-    model.to(device)
-    print(model)  # Check last layer now
+    
+    return model
 
-    # %% Load CIFAR100 dataset from torchvision
+def DefineDataloaders(trial:optuna.Trial = None):
+    # %% Load CIFAR10 dataset from torchvision
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(
         (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])  # Apply normalization
 
@@ -49,14 +45,41 @@ def main():
         root='./data', train=False, download=True, transform=transform)
 
     # Define dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    validation_loader = DataLoader(
-        validation_dataset, batch_size=64, shuffle=False)
+    if trial is not None:
+        train_loader = DataLoader(train_dataset, batch_size=trial.suggest_int('batch_size', 32, 512), shuffle=True)
+    else:
+        train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
 
+    validation_loader = DataLoader(validation_dataset, batch_size=128, shuffle=False, drop_last=False)
+    
+    return train_loader, validation_loader
+
+def DefineOptimStrategy(trial:optuna.Trial = None):
+    if trial is not None:
+        initial_lr = trial.suggest_loguniform('initial_lr', 1E-5, 1E-1)
+    
+    else:
+        initial_lr = 1E-3
+        lossFcn = nn.CrossEntropyLoss()
+
+    return lossFcn, initial_lr
+
+def main():
+
+    # Set mlflow experiment
+    mlflow.set_experiment('ImageClassificationCIFAR10_Example')
+
+    # Get model backbone from torchvision
+    # All models in torchvision.models for classification are trained on ImageNet, thus have 1000 classes as output
+    model = DefineModel()
+    device = GetDevice()
+    model.to(device)
+    print(model)  # Check last layer
+
+    
     # %% Define loss function and optimizer
-    initial_lr = 1E-3
+    lossFcn, initial_lr = DefineOptimStrategy()
     numOfEpochs = 50
-    lossFcn = nn.CrossEntropyLoss()
 
     fused = True if device == "cuda:0" else False
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=fused)
@@ -74,6 +97,8 @@ def main():
     print("\nModelTrainingManager instance:", trainer)
 
     # Define dataloader index for training
+    train_loader, validation_loader = DefineDataloaders()
+
     dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
     trainer.setDataloaders(dataloaderIndex) # Set dataloaders for training and validation
 
