@@ -519,10 +519,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 self.currentValidationLoss = tmpValidLoss
 
                 if self.mlflow_logging:
-                    mlflow.log_metric(
-                        'train_loss', self.currentTrainingLoss, step=self.currentEpoch)
-                    mlflow.log_metric(
-                        'validation_loss', self.currentValidationLoss, step=self.currentEpoch)
+                    mlflow.log_metric( 'train_loss', self.currentTrainingLoss, step=self.currentEpoch)
+                    mlflow.log_metric( 'validation_loss', self.currentValidationLoss, step=self.currentEpoch)
+                    mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss)
+
 
                 print('\tCurrent best at epoch {best_epoch}, validation loss: {best_loss}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
@@ -537,8 +537,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 self.currentEpoch += 1
 
             # Model saving code
-            modelToSave = (
-                self.bestModel if self.bestModel is not None else self.model).to('cpu')
+            modelToSave = ( self.bestModel if self.bestModel is not None else self.model).to('cpu')
             if self.keep_best:
                 print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
@@ -554,8 +553,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                exampleInput=examplePair[0], targetDevice=self.device)
 
             if self.mlflow_logging:
-                mlflow.log_param('model_checkpoint_epoch', self.bestEpoch)
-
+                mlflow.log_param('checkpoint_best_poch', self.bestEpoch)
+                
             # Post-training operations
             print('Training and validation cycle completed.')
             if self.mlflow_logging:
