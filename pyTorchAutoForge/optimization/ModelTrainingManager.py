@@ -76,7 +76,7 @@ class ModelTrainingManagerConfig():
     device: str = GetDevice()  # Default device is GPU if available
 
     # OPTUNA MODE options
-    trial: Any = None  # Optuna optuna_trial object
+    optuna_trial: Any = None  # Optuna optuna_trial object
 
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
