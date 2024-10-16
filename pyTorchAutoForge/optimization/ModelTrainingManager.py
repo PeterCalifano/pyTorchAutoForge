@@ -546,9 +546,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 mlflow.end_run(status='FAILED')
 
 
-
-
     def evalExample(self, num_samples: int = 64) -> Union[torch.Tensor, None]:
+        # TODO Extend method distinguishing between regression and classification tasks
         self.model.eval()
         if self.eval_example:
             #exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
@@ -557,55 +556,62 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             #    mlflow.log_???('example_input', exampleInput)
             
             with torch.no_grad():
-                samples_counter = 0
-                average_loss = 0.0
-                average_prediction_err = None
-                worst_prediction_err = None
-                num_of_batches = 0
-                prediction_errors = None
 
-                while samples_counter < num_samples:
-                    examplePair = next(iter(self.validationDataloader)) # Note that this returns a batch of size given by the dataloader
+                if self.tasktype == TaskType.REGRESSION:
+                    samples_counter = 0
+                    average_loss = 0.0
+                    average_prediction_err = None
+                    worst_prediction_err = None
+                    num_of_batches = 0
+                    prediction_errors = None
 
-                    X = examplePair[0].to(self.device)
-                    Y = examplePair[1].to(self.device)
+                    while samples_counter < num_samples:
+                        examplePair = next(iter(self.validationDataloader)) # Note that this returns a batch of size given by the dataloader
 
-                    # Perform FORWARD PASS
-                    examplePredictions = self.model(X)  # Evaluate model at input
-                    
-                    if examplePredictions.shape != Y.shape:
-                        # Attempt to match shapes
-                        Y = Y[:, 0:examplePredictions.size(1)]
+                        X = examplePair[0].to(self.device)
+                        Y = examplePair[1].to(self.device)
 
-                    if prediction_errors is None:
-                        prediction_errors = examplePredictions - Y
-                    else:
-                        prediction_errors = torch.cat([prediction_errors, examplePredictions - Y], dim=0)
+                        # Perform FORWARD PASS
+                        examplePredictions = self.model(X)  # Evaluate model at input
 
-                    # Compute loss for each input separately                
-                    outLossVar = self.lossFcn(examplePredictions, Y)
+                        if examplePredictions.shape != Y.shape:
+                            # Attempt to match shapes
+                            Y = Y[:, 0:examplePredictions.size(1)]
 
-                    # Compute running average of loss
-                    average_loss += outLossVar.item()
+                        if prediction_errors is None:
+                            prediction_errors = examplePredictions - Y
+                        else:
+                            prediction_errors = torch.cat([prediction_errors, examplePredictions - Y], dim=0)
 
-                    # Count samples and batches
-                    samples_counter += X.size(0)
-                    num_of_batches += 1
+                        # Compute loss for each input separately                
+                        outLossVar = self.lossFcn(examplePredictions, Y)
 
-                # Compute average prediction over all samples
-                average_prediction_err = torch.mean( torch.abs(prediction_errors), dim=0)
-                average_loss /= num_of_batches
+                        # Compute running average of loss
+                        average_loss += outLossVar.item()
 
-                worst_prediction_err, _ = torch.max( torch.abs(prediction_errors), dim=0)
+                        # Count samples and batches
+                        samples_counter += X.size(0)
+                        num_of_batches += 1
 
-            # TODO (TBC): log example in mlflow?
-            #if self.mlflow_logging:
-            #    print('TBC')
+                    # Compute average prediction over all samples
+                    average_prediction_err = torch.mean( torch.abs(prediction_errors), dim=0)
+                    average_loss /= num_of_batches
 
-            print(f"\tAverage prediction errors with {samples_counter} samples: \n",
-                  "\t\t",average_prediction_err, "\n\tCorresponding average loss: ", average_loss)
-            print(f"\n\n\tWorst prediction errors per component: \n\t\t", worst_prediction_err)
+                    worst_prediction_err, _ = torch.max( torch.abs(prediction_errors), dim=0)
 
+                # TODO (TBC): log example in mlflow?
+                #if self.mlflow_logging:
+                #    print('TBC')
+
+                    print(f"\tAverage prediction errors with {samples_counter} samples: \n",
+                      "\t\t",average_prediction_err, "\n\tCorresponding average loss: ", average_loss)
+                    print(f"\n\n\tWorst prediction errors per component: \n\t\t", worst_prediction_err)
+
+                elif self.tasktype == TaskType.CLASSIFICATION:
+                    print('CLASSIFICATION type not implemented yet.')
+                    #raise NotImplementedError('CLASSIFICATION type not implemented yet.')
+                else:
+                    raise TypeError('Invalid Task type.')
             #return examplePredictions, outLossVar
         #else:
             #return None, None
@@ -616,42 +622,44 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         # Backup the original batch size (TODO: TBC if it is useful)
         original_dataloader = self.validationDataloader
-                
+
         # Temporarily initialize a new dataloader for validation (heuristic)
-        newBathSizeTmp = 2 * self.validationDataloader.batch_size # TBC how to set this value
+        newBathSizeTmp = 2 * self.validationDataloader.batch_size  # TBC how to set this value
 
         tmpdataloader = DataLoader(
-                                original_dataloader.dataset, 
-                                batch_size=newBathSizeTmp, 
-                                shuffle=False, 
-                                drop_last=False, 
-                                pin_memory=True,
-                                num_workers=0
-                                )
-        
-        dataset_size = len(tmpdataloader.dataset)   
+            original_dataloader.dataset,
+            batch_size=newBathSizeTmp,
+            shuffle=False,
+            drop_last=False,
+            pin_memory=True,
+            num_workers=0
+        )
+
+        dataset_size = len(tmpdataloader.dataset)
+        num_samples = dataset_size
+        num_batches = len(tmpdataloader)
+        average_loss = 0.0
+
         stats = {}
 
         with torch.no_grad():
-            average_loss = 0.0
-            average_prediction_err = None
-            worst_prediction_err = None
-            num_samples = dataset_size
-            prediction_errors = None
 
+            # Task specific code
             if self.tasktype == TaskType.REGRESSION:
-                
+                average_prediction_err = None
+                worst_prediction_err = None
+                prediction_errors = None
+
                 for X, Y in tmpdataloader:
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
-
                     # Perform FORWARD PASS
                     predVal = self.bestModel(X)  # Evaluate model at input
 
                     # Evaluate loss function to get loss value dictionary
                     if self.lossFcn is None:
                         raise ValueError('Loss function not provided for regression task.')
-                    
+
                     if predVal.shape != Y.shape:
                         Y = Y[:, 0:predVal.size(1)] # Attempt to match shapes
 
@@ -666,7 +674,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # Find max prediction error over all samples
                 worst_prediction_err, _ = torch.max( torch.abs(prediction_errors), dim=0)
-
                 # Compute average prediction over all samples
                 average_prediction_err = torch.mean( torch.abs(prediction_errors), dim=0)
                 median_prediction_err, _ = torch.median( torch.abs(prediction_errors), dim=0)
@@ -675,7 +682,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 print(f"\n\tAccuracy evaluation: regression average loss: {average_loss:>4f}\n")
                 print(f"\tPrediction errors with {num_samples} samples: \n","\t Average:",average_prediction_err,
                       "\n\t Median:", median_prediction_err, "\n\t Max:", worst_prediction_err)
-                
+
                 # Pack data into dict
                 stats['prediction_err'] = prediction_errors.to('cpu').numpy()
                 stats['average_prediction_err'] = average_prediction_err.to('cpu').numpy()
@@ -683,6 +690,40 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 stats['worst_prediction_err'] = worst_prediction_err.to('cpu').numpy()
 
                 return stats
+            
+            elif self.tasktype == TaskType.CLASSIFICATION:
+
+                if not (isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
+                    raise NotImplementedError(
+                        'Current classification validation function only supports nn.CrossEntropyLoss.')
+
+                correctPredictions = 0
+                for X, Y in tmpdataloader:
+                    # Get input and labels and move to target device memory
+                    X, Y = X.to(self.device), Y.to(self.device)
+                    # Perform FORWARD PASS
+                    predVal = self.model(X)  # Evaluate model at input
+                    # Evaluate loss function to get loss value dictionary
+                    validationLossDict = self.lossFcn(predVal, Y)
+                    average_loss += validationLossDict.get('lossValue') if isinstance(
+                        validationLossDict, dict) else validationLossDict.item()
+                    
+                    # Evaluate how many correct predictions (assuming CrossEntropyLoss)
+                    correctPredictions += (predVal.argmax(1) ==
+                                           Y).type(torch.float).sum().item()
+
+                average_loss /= num_batches  # Compute batch size normalized loss value
+
+                # Compute percentage of correct classifications over dataset size
+                correctPredictions /= dataset_size
+                print( f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {average_loss:>4f}\n")
+
+                # Save results
+                stats['correct_predictions_fraction'] = correctPredictions
+                stats['average_loss'] = average_loss
+
+                return stats
+
             else:
                 raise NotImplementedError('Task type not implemented yet.')
 
