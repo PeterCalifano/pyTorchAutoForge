@@ -70,7 +70,7 @@ def objective(trial: optuna.Trial, train_dataset, validation_dataset, numOfEpoch
         # Get score for optuna
         if trainer.bestModel is not None:
             stats = trainer.evalBestAccuracy()
-            average_loss = stats['average_loss'] = average_loss
+            average_loss = stats['average_loss']
         else:
             average_loss = 1E10
 
