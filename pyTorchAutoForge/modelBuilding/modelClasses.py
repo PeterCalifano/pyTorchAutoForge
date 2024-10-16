@@ -2,25 +2,46 @@
 from typing import Union
 from pyTorchAutoForge.api.torch import * 
 from pyTorchAutoForge.modelBuilding.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize
+from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel, LoadTorchModel
 
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as torchFunc
-# For initialization
 
 #############################################################################################################################################
 class torchModel(torch.nn.Module):
     '''Custom base class inheriting nn.Module to define a PyTorch NN model, augmented with saving/loading routines like Pytorch Lightning.'''
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, moduleName:str = None, enable_tracing:bool = False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-    def saveCheckpoint(self):
-        SaveTorchModel() # To do: first input must be the model itself (traced or not)
+        # Assign module name. If not provided by user, use class name
+        if moduleName is None:
+            self.moduleName = self.__class__.__name__
+        else:
+            self.moduleName  = moduleName
 
-    def loadCheckpoint(self):
+
+    def saveState(self, exampleInput = None, target_device:str = None) -> None:
+
+        if self.enable_tracing == True and exampleInput is None:
+            self.enable_tracing = False
+            raise Warning('You must provide an example input to trace the model through torch.jit.trace(). Overriding enable_tracing to False.')
+        
+        if target_device is None:
+            target_device = self.device
+
+        SaveTorchModel(modelName = self.moduleName, 
+                        saveAsTraced = self.enable_tracing,
+                        exampleInput = exampleInput,
+                       targetDevice = target_device)
+
+    def loadState(self):
+        
         LoadTorchModel()
 #############################################################################################################################################
+# TBC: class to perform code generation of net classes instead of classes with for and if loops? 
+# --> THe key problem with the latter is that tracing/scripting is likely to fail due to conditional statements
 
 
 # %% TemplateConvNet - 19-09-2024
