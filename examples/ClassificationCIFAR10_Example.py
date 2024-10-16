@@ -46,11 +46,16 @@ def DefineDataloaders(trial:optuna.Trial = None):
 
     # Define dataloaders
     if trial is not None:
-        train_loader = DataLoader(train_dataset, batch_size=trial.suggest_int('batch_size', 32, 512), shuffle=True)
+        batch_size = trial.suggest_int('batch_size', 32, 512)
+        train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True)
     else:
-        train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+        batch_size = 128
+        train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True)
 
-    validation_loader = DataLoader(validation_dataset, batch_size=128, shuffle=False, drop_last=False)
+    validation_loader = DataLoader(
+        validation_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     
     return train_loader, validation_loader
 
@@ -76,7 +81,6 @@ def main():
     model.to(device)
     print(model)  # Check last layer
 
-    
     # %% Define loss function and optimizer
     lossFcn, initial_lr = DefineOptimStrategy()
     numOfEpochs = 50
@@ -84,26 +88,11 @@ def main():
     fused = True if device == "cuda:0" else False
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr, fused=fused)
 
-    # Define model training manager config  (dataclass init)
-    trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
-        initial_lr=initial_lr, lr_scheduler=None, num_of_epochs=numOfEpochs, optimizer=optimizer)
-    
-    # DEVNOTE: TODO, add check on optimizer from ModelTrainingManagerConfig. It must be of optimizer type
-    print("\nModelTrainingManagerConfig instance:", trainerConfig)
-    print("\nDict of ModelTrainingManagerConfig instance:", trainerConfig.getConfigDict())
-    
-    # Define model training manager instance
-    trainer = ModelTrainingManager(model=model, lossFcn=lossFcn, config=trainerConfig)
-    print("\nModelTrainingManager instance:", trainer)
-
     # Define dataloader index for training
     train_loader, validation_loader = DefineDataloaders()
+    batch_size = train_loader.batch_size
 
     dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
-    trainer.setDataloaders(dataloaderIndex) # Set dataloaders for training and validation
-
-    # Perform training and validation of model
-    trainer.trainAndValidate()
 
     # CHECK: versus TrainAndValidateModel
     #model2 = copy.deepcopy(model).to(device)
@@ -112,7 +101,27 @@ def main():
     #    print(f"Epoch TEST: {epoch}/{numOfEpochs-1}")
     #    TrainModel(dataloaderIndex.getTrainLoader(), model2, lossFcn, optimizer2, 0)
     #    ValidateModel(dataloaderIndex.getValidationLoader(), model2, lossFcn)
+    # Define model training manager config  (dataclass init)
+    trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
+                                               initial_lr=initial_lr, lr_scheduler=None, 
+                                               num_of_epochs=numOfEpochs, optimizer=optimizer,
+                                               batch_size=batch_size)
 
+    # DEVNOTE: TODO, add check on optimizer from ModelTrainingManagerConfig. It must be of optimizer type
+    print("\nModelTrainingManagerConfig instance:", trainerConfig)
+    print("\nDict of ModelTrainingManagerConfig instance:",
+          trainerConfig.getConfigDict())
+
+    # Define model training manager instance
+    trainer = ModelTrainingManager(
+        model=model, lossFcn=lossFcn, config=trainerConfig)
+    print("\nModelTrainingManager instance:", trainer)
+
+    # Set dataloaders for training and validation
+    trainer.setDataloaders(dataloaderIndex)
+
+    # Perform training and validation of model
+    trainer.trainAndValidate()
 
     for param1, param2 in zip(model.parameters(), trainer.model.parameters()):
         if not(torch.equal(param1, param2)) or not(param1 is param2):

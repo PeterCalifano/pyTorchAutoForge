@@ -22,7 +22,7 @@ def main():
 
     # Set mlflow experiment
     mlflow.set_experiment('ImageClassificationCIFAR10_HparamOptim_Example')
-    
+
     # Get model backbone from torchvision
     # All models in torchvision.models for classification are trained on ImageNet, thus have 1000 classes as output
     model = DefineModel()
@@ -38,9 +38,24 @@ def main():
     optimizer = torch.optim.Adam(
         model.parameters(), lr=initial_lr, fused=fused)
 
+    # Define dataloader index for training
+    train_loader, validation_loader = DefineDataloaders()
+    batch_size = train_loader.batch_size
+
+    dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
+
+    # CHECK: versus TrainAndValidateModel
+    # model2 = copy.deepcopy(model).to(device)
+    # optimizer2 = torch.optim.Adam(model2.parameters(), lr=initial_lr, fused=fused)
+    # for epoch in range(numOfEpochs):
+    #    print(f"Epoch TEST: {epoch}/{numOfEpochs-1}")
+    #    TrainModel(dataloaderIndex.getTrainLoader(), model2, lossFcn, optimizer2, 0)
+    #    ValidateModel(dataloaderIndex.getValidationLoader(), model2, lossFcn)
     # Define model training manager config  (dataclass init)
     trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
-                                               initial_lr=initial_lr, lr_scheduler=None, num_of_epochs=numOfEpochs, optimizer=optimizer)
+                                               initial_lr=initial_lr, lr_scheduler=None,
+                                               num_of_epochs=numOfEpochs, optimizer=optimizer,
+                                               batch_size=batch_size)
 
     # DEVNOTE: TODO, add check on optimizer from ModelTrainingManagerConfig. It must be of optimizer type
     print("\nModelTrainingManagerConfig instance:", trainerConfig)
@@ -52,23 +67,11 @@ def main():
         model=model, lossFcn=lossFcn, config=trainerConfig)
     print("\nModelTrainingManager instance:", trainer)
 
-    # Define dataloader index for training
-    train_loader, validation_loader = DefineDataloaders()
-
-    dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
     # Set dataloaders for training and validation
     trainer.setDataloaders(dataloaderIndex)
 
     # Perform training and validation of model
     trainer.trainAndValidate()
-
-    # CHECK: versus TrainAndValidateModel
-    # model2 = copy.deepcopy(model).to(device)
-    # optimizer2 = torch.optim.Adam(model2.parameters(), lr=initial_lr, fused=fused)
-    # for epoch in range(numOfEpochs):
-    #    print(f"Epoch TEST: {epoch}/{numOfEpochs-1}")
-    #    TrainModel(dataloaderIndex.getTrainLoader(), model2, lossFcn, optimizer2, 0)
-    #    ValidateModel(dataloaderIndex.getValidationLoader(), model2, lossFcn)
 
     for param1, param2 in zip(model.parameters(), trainer.model.parameters()):
         if not (torch.equal(param1, param2)) or not (param1 is param2):
