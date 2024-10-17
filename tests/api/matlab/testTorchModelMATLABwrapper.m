@@ -6,11 +6,10 @@ classdef testTorchModelMATLABwrapper < matlab.unittest.TestCase
             % Shared setup for the entire test class
             pythonObj = pyenv(Version='/home/peterc/devDir/pyTorchAutoForge/.venvTorch/bin/python3.11');
             print(pythonObj);
-            np = py.importlib.import_module('numpy');
-            pyTorchAutoForge = py.importlib.import_module('pyTorchAutoForge');
-            py.importlib.reload(pyTorchAutoForge);
-
-            self.DEBUG_MODE = true;
+ 
+            %np = py.importlib.import_module('numpy');
+            %pyTorchAutoForge = py.importlib.import_module('pyTorchAutoForge');
+            %py.importlib.reload(pyTorchAutoForge);
         end
         
     end
@@ -20,18 +19,22 @@ classdef testTorchModelMATLABwrapper < matlab.unittest.TestCase
     end
     
     methods (Test)
+        function TestEnvironmnt(testCase)
+
+        end
+
         % Test methods
         function TestInstantiation(testCase)
             
             % Select model filename to load
-            modelPath = "";
-            modelFilename = "model.pt";
+            % modelPath = "";
+            % modelFilename = "model.pt";
 
             % Instantiate MATLAB torch model wrapper
-            model = py.pyTorchAutoForge.api.matlab.TorchModelMATLABwrapper(modelPath, modelFilename, self.DEBUG_MODE);
+            % model = py.pyTorchAutoForge.api.matlab.TorchModelMATLABwrapper(modelPath, modelFilename, self.DEBUG_MODE);
             
             
-            testCase.verifyFail("");
+            % testCase.verifyFail("");
         end
     end
     

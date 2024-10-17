@@ -455,17 +455,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """_summary_
 
         Raises:
-            NotImplementedError: _description_
+            optuna.TrialPruned: _description_
         """
+
         self.startMlflowRun()
         try:
+            if self.OPTUNA_MODE:
+                trial_printout = f"of trial {self.optuna_trial.number}"
+            else:
+                trial_printout = ""
+        
             for epoch_num in range(self.num_of_epochs):
 
-                print(f"\nTraining epoch: {epoch_num+1}/{self.num_of_epochs}:")
+                print("\nTraining epoch " + trial_printout, f": {epoch_num+1}/{self.num_of_epochs}:")
                 # Update current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
-                
                 if self.mlflow_logging:
                     mlflow.log_metric('lr', self.current_lr,
                                       step=self.currentEpoch)
