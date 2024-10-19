@@ -1,31 +1,43 @@
 classdef testTorchModelMATLABwrapper < matlab.unittest.TestCase
     % TBD: how to use this class?
     
+    % Shared setup for the test environment of the class --> executed once BEFORE test cases
     methods (TestClassSetup)
-        function self = SetupTestSet(self)
-            % Shared setup for the entire test class
-            pythonObj = pyenv(Version='/home/peterc/devDir/pyTorchAutoForge/.venvTorch/bin/python3.11');
+        function self = SetupTestEnv(self)
+            pythonObj = pyenv(Version = fullfile('..', '..', '..', '.venvTorch', 'bin', 'python3'));
             print(pythonObj);
- 
-            %np = py.importlib.import_module('numpy');
-            %pyTorchAutoForge = py.importlib.import_module('pyTorchAutoForge');
-            %py.importlib.reload(pyTorchAutoForge);
-        end
-        
+            
+            % Try importing required modules
+            np = py.importlib.import_module('numpy');
+            pyTorchAutoForge = py.importlib.import_module('pyTorchAutoForge');
+            py.importlib.reload(pyTorchAutoForge);
+
+        end 
     end
-    
+
+    % Shared cleanup for the test environment of the class --> executed once AFTER test cases
+    methods (TestClassTeardown)
+        % TODO
+    end
+
+
+    %% UNIT TEST SETUP
     methods (TestMethodSetup)
         % Setup for each test
+
     end
     
-    methods (Test)
-        function TestEnvironmnt(testCase)
 
+    %% UNIT TEST CODE
+    methods (Test)
+        function TestEnvironment(testCase)
+            % Assert library correct loading
         end
 
         % Test methods
-        function TestInstantiation(testCase)
-            
+        function TestInstantiation(testCase)  
+            % Test instantiation of MATLAB wrapper objects (default)
+
             % Select model filename to load
             % modelPath = "";
             % modelFilename = "model.pt";

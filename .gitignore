@@ -3,6 +3,7 @@ localdb/
 testdata/*
 data/*
 mlruns/*
+*.asv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

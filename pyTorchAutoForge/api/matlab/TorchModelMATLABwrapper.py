@@ -69,7 +69,11 @@ class TorchModelMATLABwrapper():
         # ########### DEBUG ######################:
         if self.DEBUG_MODE:
             print('Input sample shape: ', X.shape, 'on device: ', self.device)
-            print('Evaluating model using batch input: ', X) # Add truncation for large arrays
+
+            max_chars = 300  # Define the max length you want to print
+            print(f"\nError during training and validation cycle: {str(e)[:max_chars]}...")
+            
+            print(f'Evaluating model using batch input: {X}', X) # Add truncation for large arrays
         ############################################
     
         # TODO: Add check on input shape before attempting inference
