@@ -1,52 +1,66 @@
 classdef testTorchModelMATLABwrapper < matlab.unittest.TestCase
     % TBD: how to use this class?
-    
+    properties
+        pythonEnv
+    end
     % Shared setup for the test environment of the class --> executed once BEFORE test cases
     methods (TestClassSetup)
-        function self = SetupTestEnv(self)
-            pythonObj = pyenv(Version = fullfile('..', '..', '..', '.venvTorch', 'bin', 'python3'));
-            print(pythonObj);
+        function SetupTestEnv(testCase)
+            testCase.pythonEnv = pyenv(Version = fullfile('..', '..', '..', '.venv11Torch', 'bin', 'python3.11'));
+            disp(testCase.pythonEnv);
             
-            % Try importing required modules
-            np = py.importlib.import_module('numpy');
-            pyTorchAutoForge = py.importlib.import_module('pyTorchAutoForge');
-            py.importlib.reload(pyTorchAutoForge);
-
+            % Not clear how to make pythonObj available to the class?
         end 
     end
 
     % Shared cleanup for the test environment of the class --> executed once AFTER test cases
     methods (TestClassTeardown)
         % TODO
+        function TeardownTestEnv(testCase)
+            terminate(testCase.pythonEnv);
+        end
     end
 
 
     %% UNIT TEST SETUP
     methods (TestMethodSetup)
         % Setup for each test
-
+        % function Setup_TestInstantiation()
+        % 
+        %     % Try importing required modules
+        %     np = py.importlib.import_module('numpy');
+        %     pyTorchAutoForge = py.importlib.import_module('pyTorchAutoForge');
+        %     py.importlib.reload(pyTorchAutoForge);
+        % 
+        % end
     end
     
 
     %% UNIT TEST CODE
     methods (Test)
         function TestEnvironment(testCase)
-            % Assert library correct loading
+            % Assert pyenv is correctly loaded
+            version = testCase.pythonEnv.Version;
+            testCase.fatalAssertFalse(isempty(version));
         end
 
         % Test methods
         function TestInstantiation(testCase)  
+
+            % testCase.fatalAssertNotEmpty(pyTorchAutoForge);
             % Test instantiation of MATLAB wrapper objects (default)
 
             % Select model filename to load
-            % modelPath = "";
-            % modelFilename = "model.pt";
+            modelPath = "../testData/";
+            modelFilename = "testModel";
+            modelToLoad = fullfile(modelPath, modelFilename);
+
+            % testCase.assertEqual(isfile(modelToLoad + '.pt'), true);
 
             % Instantiate MATLAB torch model wrapper
             % model = py.pyTorchAutoForge.api.matlab.TorchModelMATLABwrapper(modelPath, modelFilename, self.DEBUG_MODE);
             
-            
-            % testCase.verifyFail("");
+            % Add assert on model instance
         end
     end
     
