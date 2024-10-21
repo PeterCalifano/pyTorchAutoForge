@@ -27,7 +27,7 @@ class ModelEvaluator():
     """_summary_
     """
     def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn],
-                 dataLoaderIndex: DataloaderIndex, evalFunction: Callable = None, 
+                 dataLoader: DataLoader, evalFunction: Callable = None, 
                  plotter: Optional[ResultsPlotter] = None) -> None:
         """_summary_
 
@@ -40,7 +40,7 @@ class ModelEvaluator():
 
         self.model = model
         self.lossFcn = lossFcn
-        self.validationDataloader = dataLoaderIndex.getValidationLoader()
+        self.validationDataloader = dataLoader
         self.trainingDataloaderSize = len(self.validationDataloader)
         self.evalFunction = evalFunction
         self.device = GetDevice()
@@ -73,7 +73,7 @@ class ModelEvaluator():
         sample = GetSamplesFromDataset(tmpdataloader.dataset, 1)
 
         # Allocate torch tensors to store errors
-        residuals = torch.zeros(dataset_size, sample[1].shape[1])
+        residuals = torch.zeros(dataset_size, sample[0].shape[1])
 
         # Perform model evaluation on all batches
         idAllocator = 0
