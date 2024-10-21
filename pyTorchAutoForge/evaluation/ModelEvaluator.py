@@ -133,6 +133,8 @@ class ModelEvaluator():
     def plotResults(self) -> None:
         if self.plotter is not None:
             self.plotter.histPredictionErrors(self.stats)
+        else:
+            Warning('No plotter object provided. Cannot plot results.')
         
 
     
