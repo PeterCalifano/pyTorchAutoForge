@@ -110,7 +110,7 @@ class ModelEvaluator():
             avgResiduals = torch.mean(torch.abs(residuals), dim=0)
             stdResiduals = torch.std(torch.abs(residuals), dim=0)
             medianResiduals, _ = torch.median(torch.abs(residuals), dim=0)
-            maxResiduals = torch.max(torch.abs(residuals), dim=0)
+            maxResiduals, _ = torch.max(torch.abs(residuals), dim=0)
 
         # Pack data into dict
         self.stats = {}
