@@ -70,23 +70,15 @@ class ModelEvaluator():
 
         dataset_size = len(tmpdataloader.dataset)
 
-        # Get one sample from the dataset
-        samplePair = GetSamplesFromDataset(tmpdataloader.dataset, 1)
-
-        # Allocate torch tensors to store errors
-        residuals = torch.zeros(dataset_size, samplePair[0][0].shape[1])
+        residuals = None
 
         # Perform model evaluation on all batches
-        idAllocator = 0
         total_loss = 0.0
         with torch.no_grad():
 
             for X, Y in tmpdataloader:
 
                 X, Y = X.to(self.device), Y.to(self.device)
-
-                # Get batch size
-                batchSize = X.shape[0]
 
                 # Perform forward pass
                 Y_hat = self.model(X)
@@ -105,10 +97,10 @@ class ModelEvaluator():
                     total_loss += batch_loss.get('lossValue') if isinstance(batch_loss, dict) else batch_loss.item()
 
                 # Store residuals
-                allocRange = np.arange( idAllocator, idAllocator + batchSize + 1, dtype=int)
-                residuals[allocRange, :] = errorPerComponent
-
-                idAllocator += batchSize
+                if residuals is None:
+                    residuals = errorPerComponent
+                else:
+                    residuals = torch.cat((residuals, errorPerComponent), dim=0)
 
             if self.lossFcn is not None:
                 # Compute average loss value
@@ -117,7 +109,7 @@ class ModelEvaluator():
             # Compute statistics
             avgResiduals = torch.mean(torch.abs(residuals), dim=0)
             stdResiduals = torch.std(torch.abs(residuals), dim=0)
-            medianResiduals = torch.median(torch.abs(residuals), dim=0)
+            medianResiduals, _ = torch.median(torch.abs(residuals), dim=0)
             maxResiduals = torch.max(torch.abs(residuals), dim=0)
 
         # Pack data into dict
