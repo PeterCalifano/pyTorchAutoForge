@@ -38,12 +38,13 @@ class ModelEvaluator():
             evalFunction (Callable, optional): _description_. Defaults to None.
         """
 
-        self.model = model
         self.lossFcn = lossFcn
         self.validationDataloader = dataLoader
         self.trainingDataloaderSize = len(self.validationDataloader)
         self.evalFunction = evalFunction
         self.device = GetDevice()
+
+        self.model = model.to(self.device)
 
         self.stats = {}
         self.plotter = plotter
