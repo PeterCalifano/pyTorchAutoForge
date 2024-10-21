@@ -67,6 +67,9 @@ class ResultsPlotter():
         # DATA: Check if stats dictionary is empty
         if stats == None:
             self.stats == self.loaded_stats
+        else:
+            self.stats = stats
+
 
         if self.stats == None:
             print('Return: empty stats dictionary')
