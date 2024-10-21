@@ -70,10 +70,10 @@ class ModelEvaluator():
         dataset_size = len(tmpdataloader.dataset)
 
         # Get one sample from the dataset
-        sample = GetSamplesFromDataset(tmpdataloader.dataset, 1)
+        samplePair = GetSamplesFromDataset(tmpdataloader.dataset, 1)
 
         # Allocate torch tensors to store errors
-        residuals = torch.zeros(dataset_size, sample[0].shape[1])
+        residuals = torch.zeros(dataset_size, samplePair[0][0].shape[1])
 
         # Perform model evaluation on all batches
         idAllocator = 0
