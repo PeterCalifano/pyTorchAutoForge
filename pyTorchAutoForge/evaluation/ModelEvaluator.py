@@ -107,7 +107,8 @@ class ModelEvaluator():
                 avg_loss = total_loss/dataset_size
 
             # Compute statistics
-            avgResiduals = torch.mean(torch.abs(residuals), dim=0)
+            meanResiduals = torch.mean(residuals, dim=0)
+            avgResidualsErr = torch.mean(torch.abs(residuals), dim=0)
             stdResiduals = torch.std(torch.abs(residuals), dim=0)
             medianResiduals, _ = torch.median(torch.abs(residuals), dim=0)
             maxResiduals, _ = torch.max(torch.abs(residuals), dim=0)
@@ -115,18 +116,19 @@ class ModelEvaluator():
         # Pack data into dict
         self.stats = {}
         self.stats['prediction_err'] = residuals.to('cpu').numpy()
-        self.stats['average_prediction_err'] = avgResiduals.to('cpu').numpy()
+        self.stats['average_prediction_err'] = avgResidualsErr.to('cpu').numpy()
         self.stats['median_prediction_err'] = medianResiduals.to('cpu').numpy()
         self.stats['max_prediction_err'] = maxResiduals.to('cpu').numpy()
+        self.stats['mean_prediction_err'] = meanResiduals.to('cpu').numpy()
 
         if self.lossFcn is not None:
             self.stats['avg_loss'] = avg_loss
 
         # Print statistics
-        print('Avg residuals: ', avgResiduals)
-        print('Std residuals: ', stdResiduals)
-        print('Median residuals: ', medianResiduals)
-        print('Max residuals: ', maxResiduals)
+        print('Mean of residuals: ', meanResiduals)
+        print('Std of residuals: ', stdResiduals)
+        print('Median of residuals: ', medianResiduals)
+        print('Max of residuals: ', maxResiduals)
 
         return self.stats
 
