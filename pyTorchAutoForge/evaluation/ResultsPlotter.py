@@ -102,7 +102,7 @@ class ResultsPlotter():
         else:
             override_condition = False
 
-        if colours == None and self.colours != None and not(override_condition):
+        if colours == None and self.colours != [] and not(override_condition):
             colours = self.colours
 
         elif (colours == None and self.colours == []) or override_condition:
