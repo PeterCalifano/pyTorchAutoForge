@@ -24,7 +24,7 @@ from pyTorchAutoForge.modelBuilding import torchModel
 from typing import Union
 from torch import nn
 
-
+# DEVNOTE: verify is tracing now works with this class
 class MultiHeadAdapter(nn.Module):
     def __init__(self, numOfHeads: int, headModels:Union[nn.Module, torchModel, nn.ModuleList, nn.ModuleDict]) -> "MultiHeadAdapter":
         self.numOfHeads = numOfHeads
