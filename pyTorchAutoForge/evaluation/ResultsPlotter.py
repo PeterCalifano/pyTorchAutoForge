@@ -156,7 +156,8 @@ class ResultsPlotter():
                             color=colours[idEntry], linestyle='--', linewidth=1, 
                             label=f'Mean: {mean_errors[idEntry]:.2f}')
 
-            plt.xlabel("Error [{unit}]".format(unit=units[idEntry] if entriesNames != None else "N/D"))
+            plt.xlabel("Error [{unit}]".format(unit=units[idEntry] if (
+                entriesNames != None or self.entriesNames != None) else "N/D"))
             plt.ylabel("# Samples")
             plt.grid()
             plt.tight_layout()
