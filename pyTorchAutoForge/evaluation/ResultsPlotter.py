@@ -159,10 +159,11 @@ class ResultsPlotter():
             plt.xlabel("Error [{unit}]".format(unit=units[idEntry] if entriesNames != None else "N/D"))
             plt.ylabel("# Samples")
             plt.grid()
+            plt.tight_layout()
 
             # SAVING: Save figure if required
             if self.save_figs:
-                plt.savefig("prediction_errors_" + entryName + ".png")
+                plt.savefig("prediction_errors_" + entryName + ".png", bbox_inches='tight')
             else:
                 plt.show()
 
