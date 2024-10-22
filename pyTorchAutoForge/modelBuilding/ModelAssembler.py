@@ -25,7 +25,7 @@ from typing import Union
 from torch import nn
 
 
-class MultiHeadAdapter():
+class MultiHeadAdapter(nn.Module):
     def __init__(self, numOfHeads: int, headModels:Union[nn.Module, torchModel, nn.ModuleList, nn.ModuleDict]) -> "MultiHeadAdapter":
         self.numOfHeads = numOfHeads
         self.headList = nn.ModuleDict()
