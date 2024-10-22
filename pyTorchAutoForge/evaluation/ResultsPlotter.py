@@ -84,10 +84,10 @@ class ResultsPlotter():
             print('Return: "prediction_err" key not found in stats dictionary')
             return
         
-        if 'average_prediction_err' in self.stats:
-            avg_errors = self.stats['average_prediction_err']
+        if 'mean_prediction_err' in self.stats:
+            mean_errors = self.stats['mean_prediction_err']
         else:
-            avg_errors = None
+            mean_errors = None
 
         # Assumes that the number of entries is always smaller that the number of samples
         num_of_entry = min(prediction_errors.shape) 
@@ -151,10 +151,10 @@ class ResultsPlotter():
                             kde=True, kind='hist')
 
             # Add average error if available
-            if avg_errors is not None:
-                plt.axvline(avg_errors[idEntry] * unit_scaler,
+            if mean_errors is not None:
+                plt.axvline(mean_errors[idEntry] * unit_scaler,
                             color=colours[idEntry], linestyle='--', linewidth=1, 
-                            label=f'Mean: {avg_errors[idEntry]:.2f}')
+                            label=f'Mean: {mean_errors[idEntry]:.2f}')
 
             plt.xlabel("Error [{unit}]".format(unit=units[idEntry] if entriesNames != None else "N/D"))
             plt.ylabel("# Samples")
