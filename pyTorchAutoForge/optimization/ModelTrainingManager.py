@@ -467,7 +467,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         
             for epoch_num in range(self.num_of_epochs):
 
-                print("\nTraining epoch " + trial_printout, f": {epoch_num+1}/{self.num_of_epochs}:")
+                print("\nTraining epoch" + trial_printout, f": {epoch_num+1}/{self.num_of_epochs}:")
                 # Update current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
