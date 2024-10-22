@@ -99,11 +99,13 @@ class ResultsPlotter():
             if override_condition:
                 Warning( "Overriding colours: number of colours specified not matching number of entries.")
                 colours = None
-        
+        else:
+            override_condition = False
+
         if colours == None and self.colours != None and not(override_condition):
             colours = self.colours
 
-        elif (colours == None and self.colours == None) or override_condition:
+        elif (colours == None and self.colours == []) or override_condition:
             if self.backend_module == backend_module.MATPLOTLIB:
                 # Get colour palette from matplotlib
                 colours = plt.cm.get_cmap('viridis', num_of_entry)
