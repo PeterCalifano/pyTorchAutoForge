@@ -461,7 +461,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.startMlflowRun()
         try:
             if self.OPTUNA_MODE:
-                trial_printout = f"of trial {self.optuna_trial.number}"
+                trial_printout = f" of trial {self.optuna_trial.number}"
             else:
                 trial_printout = ""
         
