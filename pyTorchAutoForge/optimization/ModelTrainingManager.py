@@ -8,6 +8,7 @@ from typing import Optional, Any, Union, IO
 import torch
 import mlflow
 import optuna
+import kornia
 import os
 import sys
 import traceback
@@ -52,6 +53,9 @@ class ModelTrainingManagerConfig():
     # Task type for training and validation --> How to enforce the definition of this?
     tasktype: TaskType
     batch_size: int
+
+    # DIFFERENTIABLE DATA AUGMENTATION using kornia
+    kornia_transform: torch.nn.Sequential = None
 
     # FIELDS with DEFAULTS
     # Optimization strategy
@@ -321,6 +325,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # DEVNOTE: TBD if this goes here or if to move dataloader to device
             X, Y = X.to(self.device), Y.to(self.device)
 
+            # Perform data augmentation on batch using kornia modules
+            if self.kornia_transform is not None:
+                X = self.kornia_transform(X)
+
             # Perform FORWARD PASS to get predictions
             # Evaluate model at input, calls forward() method
             predVal = self.model(X)
@@ -405,6 +413,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
 
+                    # Perform data augmentation on batch using kornia modules
+                    if self.kornia_transform is not None:
+                        X = self.kornia_transform(X)
+
                     # Perform FORWARD PASS
                     predVal = self.model(X)  # Evaluate model at input
 
@@ -430,6 +442,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 for X, Y in tmpdataloader:
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
+
+                    # Perform data augmentation on batch using kornia modules
+                    if self.kornia_transform is not None:
+                        X = self.kornia_transform(X)
 
                     # Perform FORWARD PASS
                     predVal = self.model(X)  # Evaluate model at input
