@@ -374,7 +374,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         # batchMaxLoss = 0
         # validationData = {}  # Dictionary to store validation data
 
-        # Backup the original batch size (TODO: TBC if it is useful)
+        # Backup the original batch size (DEVNOTE TODO Does it make sense?)
         original_dataloader = self.validationDataloader
 
         # Temporarily initialize a new dataloader for validation
@@ -459,6 +459,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """
 
         self.startMlflowRun()
+
+        print('\n\n-------------------------- Training and validation session start --------------------------\n')
+        print('Running on device: ', self.device)
         try:
             if self.OPTUNA_MODE:
                 trial_printout = f" of trial {self.optuna_trial.number}"
