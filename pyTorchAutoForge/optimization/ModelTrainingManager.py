@@ -669,10 +669,19 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 mlflow.end_run(status='FINISHED')
 
         except KeyboardInterrupt:
-            print(
-                '\nModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
+            print('\nModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
+
+            if self.OPTUNA_MODE:
+                user_input = input('\n\nStop execution (Y) or mark as pruned (N)?').strip().lower()
+                if user_input == 'n':
+                    raise optuna.TrialPruned()
+                else: 
+                    raise KeyboardInterrupt() # Stop the program
+            else:
+                # Exit from program
+                raise KeyboardInterrupt()
 
         except optuna.TrialPruned:
             # Optuna trial kill raised
