@@ -524,9 +524,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         formatted_output = f"""
         SESSION INFO
 
-        Task Type:             {self.tasktype}
-        Model Name:            {self.modelName}
-        Device:                {self.device}
+        - Task Type:             {self.tasktype}
+        - Model Name:            {self.modelName}
+        - Device:                {self.device}
 
         SETTINGS
 
