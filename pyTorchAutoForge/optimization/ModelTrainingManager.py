@@ -361,7 +361,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, average loop time: {run_time_total/(1000*current_batch):4.4g} [ms], current lr: {self.current_lr:.06g}"
+            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, average loop time: {1000*run_time_total/current_batch:4.4g} [ms], current lr: {self.current_lr:.06g}"
 
             # Print progress on the same line
             sys.stdout.write('\r' + progress)
@@ -446,7 +446,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: { validationLossVal / current_batch:.4f}, average loop time: {run_time_total/(1000*current_batch):4.4g} [ms]"
+                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: { validationLossVal / current_batch:.4f}, average loop time: {1000*run_time_total/(current_batch):4.4g} [ms]"
 
                     # Print progress on the same line
                     sys.stdout.write('\r' + progress)
@@ -487,7 +487,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: {validationLossVal / current_batch:.4f}, average loop time: {run_time_total/(1000*current_batch):4.2f} [ms]"
+                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: {validationLossVal / current_batch:.4f}, average loop time: {1000 * run_time_total/(current_batch):4.2f} [ms]"
                     
                     # Print progress on the same line
                     sys.stdout.write('\r' + progress)
