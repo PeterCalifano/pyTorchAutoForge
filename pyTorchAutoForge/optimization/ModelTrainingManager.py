@@ -9,8 +9,7 @@ import torch
 import mlflow
 import optuna
 import kornia
-import os
-import sys
+import os, sys, time
 import traceback
 from torch import nn
 import numpy as np
@@ -317,8 +316,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.model.train()
 
         running_loss = 0.0
+        run_time_total = 0.0
         # prev_model = copy.deepcopy(self.model)
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
+            
+            # Start timer for batch processing time
+            start_time = time.time()
 
             # Get input and labels and move to target device memory
             # Define input, label pairs for target device
@@ -353,9 +356,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.optimizer.step()       # Apply gradients from the loss
             self.numOfUpdates += 1
 
+            # Accumulate batch processing time
+            run_time_total += time.time() - start_time
+
             # Calculate progress
             current_batch = batch_idx + 1
-            progress = f"\tBatch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, current lr: {self.current_lr:.11f}"
+            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, average loop time: {run_time_total/(1000*current_batch):4.2f} [ms], current lr: {self.current_lr:.06g}"
 
             # Print progress on the same line
             sys.stdout.write('\r' + progress)
@@ -401,6 +407,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         dataset_size = len(tmpdataloader.dataset)
 
         with torch.no_grad():
+            run_time_total = 0.0
+
             if self.tasktype == TaskType.CLASSIFICATION:
 
                 if not (isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
@@ -409,7 +417,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 correctPredictions = 0
 
-                for X, Y in tmpdataloader:
+                for batch_idx, (X, Y) in enumerate(tmpdataloader):
+
+                    # Start timer for batch processing time
+                    start_time = time.time()
+
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
 
@@ -429,17 +441,31 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     correctPredictions += (predVal.argmax(1)
                                            == Y).type(torch.float).sum().item()
 
+                    # Accumulate batch processing time
+                    run_time_total += time.time() - start_time
+
+                    # Calculate progress
+                    current_batch = batch_idx + 1
+                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: {validationLossVal / current_batch:.4f}, average loop time: {run_time_total/(1000*current_batch):4.2f} [ms]"
+
+                    # Print progress on the same line
+                    sys.stdout.write('\r' + progress)
+                    sys.stdout.flush()
+
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
                 # Compute percentage of correct classifications over dataset size
                 correctPredictions /= dataset_size
-                print(
-                    f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {validationLossVal:>4f}\n")
+                print(f"\n\t  Final score - accuracy: {(100*correctPredictions):0.2f}%, average loss: {validationLossVal:.4f}\n")
 
                 return validationLossVal, correctPredictions
 
             elif self.tasktype == TaskType.REGRESSION:
 
-                for X, Y in tmpdataloader:
+                for batch_idx, (X, Y) in enumerate(tmpdataloader):
+
+                    # Start timer for batch processing time
+                    start_time = time.time()
+
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
 
@@ -457,9 +483,19 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     validationLossVal += validationLossDict.get('lossValue') if isinstance(
                         validationLossDict, dict) else validationLossDict.item()
 
+                    # Accumulate batch processing time
+                    run_time_total += time.time() - start_time
+
+                    # Calculate progress
+                    current_batch = batch_idx + 1
+                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: {validationLossVal / current_batch:.4f}, average loop time: {run_time_total/(1000*current_batch):4.2f} [ms]"
+                    
+                    # Print progress on the same line
+                    sys.stdout.write('\r' + progress)
+                    sys.stdout.flush()
+
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
-                print(
-                    f"\n\tValidation: regression average loss: {validationLossVal:>4f}\n")
+                print(f"\n\t  Final score - avg. loss: {validationLossVal:.4f}\n")
 
                 return validationLossVal
 
@@ -477,16 +513,28 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.startMlflowRun()
 
         print('\n\n-------------------------- Training and validation session start --------------------------\n')
-        print('Running on device: ', self.device)
+        # Print out session information to check config
+        print('SESSION INFO: GENERAL\n')
+        print('\tTask type: ', self.tasktype)
+        print('\tModel name: ', self.modelName)
+        print('\tRunning on device: ', self.device)
+
+        print('SESSION INFO: SETTINGS\n')
+        print('\tNumber of epochs: ', self.num_of_epochs)
+        print('\tTrainer mode: ', 'OPTUNA' if self.OPTUNA_MODE else 'NORMAL')
+        print('\tInitial learning rate: ', self.initial_lr)
+        print(f'\tKornia augmentation pipeline: {self.kornia_transform}') if self.kornia_transform is not None else print('No Kornia augmentation pipeline defined.') 
+
         try:
             if self.OPTUNA_MODE:
                 trial_printout = f" of trial {self.optuna_trial.number}"
             else:
                 trial_printout = ""
-        
+            
             for epoch_num in range(self.num_of_epochs):
 
-                print("\nTraining epoch" + trial_printout, f": {epoch_num+1}/{self.num_of_epochs}:")
+                print("\nTraining epoch" + trial_printout,f": {epoch_num+1}/{self.num_of_epochs}:")
+                cycle_start_time = time.time()
                 # Update current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
@@ -548,8 +596,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss)
 
 
-                print('\tCurrent best at epoch {best_epoch}, validation loss: {best_loss}'.format(
+                print('\tCurrent best at epoch {best_epoch}, with validation loss: {best_loss:.06g}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
+                print(f'\tEpoch cycle duration: {((time.time() - cycle_start_time) / 60):.4f} [min]')
 
                 # "Early stopping" strategy implementation
                 if self.OPTUNA_MODE == False:
@@ -563,7 +612,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Model saving code
             modelToSave = ( self.bestModel if self.bestModel is not None else self.model).to('cpu')
             if self.keep_best:
-                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss}'.format(
+                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
 
             if not (os.path.isdir(self.checkpointDir)):
