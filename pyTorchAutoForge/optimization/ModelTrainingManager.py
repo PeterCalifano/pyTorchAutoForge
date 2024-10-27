@@ -361,7 +361,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, average loop time: {run_time_total/(1000*current_batch):4.2f} [ms], current lr: {self.current_lr:.06g}"
+            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, average loop time: {run_time_total/(1000*current_batch):4.4g} [ms], current lr: {self.current_lr:.06g}"
 
             # Print progress on the same line
             sys.stdout.write('\r' + progress)
@@ -375,7 +375,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         # for param1, param2 in zip(prev_model.parameters(), self.model.parameters()):
         #    if torch.equal(param1, param2) or param1 is param2:
         #        raise ValueError("Model parameters are the same after 1 epoch.")
-
+        print('\n') # Add newline after progress bar
         return running_loss / current_batch
 
     def validateModel_(self):
@@ -446,7 +446,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: {validationLossVal / current_batch:.4f}, average loop time: {run_time_total/(1000*current_batch):4.2f} [ms]"
+                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: { validationLossVal / current_batch:.4f}, average loop time: {run_time_total/(1000*current_batch):4.4g} [ms]"
 
                     # Print progress on the same line
                     sys.stdout.write('\r' + progress)
@@ -455,8 +455,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
                 # Compute percentage of correct classifications over dataset size
                 correctPredictions /= dataset_size
-                print(f"\n\t  Final score - accuracy: {(100*correctPredictions):0.2f}%, average loss: {validationLossVal:.4f}\n")
-
+                print(f"\n\t\tFinal score - accuracy: {(100*correctPredictions):0.2f}%, average loss: {validationLossVal:.4f}\n")
                 return validationLossVal, correctPredictions
 
             elif self.tasktype == TaskType.REGRESSION:
@@ -495,13 +494,59 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     sys.stdout.flush()
 
                 validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
-                print(f"\n\t  Final score - avg. loss: {validationLossVal:.4f}\n")
+                print(f"\n\t\tFinal score - avg. loss: {validationLossVal:.4f}\n")
 
                 return validationLossVal
 
             else:
                 raise NotImplementedError(
                     'Custom task type not implemented yet.')
+
+
+    def printSessionInfo(self):
+        """  
+        _summary_   
+        Prints the session information and configuration settings for the model training.
+        The output includes:
+        - Task type
+        - Model name
+        - Device being used
+        - Number of epochs
+        - Trainer mode (OPTUNA or NORMAL)
+        - Initial learning rate
+        If a Kornia augmentation pipeline is defined, it also prints the details of each transform in the pipeline,
+        including the class name and parameters.
+        Returns:
+            None
+        """
+    
+        # Print out session information to check config
+        formatted_output = f"""
+        SESSION INFO
+
+        Task Type:             {self.tasktype}
+        Model Name:            {self.modelName}
+        Device:                {self.device}
+
+        SETTINGS
+
+        - Number of Epochs:        {self.num_of_epochs}
+        - Trainer Mode:            {'OPTUNA' if self.OPTUNA_MODE else 'NORMAL'}
+        - Initial Learning Rate:   {self.initial_lr:0.8g}
+        """
+        print(formatted_output)
+
+        if self.kornia_transform is not None:
+            print("Kornia Augmentation Pipeline:")
+            for idx, transform in enumerate(self.kornia_transform):
+                print(f"  ({idx}): {transform.__class__.__name__}")
+
+                # Print each parameter for the transform
+                params = vars(transform)
+                for param, value in params.items():
+                    print(f"      - {param}: {value}")
+        else:
+            print("No Kornia augmentation pipeline defined.")
 
     def trainAndValidate(self):
         """_summary_
@@ -513,17 +558,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.startMlflowRun()
 
         print('\n\n-------------------------- Training and validation session start --------------------------\n')
-        # Print out session information to check config
-        print('SESSION INFO: GENERAL\n')
-        print('\tTask type: ', self.tasktype)
-        print('\tModel name: ', self.modelName)
-        print('\tRunning on device: ', self.device)
-
-        print('SESSION INFO: SETTINGS\n')
-        print('\tNumber of epochs: ', self.num_of_epochs)
-        print('\tTrainer mode: ', 'OPTUNA' if self.OPTUNA_MODE else 'NORMAL')
-        print('\tInitial learning rate: ', self.initial_lr)
-        print(f'\tKornia augmentation pipeline: {self.kornia_transform}') if self.kornia_transform is not None else print('No Kornia augmentation pipeline defined.') 
+        self.printSessionInfo()
 
         try:
             if self.OPTUNA_MODE:
@@ -880,8 +915,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Perform step of learning rate scheduler if provided
             self.optimizer.zero_grad()  # Reset gradients for safety
             self.lr_scheduler.step()
-            print('\nLearning rate changed: {prev_lr} --> {current_lr}\n'.format(
-                prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()))
+            print('\nLearning rate changed: {prev_lr:.6g} --> {current_lr:.6g}\n'.format( prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()))
 
             # Update current learning rate
             self.current_lr = self.lr_scheduler.get_last_lr()
