@@ -9,7 +9,7 @@ import torch
 import mlflow
 import optuna
 import kornia
-import os, sys, time
+import os, sys, time, colorama
 import traceback
 from torch import nn
 import numpy as np
@@ -554,10 +554,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         Raises:
             optuna.TrialPruned: _description_
         """
+        colorama.init(autoreset=True)
 
         self.startMlflowRun()
-
-        print('\n\n-------------------------- Training and validation session start --------------------------\n')
+        print(f'\n\n{colorama.Style.BRIGHT}{colorama.Fore.BLUE}-------------------------- Training and validation session start --------------------------\n')
         self.printSessionInfo()
 
         try:
@@ -568,7 +568,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             
             for epoch_num in range(self.num_of_epochs):
 
-                print("\nTraining epoch" + trial_printout,f": {epoch_num+1}/{self.num_of_epochs}:")
+                print(f"\n{colorama.Fore.GREEN}Training epoch" + trial_printout, f"{colorama.Fore.GREEN}: {epoch_num+1}/{self.num_of_epochs}")
                 cycle_start_time = time.time()
                 # Update current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
