@@ -327,7 +327,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Perform data augmentation on batch using kornia modules
             if self.kornia_transform is not None:
-                X = self.kornia_transform(X)
+                X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
 
             # Perform FORWARD PASS to get predictions
             # Evaluate model at input, calls forward() method
@@ -415,7 +415,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Perform data augmentation on batch using kornia modules
                     if self.kornia_transform is not None:
-                        X = self.kornia_transform(X)
+                        X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
 
                     # Perform FORWARD PASS
                     predVal = self.model(X)  # Evaluate model at input
@@ -445,7 +445,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Perform data augmentation on batch using kornia modules
                     if self.kornia_transform is not None:
-                        X = self.kornia_transform(X)
+                        X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
 
                     # Perform FORWARD PASS
                     predVal = self.model(X)  # Evaluate model at input
