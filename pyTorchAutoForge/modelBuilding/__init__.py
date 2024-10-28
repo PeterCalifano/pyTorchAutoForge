@@ -3,4 +3,5 @@ from .modelClasses import *
 from .ModelAssembler import *
 from .ModelMutatorBNtoGN import *
 
-__all__ = ['ModelAutoBuilder', 'torchModel', 'ModelAssembler', 'ModelMutatorBNtoGN']
+#__all__ = ['ModelAutoBuilder', 'torchModel',
+#           'ModelAssembler', 'ModelMutatorBNtoGN']

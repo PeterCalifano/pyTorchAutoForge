@@ -24,7 +24,8 @@ from pyTorchAutoForge.datasets import DataloaderIndex, Dataset, DataLoader
 import torchvision.models as models
 
 from pyTorchAutoForge.utils import GetDevice
-from pyTorchAutoForge.modelBuilding import ModelAutoBuilder, TemplateDeepNet, TemplateConvNet, ModelMutatorBNtoGN
+from pyTorchAutoForge.modelBuilding import ModelAutoBuilder, TemplateDeepNet, TemplateConvNet
+from pyTorchAutoForge.modelBuilding import ModelMutatorBNtoGN
 
 import matplotlib
 matplotlib.use('agg')  # or 'Qt5Agg'
