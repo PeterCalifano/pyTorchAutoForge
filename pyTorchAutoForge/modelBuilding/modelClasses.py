@@ -8,6 +8,9 @@ from torch import nn
 from torch.nn import init
 from torch.nn import functional as torchFunc
 
+
+# DEVNOTE TODO change name of this file to "modelBuildingBlocks.py" and move the OLD classes to the file "modelClasses.py" for compatibility with legacy codebase
+ 
 #############################################################################################################################################
 class torchModel(torch.nn.Module):
     '''Custom base class inheriting nn.Module to define a PyTorch NN model, augmented with saving/loading routines like Pytorch Lightning.'''
@@ -42,6 +45,47 @@ class torchModel(torch.nn.Module):
 #############################################################################################################################################
 # TBC: class to perform code generation of net classes instead of classes with for and if loops? 
 # --> THe key problem with the latter is that tracing/scripting is likely to fail due to conditional statements
+
+# TODO The structure of the model building blocks should be as follows:
+# Normalization Layer example:
+
+# TBC: classes versus functions?
+
+class NormalizationLayer(): # DEVNOTE: how to pass arguments?
+    def __init__(self, dict_key, *args, **kwargs) -> nn.Module:
+
+        self.modules_map = nn.ModuleDict(
+                                ['BatchNorm2d', nn.BatchNorm2d],
+                                ['LayerNorm', nn.LayerNorm],
+                                ['InstanceNorm2d', nn.InstanceNorm2d],
+                                ['GroupNorm', nn.GroupNorm]
+                                )
+        
+        return self.modules_map[dict_key](args) # TBC this is ok?
+
+# TODO
+class ActivationLayer():
+    def __init__(self, dict_key, *args, **kwargs) -> nn.Module:
+        self.modules_map = nn.ModuleDict([
+            ['lrelu', nn.LeakyReLU],
+            ['relu', nn.ReLU],
+            ['prelu', nn.PReLU],
+        ])
+
+        return self.modules_map[dict_key](args)
+
+# TODO 
+class ConvolutionalLayer():
+    def __init__(self, dict_key, *args, **kwargs) -> nn.Module:
+        pass
+
+# TODO --> convolutional building block
+class ConvolutionalBlock():
+    def __init__(self, dict_key, *args, **kwargs) -> nn.Sequential:
+        
+
+        return nn.Sequential() 
+
 
 
 # %% TemplateConvNet - 19-09-2024
