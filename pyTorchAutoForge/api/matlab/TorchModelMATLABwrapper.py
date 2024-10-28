@@ -10,11 +10,10 @@ from dataclasses import dataclass
 
 @dataclass 
 class WrapperConfig():
-
     # Default wrapper configuration
     DEBUG_MODE: bool = False
     device = GetDevice()
-    pass
+    
 
 # %% MATLAB wrapper class for Torch models evaluation - 11-06-2024 # TODO: update class
 class TorchModelMATLABwrapper():
