@@ -1,4 +1,4 @@
-import torch.nn as nn
+from torch import nn
 
 class ModelMutatorBNtoGN():
     def __init__(self, model:nn.Module, numOfGroups: int = 32) -> None:
