@@ -924,10 +924,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Perform step of learning rate scheduler if provided
             self.optimizer.zero_grad()  # Reset gradients for safety
             self.lr_scheduler.step()
-            print('\nLearning rate changed: {prev_lr:.6g} --> {current_lr:.6g}\n'.format( prev_lr=self.current_lr, current_lr=self.lr_scheduler.get_last_lr()))
+
+            # Get the single learning rate value
+            current_lr = self.lr_scheduler.get_last_lr()[0]
+            print('\nLearning rate changed: {prev_lr:.6g} --> {current_lr:.6g}\n'.format(prev_lr=self.current_lr, current_lr=current_lr))
 
             # Update current learning rate
-            self.current_lr = self.lr_scheduler.get_last_lr()
+            self.current_lr = current_lr
 
     def checkForEarlyStop(self, counter: int) -> bool:
         """
