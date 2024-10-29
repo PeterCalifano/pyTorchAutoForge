@@ -53,6 +53,8 @@ def validate_args(layer_class: nn.Module, show_defaults: bool, dict_key: str, *a
     for key, default_value in optional_args.items():
         kwargs.setdefault(key, default_value)
 
+    return kwargs
+
 def build_activation_layer(activation_name : str, show_defaults: bool = False, *args, **kwargs) -> nn.Module:
     """
     Build and return a PyTorch activation layer based on the provided activation name.
@@ -123,7 +125,7 @@ def build_convolutional_layer(convolution_name:str='conv2d', show_defaults: bool
 
 def build_normalization_layer(normalization_name: str = 'groupnorm', show_defaults: bool = False, *args, **kwargs) -> nn.Module:
 
-    normalization_layers = normalization_layers.lower()
+    normalization_name = normalization_name.lower()
 
     # Define normalization layers using a regular dictionary with class references
     normalization_layers = {
