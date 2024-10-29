@@ -77,7 +77,7 @@ def main():
     print("Adapter model: \n", resAdapter)
 
     # Get model backbone from torchvision
-    feature_extractor = models.efficientnet_b1(
+    feature_extractor = models.efficientnet_b0(
         weights=True)  # Load model without weights
     # Remove last Linear classifier ()
     #feature_extractor = nn.Sequential(*list(feature_extractor.children())[:-1])
