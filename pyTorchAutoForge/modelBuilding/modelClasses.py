@@ -239,7 +239,7 @@ class TemplateDeepNet(torchModel):
         self.layers.append(nn.Flatten())
 
 
-        for i in range(idLayer, self.num_layers+idLayer-1):
+        for i in range(idLayer, self.num_layers+idLayer-2):
 
             # Fully Connected layers block
             self.layers.append(nn.Linear(input_size, self.outChannelsSizes[i], bias=True))
