@@ -556,7 +556,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """
         colorama.init(autoreset=True)
 
-        self.startMlflowRun()
+        self.startMlflowRun()  # DEVNOTE: TODO split into more subfunctions
         print(f'\n\n{colorama.Style.BRIGHT}{colorama.Fore.BLUE}-------------------------- Training and validation session start --------------------------\n')
         self.printSessionInfo()
 
@@ -630,7 +630,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     mlflow.log_metric( 'validation_loss', self.currentValidationLoss, step=self.currentEpoch)
                     mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss)
 
-
                 print('\tCurrent best at epoch {best_epoch}, with validation loss: {best_loss:.06g}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
                 print(f'\tEpoch cycle duration: {((time.time() - cycle_start_time) / 60):.4f} [min]')
@@ -639,6 +638,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if self.OPTUNA_MODE == False:
                     if self.checkForEarlyStop(noNewBestCounter):
                         break
+                elif self.OPTUNA_MODE == True:
+                    # Safety exit for model divergence
+                    if tmpTrainLoss >= 1E8 or tmpValidLoss >= 1E8:
+                        raise optuna.TrialPruned()
 
                 # Post epoch operations
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
