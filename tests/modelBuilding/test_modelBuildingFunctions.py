@@ -46,12 +46,47 @@ def test_convolutional_block_builder():
 
 
 def test_normalization_builder():
-    pass
+    # Test building each normalization layer
+    dict_key = 'BatchNorm2d'
+    num_features = 10
+    batch_norm = build_normalization_layer(
+        dict_key, show_defaults=True, num_features=num_features)
+    print(batch_norm)
+
+    dict_key = 'LayerNorm'
+    normalized_shape = [10, 10]
+    layer_norm = build_normalization_layer(
+        dict_key, show_defaults=True, normalized_shape=normalized_shape)
+    print(layer_norm)
+
+    dict_key = 'InstanceNorm2d'
+    num_features = 10
+    instance_norm = build_normalization_layer(
+        dict_key, show_defaults=True, num_features=num_features)
+    print(instance_norm)
+
+    dict_key = 'GroupNorm'
+    num_groups = 2
+    num_channels = 10
+    group_norm = build_normalization_layer(
+        dict_key, show_defaults=True, num_groups=num_groups, num_channels=num_channels)
+    print(group_norm)
+
+    # Assert equality
+    assert isinstance(batch_norm, nn.BatchNorm2d)
+    assert batch_norm.num_features == num_features
+    assert isinstance(layer_norm, nn.LayerNorm)
+    assert list(layer_norm.normalized_shape) == normalized_shape
+    assert isinstance(instance_norm, nn.InstanceNorm2d)
+    assert instance_norm.num_features == num_features
+    assert isinstance(group_norm, nn.GroupNorm)
+    assert group_norm.num_groups == num_groups
+    assert group_norm.num_channels == num_channels
 
 
 if __name__ == "__main__":
     test_activation_builder()
+    test_normalization_builder()
     test_convolutional_builder()
     test_convolutional_block_builder()
-    test_normalization_builder()
     print("All tests passed")
