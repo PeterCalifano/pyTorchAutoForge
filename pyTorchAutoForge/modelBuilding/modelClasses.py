@@ -1,9 +1,11 @@
 # Module to apply activation functions in forward pass instead of defining them in the model class
+import torch.nn as nn
 from typing import Union
 from pyTorchAutoForge.api.torch import * 
 from pyTorchAutoForge.modelBuilding.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize
 from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel, LoadTorchModel
 
+import inspect, pytest
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as torchFunc
@@ -51,33 +53,10 @@ class torchModel(torch.nn.Module):
 
 # TBC: classes versus functions?
 
-class NormalizationLayer(): # DEVNOTE: how to pass arguments?
-    def __init__(self, dict_key, *args, **kwargs) -> nn.Module:
 
-        self.modules_map = nn.ModuleDict(
-                                ['BatchNorm2d', nn.BatchNorm2d],
-                                ['LayerNorm', nn.LayerNorm],
-                                ['InstanceNorm2d', nn.InstanceNorm2d],
-                                ['GroupNorm', nn.GroupNorm]
-                                )
-        
-        return self.modules_map[dict_key](args) # TBC this is ok?
 
-# TODO
-class ActivationLayer():
-    def __init__(self, dict_key, *args, **kwargs) -> nn.Module:
-        self.modules_map = nn.ModuleDict([
-            ['lrelu', nn.LeakyReLU],
-            ['relu', nn.ReLU],
-            ['prelu', nn.PReLU],
-        ])
 
-        return self.modules_map[dict_key](args)
 
-# TODO 
-class ConvolutionalLayer():
-    def __init__(self, dict_key, *args, **kwargs) -> nn.Module:
-        pass
 
 # TODO --> convolutional building block
 class ConvolutionalBlock():
@@ -309,3 +288,7 @@ class TemplateDeepNet(torchModel):
         prediction = val
 
         return prediction
+
+
+
+
