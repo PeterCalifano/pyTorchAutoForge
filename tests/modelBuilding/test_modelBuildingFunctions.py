@@ -38,8 +38,40 @@ def test_activation_builder():
 
 
 def test_convolutional_builder():
-    pass
+    # Test building each convolutional layer
+    dict_key = 'Conv1d'
+    in_channels, out_channels, kernel_size = 3, 6, 3
+    conv1d = build_convolutional_layer(
+        dict_key, show_defaults=True, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size)
+    print(conv1d)
 
+    dict_key = 'Conv2d'
+    in_channels, out_channels, kernel_size = 3, 6, (3, 3)
+    conv2d = build_convolutional_layer(
+        dict_key, show_defaults=True, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size)
+    print(conv2d)
+
+    dict_key = 'Conv3d'
+    in_channels, out_channels, kernel_size = 3, 6, (3, 3, 3)
+    conv3d = build_convolutional_layer(
+        dict_key, show_defaults=True, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size)
+    print(conv3d)
+
+    # Assert equality
+    assert isinstance(conv1d, nn.Conv1d)
+    assert conv1d.in_channels == in_channels
+    assert conv1d.out_channels == out_channels
+    assert conv1d.kernel_size == (kernel_size,)
+
+    assert isinstance(conv2d, nn.Conv2d)
+    assert conv2d.in_channels == in_channels
+    assert conv2d.out_channels == out_channels
+    assert conv2d.kernel_size == kernel_size
+
+    assert isinstance(conv3d, nn.Conv3d)
+    assert conv3d.in_channels == in_channels
+    assert conv3d.out_channels == out_channels
+    assert conv3d.kernel_size == kernel_size
 
 def test_convolutional_block_builder():
     pass
