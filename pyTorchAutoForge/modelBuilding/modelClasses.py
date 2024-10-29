@@ -239,7 +239,7 @@ class TemplateDeepNet(torchModel):
         self.layers.append(nn.Flatten())
 
 
-        for i in range(idLayer, self.num_layers+idLayer):
+        for i in range(idLayer, self.num_layers+idLayer-1):
 
             # Fully Connected layers block
             self.layers.append(nn.Linear(input_size, self.outChannelsSizes[i], bias=True))
@@ -253,6 +253,9 @@ class TemplateDeepNet(torchModel):
 
             # Update input size for next layer
             input_size = self.outChannelsSizes[i]
+
+        # Add output layer
+        self.layers.append(nn.Linear(input_size, self.outChannelsSizes[-1], bias=True))
 
         # Initialize weights of layers
         self.__initialize_weights__()
