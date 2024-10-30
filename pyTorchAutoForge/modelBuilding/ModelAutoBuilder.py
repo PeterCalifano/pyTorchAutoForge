@@ -1,7 +1,8 @@
+from enum import Enum
 from typing import Union
 import numpy as np
 import torch
-
+from torch import nn
 # Auxiliar functions
 
 
@@ -111,3 +112,57 @@ class ModelAutoBuilder():
     def __init__(self):
         raise NotImplementedError('ModelAutoBuilder class is not implemented yet')
         pass
+
+
+class enumMultiHeadOutMode(Enum):
+    Concatenate = 0
+    Append = 1
+    Sum = 2
+    Average = 3
+
+
+class MultiHeadRegressor(nn.Module):
+    def __init__(self, model_heads: Union[nn.ModuleList, nn.ModuleDict, nn.Module, dict], output_mode: enumMultiHeadOutMode = enumMultiHeadOutMode.Concatenate, *args, **kwargs):
+        # Initialize nn.Module base class
+        super(MultiHeadRegressor, self).__init__()
+        self.heads = nn.ModuleList()
+
+        if isinstance(model_heads, dict):
+            raise NotImplementedError(
+                "Dictionary input not supported yet. TBD if a class for constraining how the model should be specified is required, likely")
+
+        elif isinstance(model_heads, nn.ModuleList):
+            # Unpack list and append to heads module List
+            for module in model_heads:
+                self.heads.append(module)
+
+        elif isinstance(model_heads, nn.ModuleDict):
+
+            # Unpack dictionary and append to heads module List
+            for key, module in model_heads.items():
+                self.heads.append(module)
+
+        elif isinstance(model_heads, nn.Module):
+            self.heads.append(model_heads)
+
+    def forward(self, X):
+
+        # Perform forward pass for each head and append to list
+        predictions = []
+
+        for head in self.heads:
+            predictions.append(head(X))
+
+        return self.pack_output(predictions)
+
+    def pack_output(self, predictions: list):
+
+        # Define output object depending on self.output_mode
+        if self.output_mode == enumMultiHeadOutMode.Concatenate:
+            return torch.cat(predictions, 1)  # Concatenate along 2nd dimension
+
+        if self.output_mode == enumMultiHeadOutMode.Append:
+            return predictions
+
+        else:
+            raise NotImplementedError("This output mode is not implemented yet")
