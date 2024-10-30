@@ -17,7 +17,7 @@ if "ele" in username or "pilo" in username:
 
 setup(
     name='pyTorchAutoForge',
-    version='0.2',
+    version='0.3.0',
     packages=find_packages(),
     install_requires=[
         "torch==2.2.1",
