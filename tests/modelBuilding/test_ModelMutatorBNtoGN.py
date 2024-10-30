@@ -1,13 +1,12 @@
 
-import sys
-import os
-
+import sys, os
 # Add path to sys
 sys.path.append(os.path.abspath(
     os.path.join(os.path.dirname(__file__), '../../../operative/operative-develop/src')))
 
+from tailoredModels import FullDiskDataset, ShiftDiskTransform, NormalizeImage, conv2dResolutionAdapter, CentroidRangeDeepMSEloss
+
 # Import modules
-from tailoredModels import FullDiskDataset, ShiftDiskTransform, NormalizeImage, inputResolutionAdapter, CentroidRangeDeepMSEloss
 import matplotlib.pyplot as plt
 import torch
 

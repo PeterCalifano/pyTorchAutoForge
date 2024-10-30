@@ -100,6 +100,22 @@ def build_activation_layer(activation_name : str, show_defaults: bool = False, *
 
 
 def build_convolutional_layer(convolution_name:str='conv2d', show_defaults: bool = False, *args, **kwargs) -> nn.Module:
+    """
+    Builds a convolutional layer based on the specified type and arguments.
+    Args:
+        convolution_name (str): The type of convolutional layer to build. 
+                                Options are 'conv1d', 'conv2d', and 'conv3d'. 
+                                Default is 'conv2d'.
+        show_defaults (bool): If True, display the default arguments for the 
+                              specified convolutional layer. Default is False.
+        *args: Variable length argument list to pass to the convolutional layer.
+        **kwargs: Arbitrary keyword arguments to pass to the convolutional layer.
+    Returns:
+        nn.Module: An instance of the specified convolutional layer.
+    Raises:
+        ValueError: If an unknown convolution type is specified.
+    """
+    
     convolution_name = convolution_name.lower()
 
     # Define convolutional layers using a regular dictionary with class references
@@ -124,6 +140,29 @@ def build_convolutional_layer(convolution_name:str='conv2d', show_defaults: bool
 
 
 def build_normalization_layer(normalization_name: str = 'groupnorm', show_defaults: bool = False, *args, **kwargs) -> nn.Module:
+    """
+    Builds and returns a normalization layer based on the specified normalization type.
+
+    Args:
+        normalization_name (str): The name of the normalization layer to build. 
+                                  Options include 'batchnorm2d', 'layernorm', 'instancenorm2d', and 'groupnorm'.
+                                  Default is 'groupnorm'.
+        show_defaults (bool): If True, displays the default arguments for the specified normalization layer.
+                              Default is False.
+        *args: Additional positional arguments to pass to the normalization layer constructor.
+        **kwargs: Additional keyword arguments to pass to the normalization layer constructor.
+
+    Returns:
+        nn.Module: An instance of the specified normalization layer.
+
+    Raises:
+        ValueError: If the specified normalization_name is not recognized.
+
+    Example:
+        >>> norm_layer = build_normalization_layer('batchnorm2d', num_features=64)
+        >>> print(norm_layer)
+        BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    """
 
     normalization_name = normalization_name.lower()
 
@@ -146,3 +185,33 @@ def build_normalization_layer(normalization_name: str = 'groupnorm', show_defaul
 
     # Instantiate and return the normalization layer with the validated arguments
     return normalization_class(*args, **kwargs)
+
+
+def build_pooling_layer(pooling_name, show_defaults: bool = False, *args, **kwargs) -> nn.Module:
+    # Define pooling layers with both standard and adaptive pooling classes
+    pooling_layers = {
+        'MaxPool1d': nn.MaxPool1d,
+        'MaxPool2d': nn.MaxPool2d,
+        'MaxPool3d': nn.MaxPool3d,
+        'AvgPool1d': nn.AvgPool1d,
+        'AvgPool2d': nn.AvgPool2d,
+        'AvgPool3d': nn.AvgPool3d,
+        'AdaptiveMaxPool1d': nn.AdaptiveMaxPool1d,
+        'AdaptiveMaxPool2d': nn.AdaptiveMaxPool2d,
+        'AdaptiveMaxPool3d': nn.AdaptiveMaxPool3d,
+        'AdaptiveAvgPool1d': nn.AdaptiveAvgPool1d,
+        'AdaptiveAvgPool2d': nn.AdaptiveAvgPool2d,
+        'AdaptiveAvgPool3d': nn.AdaptiveAvgPool3d
+    }
+
+    if pooling_name not in pooling_layers:
+        raise ValueError(f"Unknown pooling type: {pooling_name}")
+
+    # Retrieve the pooling class
+    pooling_class = pooling_layers[pooling_name]
+
+    # Perform argument validation
+    kwargs = validate_args(pooling_class, show_defaults, dict_key=pooling_name, *args, **kwargs)
+
+    # Instantiate and return the pooling layer with validated arguments
+    return pooling_class(*args, **kwargs)

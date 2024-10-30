@@ -36,7 +36,6 @@ def test_activation_builder():
     assert isinstance(sigmoid, nn.Sigmoid)
     assert isinstance(tanh, nn.Tanh)
 
-
 def test_convolutional_builder():
     # Test building each convolutional layer
     dict_key = 'Conv1d'
@@ -76,7 +75,6 @@ def test_convolutional_builder():
 def test_convolutional_block_builder():
     pass
 
-
 def test_normalization_builder():
     # Test building each normalization layer
     dict_key = 'BatchNorm2d'
@@ -115,10 +113,27 @@ def test_normalization_builder():
     assert group_norm.num_groups == num_groups
     assert group_norm.num_channels == num_channels
 
+def test_pooling_builder():
+
+    # Show optional defaults for AdaptiveMaxPool2d and create it with output size 3x3
+    adaptive_pooling_layer = build_pooling_layer('AdaptiveMaxPool2d', show_defaults=True, output_size=(3, 3))
+    print(adaptive_pooling_layer)
+
+    # Create MaxPool1d with a specific kernel size and default settings for other parameters
+    pooling_layer = build_pooling_layer('MaxPool1d', kernel_size=3)
+    print(pooling_layer)
+
+    # Check instances of the pooling layers
+    assert isinstance(adaptive_pooling_layer, nn.AdaptiveMaxPool2d)
+    assert adaptive_pooling_layer.output_size == (3, 3)
+    assert isinstance(pooling_layer, nn.MaxPool1d)
+    assert pooling_layer.kernel_size == 3
+
 
 if __name__ == "__main__":
     test_activation_builder()
     test_normalization_builder()
     test_convolutional_builder()
     test_convolutional_block_builder()
+    test_pooling_builder()
     print("All tests passed")
