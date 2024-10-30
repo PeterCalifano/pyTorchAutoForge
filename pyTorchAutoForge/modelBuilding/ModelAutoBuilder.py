@@ -5,6 +5,7 @@ import torch
 from torch import nn
 # Auxiliar functions
 
+from modelBuildingFunctions import *
 
 def ComputeConv2dOutputSize(inputSize: Union[list, np.array, torch.tensor], kernelSize=3, strideSize=1, paddingSize=0):
     """
@@ -107,13 +108,8 @@ def AutoComputeConvBlocksOutput(self, kernelSizes: list, poolingKernelSize: list
     return convBlockOutputSize
 
 
-# %% ModelAutoBuilder class implementation
-class ModelAutoBuilder():
-    def __init__(self):
-        raise NotImplementedError('ModelAutoBuilder class is not implemented yet')
-        pass
 
-
+# %% MultiHeadRegressor class implementation
 class enumMultiHeadOutMode(Enum):
     Concatenate = 0
     Append = 1
@@ -166,3 +162,12 @@ class MultiHeadRegressor(nn.Module):
 
         else:
             raise NotImplementedError("This output mode is not implemented yet")
+
+# %% ModelAutoBuilder class implementation
+
+class ModelAutoBuilder():
+    def __init__(self, modelConfig: Union[ModelConfig]):
+        self.modelConfig = modelConfig
+
+    def build(self):
+        pass  # TODO

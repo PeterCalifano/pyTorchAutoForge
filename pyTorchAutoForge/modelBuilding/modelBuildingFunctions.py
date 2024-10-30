@@ -1,8 +1,80 @@
 import torch.nn as nn
-from typing import Union
+from typing import Union, Any, Dict, List, Optional, Tuple
 import inspect
+from enum import Enum
+from dataclasses import dataclass, field
 
 
+# %% Configuration classes
+
+class block_type(Enum):
+    conv = 0
+    linear = 1
+
+#class layer_type(Enum):
+#    conv = 0
+#    norm = 1
+#    activation = 2
+#    pooling = 3
+#    linear = 4
+
+
+# Base classes for layers and blocks
+@dataclass 
+class LayerConfig: # Empty class to force inheritance
+    pass
+
+@dataclass
+class BlockConfig:
+    type: block_type           # Block type
+    layers: List[LayerConfig]  # List of layers in the block
+
+
+@dataclass
+class ModelConfig:
+    modules: List[Union[LayerConfig, BlockConfig]]  # List of layers and blocks in the model
+
+# Single layer configuration classes
+@dataclass
+class ConvLayerConfig(LayerConfig):
+    in_channels: int
+    out_channels: int
+    typename: str = "conv2d"
+    kernel_size: int = 3
+    stride: int = 1
+    padding: int = 0
+    dilation: int = 1
+    groups: int = 1
+
+
+@dataclass
+class NormLayerConfig(LayerConfig):
+    num_features: int
+    typename: str = "BatchNorm2d"
+
+@dataclass
+class ActivationLayerConfig(LayerConfig):
+    typename: str = "PRelu"
+    inplace: bool = True  # Only for ReLU-like activations
+    leaky_slope: float = 0.01  # Only for LeakyReLU
+
+@dataclass
+class PoolingLayerConfig(LayerConfig):
+    typename: str = "MaxPool2d"
+    kernel_size: int = 2
+    stride: Optional[int] = 2
+    padding: int = 0
+
+@dataclass
+class LinearLayerConfig(LayerConfig):
+    in_features: int
+    out_features: int
+    typename: str = "Linear"
+
+
+
+
+# %% Single layer builders
 def validate_args(layer_class: nn.Module, show_defaults: bool, dict_key: str, *args, **kwargs):
     """
     Validates the arguments for a given layer class by inspecting its signature.
@@ -215,3 +287,100 @@ def build_pooling_layer(pooling_name, show_defaults: bool = False, *args, **kwar
 
     # Instantiate and return the pooling layer with validated arguments
     return pooling_class(*args, **kwargs)
+
+
+def build_linear_layer(linear_name, show_defaults: bool = False, *args, **kwargs) -> nn.Module:
+    # Define linear layers using a dictionary with class references
+    linear_layers = {
+        'Linear': nn.Linear,
+        'Bilinear': nn.Bilinear,
+        'LazyLinear': nn.LazyLinear
+    }
+
+    if linear_name not in linear_layers:
+        raise ValueError(f"Unknown linear layer type: {linear_name}")
+
+    # Retrieve the linear class
+    linear_class = linear_layers[linear_name]
+
+    # Perform argument validation
+    kwargs = validate_args(linear_class, show_defaults, dict_key=linear_name, *args, **kwargs)
+    
+    # Instantiate and return the linear layer with validated arguments
+    return linear_class(*args, **kwargs)
+
+
+# %% Block builders
+#def build_convolutional_block(block_config: BlockConfig) -> nn.Module:
+#    pass
+#def build_linear_block(block_config: BlockConfig) -> nn.Module:
+#    pass
+
+# NOTE: there seems to be no necessity of block specific builders.
+
+# %% Builder wrapper function
+#def build_model(ModelConfig):
+
+
+# Function to build the generic layer from configuration
+def build_layer(config: LayerConfig) -> nn.Module:
+
+    assert (isinstance(config, LayerConfig)), f"Input object type {type(config)} not an instance of LayerConfig or its subclasses"
+
+    # Unpack parameters from the configuration
+    layer_type = config.typename
+    params = vars(config)  # Convert the dataclass fields to a dictionary
+
+    # Remove the 'type' key as it's not an actual parameter for the builder functions
+    params.pop('typename')
+
+    if isinstance(config, ConvLayerConfig):
+        return build_convolutional_layer(layer_type, **params)
+
+    elif isinstance(config, NormLayerConfig):
+        return build_normalization_layer(layer_type, **params)
+
+    elif isinstance(config, ActivationLayerConfig):
+        return build_activation_layer(layer_type, **params)
+
+    elif isinstance(config, PoolingLayerConfig):
+        return build_pooling_layer(layer_type, **params)
+
+    elif isinstance(config, LinearLayerConfig):
+        return build_linear_layer(layer_type, **params)
+
+    else:
+        raise ValueError(f"Unsupported configuration type: {type(config)}")
+
+
+# Function to build the generic block from configuration
+def build_block(block_config: BlockConfig) -> nn.Module:
+    """
+    Builds a block from a BlockConfig instance by sequentially creating layers.
+    """
+
+    assert(isinstance(block_config, BlockConfig)), f"Input object type {type(block_config)} not an instance of BlockConfig"
+
+    layers = [build_layer(layer_config) for layer_config in block_config.layers]
+    return nn.Sequential(*layers)
+
+
+def test_block_builder():
+    # Define a simple block configuration
+    block_config = BlockConfig(
+        type=block_type.conv,
+        layers=[
+            ConvLayerConfig(in_channels=3, out_channels=16, typename='conv2d', kernel_size=3, stride=1, padding=1),
+            NormLayerConfig(num_features=16, typename= 'batchnorm2d'),
+            ActivationLayerConfig('relu', inplace=True),
+            PoolingLayerConfig()
+        ]
+    )
+
+    # Build the block
+    block = build_block(block_config)
+    print(block)
+
+if __name__ == "__main__":
+    test_block_builder()
+
