@@ -3,7 +3,6 @@
 # to set the configuration class. Default values are specified as the class defaults.
 # Loading methods only modify the parameters the user has specified
 
-
 from typing import Optional, Any, Union, IO
 import torch
 import mlflow
@@ -1545,3 +1544,10 @@ def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
                 'Either both inputSample and labelsSample must be provided or neither!')
 
         return examplePredictions, exampleLosses, X.to(device), Y.to(device)
+
+
+
+# %% Function to freeze a generic nn.Module model parameters to avoid backpropagation
+def FreezeModel(model: nn.Module) -> nn.Module:
+    model.requires_grad_(False)
+    return model
