@@ -5,7 +5,7 @@ import torch
 from torch import nn
 # Auxiliar functions
 
-from modelBuildingFunctions import *
+from pyTorchAutoForge.modelBuilding.modelBuildingFunctions import *
 
 def ComputeConv2dOutputSize(inputSize: Union[list, np.array, torch.tensor], kernelSize=3, strideSize=1, paddingSize=0):
     """
