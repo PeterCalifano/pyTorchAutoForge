@@ -231,6 +231,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         else:
             self.OPTUNA_MODE = False
 
+        # Set kornia transform device
+        if self.kornia_transform is not None:
+            self.kornia_transform = self.kornia_transform.to(self.device)
+
         # Initialize dataloaders if provided
         if dataLoaderIndex is not None:
             self.setDataloaders(dataLoaderIndex)
