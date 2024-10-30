@@ -1000,6 +1000,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         #    Warning('MLFlow logging is disabled. No run started.')
 
 
+# %% Function to freeze a generic nn.Module model parameters to avoid backpropagation
+def FreezeModel(model: nn.Module) -> nn.Module:
+    model.requires_grad_(False)
+    return model
+
+####################################################################################################
+
 # LEGACY FUNCTIONS - 18/09/2024
 # %% Function to perform one step of training of a model using dataset and specified loss function - 04-05-2024
 # Updated by PC 04-06-2024
@@ -1546,8 +1553,3 @@ def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
         return examplePredictions, exampleLosses, X.to(device), Y.to(device)
 
 
-
-# %% Function to freeze a generic nn.Module model parameters to avoid backpropagation
-def FreezeModel(model: nn.Module) -> nn.Module:
-    model.requires_grad_(False)
-    return model
