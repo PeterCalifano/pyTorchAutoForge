@@ -1,6 +1,6 @@
 from pyTorchAutoForge.modelBuilding.modelBuildingFunctions import *
 
-
+# Single layer builders
 def test_activation_builder():
     # Test building of each layer
     activation_name = 'relu'
@@ -72,9 +72,6 @@ def test_convolutional_builder():
     assert conv3d.out_channels == out_channels_3d
     assert conv3d.kernel_size == kernel_size_3d
 
-def test_convolutional_block_builder():
-    pass
-
 def test_normalization_builder():
     # Test building each normalization layer
     dict_key = 'BatchNorm2d'
@@ -129,11 +126,22 @@ def test_pooling_builder():
     assert isinstance(pooling_layer, nn.MaxPool1d)
     assert pooling_layer.kernel_size == 3
 
+def test_linear_builder():
+    # Test building each linear layer
+    dict_key = 'Linear'
+    in_features, out_features = (10, 5)
+    linear = build_linear_layer(dict_key, show_defaults=True, in_features=in_features, out_features=out_features)
+    print(linear)
+
+    # Assert equality
+    assert isinstance(linear, nn.Linear)
+    assert linear.in_features == in_features
+    assert linear.out_features == out_features 
 
 if __name__ == "__main__":
     test_activation_builder()
     test_normalization_builder()
     test_convolutional_builder()
-    test_convolutional_block_builder()
     test_pooling_builder()
+    test_linear_builder()
     print("All tests passed")
