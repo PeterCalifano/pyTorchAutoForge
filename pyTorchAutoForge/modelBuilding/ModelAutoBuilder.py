@@ -122,6 +122,7 @@ class MultiHeadRegressor(nn.Module):
         # Initialize nn.Module base class
         super(MultiHeadRegressor, self).__init__()
         self.heads = nn.ModuleList()
+        self.output_mode = output_mode
 
         if isinstance(model_heads, dict):
             raise NotImplementedError(
