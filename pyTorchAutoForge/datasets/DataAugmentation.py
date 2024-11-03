@@ -43,35 +43,50 @@ def build_kornia_augs(sigma_noise: float, sigma_blur: Union[tuple, float] = (0.0
     return torch.nn.Sequential(random_brightness, random_contrast, gaussian_blur, gaussian_noise)
 
 
-
-
 class ImagesAugsModule(nn.Module):
-    def __init__():
-        def __init__(self, sigma_noise: float, sigma_blur: Union[tuple, float] = (0.0001, 1.0),
-                     brightness_factor: Union[tuple, float] = (0.0001, 0.01),
-                     contrast_factor: Union[tuple, float] = (0.0001, 0.01), unnormalize_before: bool = False):
-            super(ImagesAugsModule, self).__init__()
+    def __init__(self, sigma_noise: float, sigma_blur: Union[tuple, float] = (0.0001, 1.0),
+                    brightness_factor: Union[tuple, float] = (0.0001, 0.01),
+                    contrast_factor: Union[tuple, float] = (0.0001, 0.01), unnormalize_before: bool = False):
+        super(ImagesAugsModule, self).__init__()
 
-            # Store augmentations data
-            self.sigma_noise = sigma_noise
-            self.sigma_blur = sigma_blur
-            self.brightness_factor = brightness_factor
-            self.contrast_factor = contrast_factor
+        # Store augmentations data
+        self.sigma_noise = sigma_noise
+        self.sigma_blur = sigma_blur
+        self.brightness_factor = brightness_factor
+        self.contrast_factor = contrast_factor
 
-            self.augmentations = build_kornia_augs(sigma_noise, sigma_blur, brightness_factor, contrast_factor)
+        self.augmentations = build_kornia_augs(sigma_noise, sigma_blur, brightness_factor, contrast_factor)
 
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
 
-            if self.unnormalize_before:
-                x = 255.0 * x
+        if self.unnormalize_before:
+            x = 255.0 * x
 
-            x = self.augmentations(x)
+        x = self.augmentations(x)
 
-            if self.unnormalize_before:
-                x = x / 255.0
+        if self.unnormalize_before:
+            x = x / 255.0
 
-            return x
+        return x
 
+
+class GeometryAugsModule(nn.Module):
+    def __init__(self):
+        super(ImagesAugsModule, self).__init__()
+
+        # Example usage
+        self.augmentations = AugmentationSequential(
+            kornia_aug.RandomRotation(degrees=30.0, p=1.0),
+            kornia_aug.RandomAffine(degrees=0, translate=(0.1, 0.1), p=1.0),
+            data_keys=["input", "mask"]
+        )  # Define the keys: image is "input", mask is "mask"
+
+
+    def forward(self, x: torch.Tensor, labels: Union[torch.Tensor, tuple[torch.Tensor]]) -> torch.Tensor:
+        # TODO define interface (input, output format and return type)
+        x, labels = self.augmentations(x, labels)
+
+        return x, labels
 
 
     
