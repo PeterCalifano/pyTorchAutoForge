@@ -3,7 +3,7 @@ import seaborn as sns
 from enum import Enum
 import numpy as np
 from dataclasses import dataclass, field 
-
+import os
 
 class backend_module(Enum):
     MATPLOTLIB = "Use matplotlib for plotting",
@@ -17,6 +17,7 @@ class ResultsPlotterConfig():
     colours: list = field(default_factory=list)
     units: list = None
     entriesNames: list = None
+    output_folder: str = None
 
 class ResultsPlotter():
     """
@@ -164,7 +165,14 @@ class ResultsPlotter():
 
             # SAVING: Save figure if required
             if self.save_figs:
-                plt.savefig("prediction_errors_" + entryName + ".png", bbox_inches='tight')
+                if self.output_folder is not None:
+                    output_dir_path = self.output_folder
+                    if os.path.isdir(output_dir_path):
+                        os.makedirs(output_dir_path, exist_ok=False)
+                else:
+                    output_dir_path = "."
+
+                plt.savefig(os.path.join(output_dir_path, "prediction_errors_" + entryName + ".png"), bbox_inches='tight')
             else:
                 plt.show()
 
