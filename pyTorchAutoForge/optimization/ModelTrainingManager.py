@@ -667,7 +667,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                exampleInput=examplePair[0], targetDevice=self.device)
 
             if self.mlflow_logging:
-                mlflow.log_param('checkpoint_best_poch', self.bestEpoch)
+                mlflow.log_param('checkpoint_best_epoch', self.bestEpoch)
                 
             # Post-training operations
             print('Training and validation cycle completed.')
