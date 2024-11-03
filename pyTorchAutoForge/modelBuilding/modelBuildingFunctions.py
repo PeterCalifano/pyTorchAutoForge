@@ -5,6 +5,8 @@ from enum import Enum
 from dataclasses import dataclass, field
 
 
+# DEVNOTE: as anticipated (and suggested by Giacomo) the current generic approach to build functions (without defaults) is a bit cumbersome to use. 
+
 # %% Configuration classes
 
 class block_type(Enum):
