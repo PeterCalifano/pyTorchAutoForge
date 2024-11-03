@@ -27,7 +27,7 @@ class ModelEvaluator():
     """_summary_
     """
     def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn],
-                 dataLoader: DataLoader, evalFunction: Callable = None, 
+                 dataLoader: DataLoader, device: str = 'cpu', evalFunction: Callable = None, 
                  plotter: Optional[ResultsPlotter] = None) -> None:
         """_summary_
 
@@ -42,7 +42,7 @@ class ModelEvaluator():
         self.validationDataloader = dataLoader
         self.trainingDataloaderSize = len(self.validationDataloader)
         self.evalFunction = evalFunction
-        self.device = GetDevice()
+        self.device = device
 
         self.model = model.to(self.device)
 
@@ -50,7 +50,6 @@ class ModelEvaluator():
         self.plotter = plotter
 
     def evaluateRegressor(self) -> dict:
-        '''DEVNOTE: loss function averaging assumes that the batch_loss is not an average but a sum of losses'''
         self.model.eval()
 
         # Backup the original batch size (TODO: TBC if it is useful)
