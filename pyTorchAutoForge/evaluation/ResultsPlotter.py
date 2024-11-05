@@ -167,7 +167,7 @@ class ResultsPlotter():
             if self.save_figs:
                 if self.output_folder is not None:
                     output_dir_path = self.output_folder
-                    if os.path.isdir(output_dir_path):
+                    if not(os.path.isdir(output_dir_path)):
                         os.makedirs(output_dir_path, exist_ok=False)
                 else:
                     output_dir_path = "."
