@@ -16,7 +16,7 @@ class WrapperConfig():
     
 
 # %% MATLAB wrapper class for Torch models evaluation - 11-06-2024 # TODO: update class
-class TorchModelMATLABwrapper():
+class TorchModelMATLABwrapper(nn.Module):
     '''Class to wrap a trained PyTorch model for evaluation in MATLAB'''
 
     def __init__(self, trainedModel: Union[str, nn.Module, torchModel], 
