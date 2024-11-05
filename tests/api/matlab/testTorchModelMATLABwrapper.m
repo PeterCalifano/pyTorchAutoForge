@@ -6,7 +6,7 @@ classdef testTorchModelMATLABwrapper < matlab.unittest.TestCase
     % Shared setup for the test environment of the class --> executed once BEFORE test cases
     methods (TestClassSetup)
         function SetupTestEnv(testCase)
-            testCase.pythonEnv = pyenv(Version = fullfile('..', '..', '..', '.venv11Torch', 'bin', 'python3.11'));
+            testCase.pythonEnv = pyenv(Version = fullfile('..', '..', '..', '.venvTorch', 'bin', 'python3.11'));
             disp(testCase.pythonEnv);
             
             % Not clear how to make pythonObj available to the class?
