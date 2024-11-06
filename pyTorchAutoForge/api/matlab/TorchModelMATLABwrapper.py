@@ -16,13 +16,12 @@ class MatlabWrapperConfig():
     
 
 # %% MATLAB wrapper class for Torch models evaluation - 11-06-2024 # TODO: update class
-class TorchModelMATLABwrapper(nn.Module):
+class TorchModelMATLABwrapper():
     '''Class to wrap a trained PyTorch model for evaluation in MATLAB'''
 
     def __init__(self, trainedModel: Union[str, nn.Module, torchModel], 
                  wrapperConfig: MatlabWrapperConfig = MatlabWrapperConfig()) -> None:
         '''Constructor for TorchModelMATLABwrapper'''
-        super(TorchModelMATLABwrapper, self).__init__()
 
         # Initialize using configuration class
         self.DEBUG_MODE = wrapperConfig.DEBUG_MODE
@@ -79,14 +78,14 @@ class TorchModelMATLABwrapper(nn.Module):
             # Check input type and convert to torch.tensor if necessary
             if inputSample is np.ndarray and inputSample.dtype != np.float32:
                 Warning('Converting input to np.float32 from', inputSample.dtype)
-                inputSample = np.float32(inputSample)
+                inputSample = torch.from_numpy(np.float32(inputSample))
 
             elif inputSample is torch.Tensor and inputSample.dtype != torch.float32:
                 Warning('Converting input to torch.float32 from', inputSample.dtype)
                 inputSample = inputSample.float()
 
-            # Convert numpy array into torch.tensor for model inference
-            X = torch.tensor(inputSample).reshape(numBatches, -1) if inputSample is np.array else inputSample.reshape(numBatches, -1)
+            # Reshape according to batch dimension
+            X = inputSample.reshape(numBatches, -1)
 
         except Exception as e:
             max_chars = 400  # Define the max length you want to print
