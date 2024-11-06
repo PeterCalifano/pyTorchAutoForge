@@ -6,10 +6,10 @@ def test_TorchModelMATLABwrapper():
     import os
     file_dir = os.path.dirname(os.path.realpath(__file__))
     
-    module_path = os.path.join(file_dir, '../..', 'data/sample_cnn_traced.pt')
+    module_path = os.path.join(file_dir, '../..', 'data/sample_cnn_traced')
 
     # Check if model exists
-    if not os.path.isfile(module_path):
+    if not os.path.isfile(module_path + '.pt'):
         raise FileNotFoundError('Model specified by: ',
                                 module_path, ': NOT FOUND. Run create_sample_tracedModel.py to create model first.')
 
