@@ -22,7 +22,7 @@ def create_sample_tracedModel_():
     input_tensor = torch.randn(1, 3, 256, 256)
 
     # Trace the model
-    traced_model = torch.jit.script(model, input_tensor)
+    traced_model = torch.jit.trace(model, input_tensor)
 
     # Get working directory
     import os
