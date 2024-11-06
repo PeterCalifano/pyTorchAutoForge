@@ -135,8 +135,10 @@ def test_TorchModelMATLABwrapper():
 
     print('Input shape:', input_sample.shape)
     output = model_wrapper.forward(input_sample)
+    assert isinstance(output, np.ndarray) 
+    assert output.shape == (1, 16, 252, 252)
     print('Output shape:', output.shape)
-
+    
 
 if __name__ == '__main__':
     test_TorchModelMATLABwrapper()
