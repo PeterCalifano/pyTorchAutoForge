@@ -9,7 +9,7 @@ from typing import Union
 from dataclasses import dataclass
 
 @dataclass 
-class WrapperConfig():
+class MatlabWrapperConfig():
     # Default wrapper configuration
     DEBUG_MODE: bool = False
     device = GetDevice()
@@ -20,7 +20,7 @@ class TorchModelMATLABwrapper(nn.Module):
     '''Class to wrap a trained PyTorch model for evaluation in MATLAB'''
 
     def __init__(self, trainedModel: Union[str, nn.Module, torchModel], 
-                 wrapperConfig: WrapperConfig = WrapperConfig()) -> None:
+                 wrapperConfig: MatlabWrapperConfig = MatlabWrapperConfig()) -> None:
         '''Constructor for TorchModelMATLABwrapper'''
 
         # Initialize using configuration class
@@ -91,9 +91,4 @@ class TorchModelMATLABwrapper(nn.Module):
         return Y.detach().cpu().numpy()  # Move to cpu and convert to numpy before returning
 
 
-# Test function definition for pytest
-def test_TorchModelMATLABwrapper():
-    module_path = ''
-
-    model_wrapper = TorchModelMATLABwrapper()
 
