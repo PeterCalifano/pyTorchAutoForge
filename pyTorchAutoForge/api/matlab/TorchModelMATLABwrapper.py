@@ -76,13 +76,14 @@ class TorchModelMATLABwrapper():
                 numBatches = 1
 
             # Check input type and convert to torch.tensor if necessary
-            if inputSample is np.ndarray and inputSample.dtype != np.float32:
+            if isinstance(inputSample, np.ndarray) and inputSample.dtype != np.float32:
                 Warning('Converting input to np.float32 from', inputSample.dtype)
                 inputSample = torch.from_numpy(np.float32(inputSample))
 
-            elif inputSample is torch.Tensor and inputSample.dtype != torch.float32:
+            elif isinstance(inputSample, torch.Tensor) and inputSample.dtype != torch.float32:
                 Warning('Converting input to torch.float32 from', inputSample.dtype)
                 inputSample = inputSample.float()
+
 
             # Reshape according to batch dimension
             X = inputSample.reshape(numBatches, -1)
