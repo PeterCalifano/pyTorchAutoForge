@@ -6,9 +6,7 @@ from pyTorchAutoForge.utils.utils import AddZerosPadding
 
 # TODO: UPDATE FUNCTION
 def SaveTorchModel(model: torch.nn.Module, modelpath: str = "./trainedModel", saveAsTraced: bool = False, exampleInput: torch.Tensor = None, targetDevice: str = 'cpu') -> None:
-    if 'os.path' not in sys.modules:
-        import os.path
-
+   
     if saveAsTraced:
         extension = '.pt'
     else:
@@ -66,9 +64,6 @@ def SaveTorchModel(model: torch.nn.Module, modelpath: str = "./trainedModel", sa
 
 # %% Function to load model state into empty model- 04-05-2024, updated 11-06-2024
 def LoadTorchModel(model: torch.nn.Module = None, modelpath: str = "savedModels/trainedModel.pt", loadAsTraced: bool = False) -> torch.nn.Module:
-
-    if 'os.path' not in sys.modules:
-        import os.path
 
     # Check if input name has extension
     modelNameCheck, extension = os.path.splitext(str(modelpath))

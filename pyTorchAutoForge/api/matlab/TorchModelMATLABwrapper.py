@@ -22,6 +22,7 @@ class TorchModelMATLABwrapper(nn.Module):
     def __init__(self, trainedModel: Union[str, nn.Module, torchModel], 
                  wrapperConfig: MatlabWrapperConfig = MatlabWrapperConfig()) -> None:
         '''Constructor for TorchModelMATLABwrapper'''
+        super(TorchModelMATLABwrapper, self).__init__()
 
         # Initialize using configuration class
         self.DEBUG_MODE = wrapperConfig.DEBUG_MODE
