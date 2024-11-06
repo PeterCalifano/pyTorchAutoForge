@@ -93,4 +93,7 @@ class TorchModelMATLABwrapper(nn.Module):
 
 # Test function definition for pytest
 def test_TorchModelMATLABwrapper():
-    pass
+    module_path = ''
+
+    model_wrapper = TorchModelMATLABwrapper()
+
