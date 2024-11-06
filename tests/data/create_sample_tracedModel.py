@@ -12,9 +12,9 @@ def create_sample_tracedModel_():
 
         # Forward pass function
         def forward(self, x):
-                x = F.relu(self.conv1(x))
-                x = F.relu(self.conv2(x))
-                return x
+            x = F.relu(self.conv1(x))
+            x = F.relu(self.conv2(x))
+            return x
 
     model = SampleCNN()
 
@@ -22,7 +22,7 @@ def create_sample_tracedModel_():
     input_tensor = torch.randn(1, 3, 256, 256)
 
     # Trace the model
-    traced_model = torch.jit.trace(model, input_tensor)
+    traced_model = torch.jit.script(model, input_tensor)
 
     # Get working directory
     import os
