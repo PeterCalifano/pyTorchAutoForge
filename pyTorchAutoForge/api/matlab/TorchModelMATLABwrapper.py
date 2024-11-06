@@ -54,7 +54,7 @@ class TorchModelMATLABwrapper():
         if self.DEBUG_MODE:
             print("The following model has been loaded and will be used in forward() call: \n", self.trainedModel)
 
-    def forward(self, inputSample: Union[np.ndarray, torch.Tensor], numBatches: int = None):
+    def forward(self, inputSample: Union[np.ndarray, torch.Tensor], numBatches: int = None, inputShape: list[int] = None):
         '''Forward method to perform inference on N sample input using loaded trainedModel. Batch size assumed as 1 if not given.'''
         
         if self.DEBUG_MODE:
@@ -85,8 +85,12 @@ class TorchModelMATLABwrapper():
                 inputSample = inputSample.float()
 
 
-            # Reshape according to batch dimension
-            X = inputSample.reshape(numBatches, -1)
+            if inputShape is not None:
+                raise NotImplementedError('Input shape validation/reshaping is not implemented yet. Please set inputShape to None for now.')
+                X = inputSample.view()
+            else:
+                # Reshape according to batch dimension
+                X = inputSample
 
         except Exception as e:
             max_chars = 400  # Define the max length you want to print
@@ -109,4 +113,30 @@ class TorchModelMATLABwrapper():
         return Y.detach().cpu().numpy()  # Move to cpu and convert to numpy before returning
 
 
+def test_TorchModelMATLABwrapper():
+    # Get script path
+    import os
+    file_dir = os.path.dirname(os.path.realpath(__file__))
 
+    module_path = os.path.join('/home/peterc/devDir/pyTorchAutoForge/tests/data/sample_cnn_traced')
+
+    # Check if model exists
+    if not os.path.isfile(module_path + '.pt'):
+        raise FileNotFoundError('Model specified by: ',
+                                module_path, ': NOT FOUND. Run create_sample_tracedModel.py to create model first.')
+
+    # Define wrapper configuration and wrapper object
+    wrapper_config = MatlabWrapperConfig()
+
+    model_wrapper = TorchModelMATLABwrapper(module_path, wrapper_config)
+
+    # Test forward method
+    input_sample = np.random.rand(1, 3, 256, 256)
+
+    print('Input shape:', input_sample.shape)
+    output = model_wrapper.forward(input_sample)
+    print('Output shape:', output.shape)
+
+
+if __name__ == '__main__':
+    test_TorchModelMATLABwrapper()
