@@ -21,7 +21,6 @@ classdef CTorchModelWrapper < handle
         device = 'cpu';
     end
 
-
     methods (Access = public)
         % CONSTRUCTOR
         function self = CTorchModelWrapper(model_path, device, kwargs)

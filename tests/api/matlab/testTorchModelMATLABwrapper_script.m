@@ -4,7 +4,7 @@ clc
 terminate(pyenv)
 
 %% TEST MATLAB torch wrapper
-pythonEnvPath = fullfile('..', '..', '..', '.venvTorch', 'bin', 'python3.11');
+pythonEnvPath = fullfile('..', '..', '..', '.venvTorch', 'bin', 'python3');
 pythonEnv = pyenv(Version = pythonEnvPath);
 disp(pythonEnv);
             
@@ -15,7 +15,7 @@ autoforge_matlab_wrapper = py.importlib.import_module('pyTorchAutoForge.api.matl
 py.importlib.reload(autoforge);
 
 % Define model path
-model_path = 'path/to/your/model.pth'; % Set this to the path of your PyTorch model checkpoint
+model_path = '/home/peterc/devDir/pyTorchAutoForge/tests/data/sample_cnn_traced'; % Set this to the path of your PyTorch model checkpoint
 
 % ACHTUNG: model is assumed to be traced using torch.jit.trace
 
