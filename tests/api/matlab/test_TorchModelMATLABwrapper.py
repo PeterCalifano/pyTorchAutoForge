@@ -5,7 +5,7 @@ def test_TorchModelMATLABwrapper():
     # Get script path
     import os
     file_dir = os.path.dirname(os.path.realpath(__file__))
-    
+
     module_path = os.path.join(file_dir, '../..', 'data/sample_cnn_traced')
 
     # Check if model exists
@@ -23,10 +23,10 @@ def test_TorchModelMATLABwrapper():
 
     print('Input shape:', input_sample.shape)
     output = model_wrapper.forward(input_sample)
+    assert isinstance(output, np.ndarray)
+    assert output.shape == (1, 16, 252, 252)
     print('Output shape:', output.shape)
-    
 
-    return 0    
 
 if __name__ == '__main__':
     test_TorchModelMATLABwrapper()
