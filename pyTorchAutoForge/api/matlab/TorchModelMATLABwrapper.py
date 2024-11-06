@@ -95,7 +95,7 @@ class TorchModelMATLABwrapper():
         except Exception as e:
             max_chars = 400  # Define the max length you want to print
             print( f"\nError during input preprocessing: {str(e)[:max_chars]}...")
-            return 1
+            return str(e)[:max_chars]
         
         # Perform inference using model
         try:
@@ -103,7 +103,7 @@ class TorchModelMATLABwrapper():
         except Exception as e:        
             max_chars = 400  # Define the max length you want to print
             print(f"\nError during model inference: {str(e)[:max_chars]}...")
-            return 1
+            return str(e)[:max_chars]
 
         # ########### DEBUG ######################:
         if self.DEBUG_MODE:
