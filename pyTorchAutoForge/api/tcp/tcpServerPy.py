@@ -4,11 +4,23 @@
 # Python imports
 import socketserver
 import numpy as np
+from abc import ABC, abstractmethod
+from typing import Any
+# Check documentation page before coding: https://docs.python.org/3/library/abc.html
+class DataProcessingBaseFcn(ABC):
+    # TODO: class to constraint implementation of data processing functions DataProcessor uses (sort of abstract class)
+    def __init__(self) -> None:
+        pass
+        
+    @abstractmethod
+    def process(self, inputData):
+        pass
+
 
 # %% Data processing function wrapper as generic interface in RequestHandler for TCP servers - PeterC - 15-06-2024
 class DataProcessor():
-    '''Data processing function wrapper as generic interface in RequestHandler for TCP servers'''
-    def __init__(self, processDataFcn:callable, inputTargetType, BufferSizeInBytes:int, ENDIANNESS:str='little', DYNAMIC_BUFFER_MODE=False):
+    '''Data processing function wrapper as generic interface in RequestHandler for TCP servers. Input/output for numerical data: numpy.ndarray'''
+    def __init__(self, processDataFcn:callable, inputTargetType:Any = np.float32, BufferSizeInBytes:int = -1, ENDIANNESS:str='little', DYNAMIC_BUFFER_MODE:bool=False):
         '''Constructor'''
         self.processDataFcn = processDataFcn
         self.inputTargetType = inputTargetType
@@ -22,8 +34,9 @@ class DataProcessor():
         # Decode inputData
         decodedData, numBatches = self.decode(inputData)
         # Execute processing function
-        processedData = self.processDataFcn(decodedData, numBatches) 
-        # TODO: replace temporary input with a structured type like a dict to avoid multiple inputs and keep the function interface generic
+        processedData = self.processDataFcn(decodedData, numBatches) # DEVNOTE TODO: replace by standard class method call
+
+        # TODO: replace temporary input with a structured type like a dict to avoid multiple inputs and keep the function interface generic --> better to define a data class?
 
         return self.encode(processedData)
     
@@ -50,8 +63,10 @@ class pytcp_requestHandler(socketserver.BaseRequestHandler):
     '''Request Handler class for tcp server'''
     def __init__(self, request, client_address, server, DataProcessor:DataProcessor, ENDIANNESS:str='little'):
         ''''Constructor'''
-        self.DataProcessor = DataProcessor # Initialize DataProcessing object for handle
+        self.DataProcessor     = DataProcessor # Initialize DataProcessing object for handle
         self.BufferSizeInBytes = DataProcessor.BufferSizeInBytes
+
+        assert self.BufferSizeInBytes > 0, "Buffer size must be greater than 0! You probably did not set it or set it to a negative value."
 
         if hasattr(DataProcessor, 'DYNAMIC_BUFFER_MODE'):
             self.DYNAMIC_BUFFER_MODE = DataProcessor.DYNAMIC_BUFFER_MODE
@@ -66,7 +81,7 @@ class pytcp_requestHandler(socketserver.BaseRequestHandler):
         super().__init__(request, client_address, server)
 
     def handle(self) -> None:
-        '''Handle method'''
+        '''Function handling request from client'''
         print(f"Handling request from client: {self.client_address}")
         try:
             while True:
@@ -105,7 +120,7 @@ class pytcp_requestHandler(socketserver.BaseRequestHandler):
                     else:
                         print('Message size matches expected size. Calling data processor...')
 
-                # Move the data to DataProcessor and process according to specified function
+                # Data processing handling: move the data to DataProcessor and process according to specified function
                 outputDataSerialized = self.DataProcessor.process(dataBuffer)
                 # For strings: outputDataSerialized = ("Acknowledge message. Array was received!").encode('utf-8')
 
@@ -119,8 +134,6 @@ class pytcp_requestHandler(socketserver.BaseRequestHandler):
                 # Send the serialized output data
                 self.request.sendall(outputDataSerialized)
                 
-                # break 
-
         except Exception as e:
             print(f"Error occurred while handling request: {e}")
             
