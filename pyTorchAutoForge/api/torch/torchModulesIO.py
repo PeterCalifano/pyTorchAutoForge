@@ -5,10 +5,8 @@ import torch.utils
 from pyTorchAutoForge.utils.utils import AddZerosPadding
 
 # TODO: UPDATE FUNCTION
-def SaveTorchModel(model: torch.nn.Module, modelName: str = "trainedModel", saveAsTraced: bool = False, exampleInput=None, targetDevice: str = 'cpu') -> None:
-    if 'os.path' not in sys.modules:
-        import os.path
-
+def SaveTorchModel(model: torch.nn.Module, modelpath: str = "./trainedModel", saveAsTraced: bool = False, exampleInput: torch.Tensor = None, targetDevice: str = 'cpu') -> None:
+   
     if saveAsTraced:
         extension = '.pt'
     else:
@@ -22,23 +20,23 @@ def SaveTorchModel(model: torch.nn.Module, modelName: str = "trainedModel", save
     targetDeviceName = targetDevice
     targetDeviceName = targetDeviceName.replace(':', '')
 
-    if modelName == 'trainedModel':
-        if not (os.path.isdir('./testModels')):
-            os.mkdir('testModels')
+    if modelpath == 'trainedModel':
+        if not (os.path.isdir('./savedModels')):
+            os.mkdir('savedModels')
             if not (os.path.isfile('.gitignore')):
                 # Write gitignore in the current folder if it does not exist
                 gitignoreFile = open('.gitignore', 'w')
-                gitignoreFile.write("\ntestModels/*")
+                gitignoreFile.write("\nsavedModels/*")
                 gitignoreFile.close()
             else:
                 # Append to gitignore if it exists
                 gitignoreFile = open('.gitignore', 'a')
-                gitignoreFile.write("\ntestModels/*")
+                gitignoreFile.write("\nsavedModels/*")
                 gitignoreFile.close()
 
-        filename = "testModels/" + modelName + '_' + targetDeviceName + extension
+        filename = "savedModels/" + modelpath + '_' + targetDeviceName + extension
     else:
-        filename = modelName + '_' + targetDeviceName + extension
+        filename = modelpath + '_' + targetDeviceName + extension
 
     # Attach timetag to model checkpoint
     # currentTime = datetime.datetime.now()
@@ -65,10 +63,10 @@ def SaveTorchModel(model: torch.nn.Module, modelName: str = "trainedModel", save
 
 
 # %% Function to load model state into empty model- 04-05-2024, updated 11-06-2024
-def LoadTorchModel(model: torch.nn.Module = None, modelName: str = "trainedModel", filepath: str = "testModels/", loadAsTraced: bool = False) -> torch.nn.Module:
+def LoadTorchModel(model: torch.nn.Module = None, modelpath: str = "savedModels/trainedModel.pt", loadAsTraced: bool = False) -> torch.nn.Module:
 
     # Check if input name has extension
-    modelNameCheck, extension = os.path.splitext(str(modelName))
+    modelNameCheck, extension = os.path.splitext(str(modelpath))
 
     # print(modelName, ' ', modelNameCheck, ' ', extension)
 
@@ -81,11 +79,10 @@ def LoadTorchModel(model: torch.nn.Module = None, modelName: str = "trainedModel
         extension = ''
 
     # Contatenate file path
-    modelPath = os.path.join(filepath, modelName + extension)
+    modelPath = os.path.join(modelpath, modelpath + extension)
 
     if not (os.path.isfile(modelPath)):
-        raise FileNotFoundError('Model specified by: ',
-                                modelPath, ': NOT FOUND.')
+        raise FileNotFoundError('No file found at:', modelPath)
 
     if loadAsTraced and model is None:
         print('Loading traced model from filename: ', modelPath)

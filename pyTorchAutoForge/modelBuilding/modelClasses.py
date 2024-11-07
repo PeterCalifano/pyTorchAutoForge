@@ -36,7 +36,7 @@ class torchModel(torch.nn.Module):
         if target_device is None:
             target_device = self.device
 
-        SaveTorchModel(modelName = self.moduleName, 
+        SaveTorchModel(modelpath = self.moduleName, 
                         saveAsTraced = self.enable_tracing,
                         exampleInput = exampleInput,
                        targetDevice = target_device)

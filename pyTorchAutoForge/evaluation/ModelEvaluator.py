@@ -68,14 +68,15 @@ class ModelEvaluator():
         )
 
         dataset_size = len(tmpdataloader.dataset)
-
+        numOfBatches = len(tmpdataloader)
         residuals = None
 
         # Perform model evaluation on all batches
         total_loss = 0.0
+        print('\nEvaluating model on validation dataset...\n')
         with torch.no_grad():
 
-            for X, Y in tmpdataloader:
+            for batch_idx, X, Y in enumerate(tmpdataloader):
 
                 X, Y = X.to(self.device), Y.to(self.device)
 
@@ -100,6 +101,13 @@ class ModelEvaluator():
                     residuals = errorPerComponent
                 else:
                     residuals = torch.cat((residuals, errorPerComponent), dim=0)
+
+                # Print progress
+                current_batch = batch_idx + 1
+                progress = f"\tTraining: Batch {batch_idx+1}/{numOfBatches}"
+                # Print progress on the same line
+                sys.stdout.write('\r' + progress)
+                sys.stdout.flush()
 
             if self.lossFcn is not None:
                 # Compute average loss value
