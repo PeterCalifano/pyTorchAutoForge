@@ -145,17 +145,24 @@ class pytcp_requestHandler(socketserver.BaseRequestHandler):
 class pytcp_server(socketserver.TCPServer):
     allow_reuse_address = True
     '''Python-based custom tcp server class using socketserver module'''
+
     def __init__(self, serverAddress: tuple[str|bytes|bytearray, int], RequestHandlerClass:pytcp_requestHandler, DataProcessor:DataProcessor, bindAndActivate:bool=True) -> None:
         '''Constructor for custom tcp server'''
         self.DataProcessor = DataProcessor # Initialize DataProcessing object for handle
         super().__init__(serverAddress, RequestHandlerClass, bindAndActivate)
         print('Server opened on (HOST, PORT): (',serverAddress[0],', ',serverAddress[1],')')
+
     def finish_request(self, request, client_address) -> None:
         '''Function evaluating Request Handler'''
         self.RequestHandlerClass(request, client_address, self, self.DataProcessor)
 
-# %% MAIN SCRIPT
-def main():
-    print('Main in this script does nothing...')
+# %% TEST SCRIPTS
+
+def test_server_implementation():
+    pass 
+
+def test_data_processor_base():
+    pass
+
 if __name__ == "__main__":
-    main()
+    test_server_implementation()
