@@ -76,7 +76,7 @@ class ModelEvaluator():
         print('\nEvaluating model on validation dataset...\n')
         with torch.no_grad():
 
-            for batch_idx, X, Y in enumerate(tmpdataloader):
+            for batch_idx, (X, Y) in enumerate(tmpdataloader):
 
                 X, Y = X.to(self.device), Y.to(self.device)
 
