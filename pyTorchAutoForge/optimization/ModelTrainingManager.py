@@ -333,7 +333,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             X, Y = X.to(self.device), Y.to(self.device)
 
             # Perform data augmentation on batch using kornia modules
-            if self.kornia_transform is not None and self.kornia_augs_in_validation:
+            if self.kornia_transform is not None:
                 X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
 
             # Perform FORWARD PASS to get predictions
@@ -430,7 +430,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform data augmentation on batch using kornia modules
-                    if self.kornia_transform is not None:
+                    if self.kornia_transform is not None and self.kornia_augs_in_validation:
                         X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
 
                     # Perform FORWARD PASS
