@@ -54,7 +54,8 @@ class ModelTrainingManagerConfig():
 
     # DIFFERENTIABLE DATA AUGMENTATION using kornia
     kornia_transform: torch.nn.Sequential = None
-
+    kornia_augs_in_validation: bool = False
+    
     # FIELDS with DEFAULTS
     # Optimization strategy
     num_of_epochs: int = 10  # Number of epochs for training
@@ -332,7 +333,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             X, Y = X.to(self.device), Y.to(self.device)
 
             # Perform data augmentation on batch using kornia modules
-            if self.kornia_transform is not None:
+            if self.kornia_transform is not None and self.kornia_augs_in_validation:
                 X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
 
             # Perform FORWARD PASS to get predictions
