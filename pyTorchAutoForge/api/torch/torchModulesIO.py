@@ -79,7 +79,7 @@ def LoadTorchModel(model: torch.nn.Module = None, modelpath: str = "savedModels/
         extension = ''
 
     # Contatenate file path
-    modelPath = os.path.join(modelpath, modelpath + extension)
+    modelPath = modelpath + extension
 
     if not (os.path.isfile(modelPath)):
         raise FileNotFoundError('No file found at:', modelPath)
