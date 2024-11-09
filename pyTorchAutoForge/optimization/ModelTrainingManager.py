@@ -632,7 +632,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if self.mlflow_logging:
                     mlflow.log_metric( 'train_loss', self.currentTrainingLoss, step=self.currentEpoch)
                     mlflow.log_metric( 'validation_loss', self.currentValidationLoss, step=self.currentEpoch)
-                    mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss)
+                    mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss, step=self.currentEpoch)
+                    mlflow.log_metric( 'num_of_updates', self.numOfUpdates, step=self.currentEpoch)
 
                 print('\tCurrent best at epoch {best_epoch}, with validation loss: {best_loss:.06g}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
