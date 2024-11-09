@@ -104,11 +104,12 @@ class ModelEvaluator():
 
                 # Print progress
                 current_batch = batch_idx + 1
-                progress = f"\tTraining: Batch {batch_idx+1}/{numOfBatches}"
+                progress = f"Evaluating: Batch {batch_idx+1}/{numOfBatches}"
                 # Print progress on the same line
                 sys.stdout.write('\r' + progress)
                 sys.stdout.flush()
 
+            print('\n')
             if self.lossFcn is not None:
                 # Compute average loss value
                 avg_loss = total_loss/dataset_size
