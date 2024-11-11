@@ -564,6 +564,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         print(f'\n\n{colorama.Style.BRIGHT}{colorama.Fore.BLUE}-------------------------- Training and validation session start --------------------------\n')
         self.printSessionInfo()
 
+        modelSaveName = None
+
         try:
             if self.OPTUNA_MODE:
                 trial_printout = f" of trial {self.optuna_trial.number}"
@@ -625,6 +627,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         # Transfer best model to CPU to avoid additional memory allocation on GPU
                         self.bestModel = copy.deepcopy(self.model).to('cpu')
 
+                        # Delete previous best model checkpoint if it exists
+                        if modelSaveName is not None:
+                            if os.path.exists(modelSaveName):
+                                os.remove(modelSaveName)      
+
+                        # Save temporary best model
+                        modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
+                        SaveTorchModel(self.bestModel, modelSaveName, saveAsTraced=False, targetDevice='cpu')
+
                 # Update current training and validation loss values
                 self.currentTrainingLoss = tmpTrainLoss
                 self.currentValidationLoss = tmpValidLoss
@@ -653,6 +664,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 self.currentEpoch += 1
 
             # Model saving code
+            if modelSaveName is not None:
+                if os.path.exists(modelSaveName):
+                    os.remove(modelSaveName) 
+
             modelToSave = ( self.bestModel if self.bestModel is not None else self.model).to('cpu')
             if self.keep_best:
                 print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(
