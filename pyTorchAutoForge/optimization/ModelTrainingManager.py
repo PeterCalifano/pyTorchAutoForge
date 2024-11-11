@@ -8,7 +8,7 @@ import torch
 import mlflow
 import optuna
 import kornia
-import os, sys, time, colorama
+import os, sys, time, colorama, glob
 import traceback
 from torch import nn
 import numpy as np
@@ -629,8 +629,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                         # Delete previous best model checkpoint if it exists
                         if modelSaveName is not None:
-                            if os.path.exists(modelSaveName):
-                                os.remove(modelSaveName)      
+
+                            # Get file name with modelSaveName as prefix
+                             # Get the file name with modelSaveName as prefix
+                            checkpoint_files = glob.glob(f"{modelSaveName}*")
+
+                            if checkpoint_files:
+                                # If multiple files match, delete all or choose one (e.g., the first one)
+                                for file in checkpoint_files:
+                                    if os.path.exists(file):
+                                        os.remove(file)
+                                        break  
 
                         # Save temporary best model
                         modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
