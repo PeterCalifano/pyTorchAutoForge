@@ -632,7 +632,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                             # Get file name with modelSaveName as prefix
                              # Get the file name with modelSaveName as prefix
-                            checkpoint_files = glob.glob(f"{modelSaveName}*")
+                            checkpoint_files = glob.glob( f"{os.path.join(self.checkpointDir, self.modelName)}_epoch*" )
 
                             if checkpoint_files:
                                 # If multiple files match, delete all or choose one (e.g., the first one)
