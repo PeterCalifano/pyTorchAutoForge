@@ -1574,3 +1574,10 @@ def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
         return examplePredictions, exampleLosses, X.to(device), Y.to(device)
 
 
+
+# %% TEST CODE
+def ModelTrainingManager_test_():
+    pass
+
+if __name__ == '__main__':
+    ModelTrainingManager_test_()
