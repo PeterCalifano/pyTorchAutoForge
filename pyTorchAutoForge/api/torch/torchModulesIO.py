@@ -38,6 +38,11 @@ def SaveTorchModel(model: torch.nn.Module, modelpath: str = "./trainedModel", sa
     else:
         filename = modelpath + '_' + targetDeviceName + extension
 
+        # Get directory from modelpath and check it exists
+        modelpath_only = os.path.dirname(filename)
+        if not (os.path.isdir(modelpath_only)):
+            os.makedirs(modelpath_only)
+
     # Attach timetag to model checkpoint
     # currentTime = datetime.datetime.now()
     # formattedTimestamp = currentTime.strftime('%d-%m-%Y_%H-%M') # Format time stamp as day, month, year, hour and minute
