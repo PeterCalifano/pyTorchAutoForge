@@ -4,6 +4,7 @@ testdata/*
 data/*
 mlruns/*
 *.asv
+checkpoints/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
