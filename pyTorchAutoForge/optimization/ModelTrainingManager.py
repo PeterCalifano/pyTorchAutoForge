@@ -252,13 +252,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.setDataloaders(dataLoaderIndex)
 
         # Handle override of optimizer inherited from ModelTrainingManagerConfig
-        if optimizer is not None:
+        if optimizer is not None: # Override
             if isinstance(optimizer, optim.Optimizer):
-                self.reinstantiate_optimizer_()
+                self.reinstantiate_optimizer_(optimizer)
             elif isinstance(optimizer, enumOptimizerType) or issubclass(optimizer, optim.Optimizer):
                 self.define_optimizer_(optimizer)
-        else:
-            raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
+            else:
+                Warning('Overriding of optimizer failed. Attempt to use optimizer from ModelTrainingManagerConfig...')
+
+        else: # Use optimizer from ModelTrainingManagerConfig
+            if self.optimizer is not None:
+                if isinstance(self.optimizer, optim.Optimizer):
+                    self.reinstantiate_optimizer_()
+                elif isinstance(self.optimizer, enumOptimizerType) or issubclass(self.optimizer, optim.Optimizer):
+                    self.define_optimizer_(self.optimizer)
+            else:
+                raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
 
 
     def define_optimizer_(self, optimizer: Union[optim.Optimizer, enumOptimizerType]) -> None:
@@ -291,10 +300,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             raise ValueError('Optimizer not recognized. Please provide a valid optimizer type or ID from enumOptimizerType enumeration class.')
         
 
-    def reinstantiate_optimizer_(self):
+    def reinstantiate_optimizer_(self, optimizer_override: optim.Optimizer = None) -> None:
         """
         Reinstantiates the optimizer with the same hyperparameters but with the current model parameters.
         """
+        if optimizer_override is not None:
+            self.optimizer = optimizer_override
+
         optim_class = self.optimizer.__class__
         optim_params = self.optimizer.param_groups[0]
         optimizer_hyperparams = {key: value for key, value in optim_params.items() if (
@@ -551,6 +563,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         - Number of Epochs:        {self.num_of_epochs}
         - Trainer Mode:            {'OPTUNA' if self.OPTUNA_MODE else 'NORMAL'}
         - Initial Learning Rate:   {self.initial_lr:0.8g}
+        - Optimizer:               {self.optimizer.__class__.__name__}
         """
         print(formatted_output)
 
@@ -742,7 +755,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
 
-    def evalExample(self, num_samples: int = 64) -> Union[torch.Tensor, None]:
+    def evalExample(self, num_samples: int = 128) -> Union[torch.Tensor, None]:
         # TODO Extend method distinguishing between regression and classification tasks
         self.model.eval()
         if self.eval_example:
@@ -1675,8 +1688,10 @@ def ModelTrainingManager_test_():
     #optimizer = torch.optim.Adam(
     #    model.parameters(), lr=initial_lr, fused=fused)
 
-    optimizer = torch.optim.SGD(
-        model.parameters(), lr=initial_lr)
+    #optimizer = torch.optim.SGD(
+    #    model.parameters(), lr=initial_lr)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=0.01)
     
     # Define dataloader index for training
     train_loader, validation_loader = DefineDataloaders()  # With defaul batch size
@@ -1700,9 +1715,13 @@ def ModelTrainingManager_test_():
     print("\nDict of ModelTrainingManagerConfig instance:",
           trainerConfig.getConfigDict())
 
+    # Test overriding of optimizer
+    optimizer = torch.optim.SGD(
+        model.parameters(), lr=initial_lr)
+     
     # Define model training manager instance
     trainer = ModelTrainingManager(
-        model=model, lossFcn=lossFcn, config=trainerConfig)
+        model=model, lossFcn=lossFcn, config=trainerConfig, optimizer=optimizer)
     print("\nModelTrainingManager instance:", trainer)
 
     # Set dataloaders for training and validation
