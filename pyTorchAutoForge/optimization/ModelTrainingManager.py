@@ -554,16 +554,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         formatted_output = f"""
         SESSION INFO
 
-        - Task Type:             {self.tasktype}
-        - Model Name:            {self.modelName}
-        - Device:                {self.device}
+        - Task Type:                  {self.tasktype}
+        - Model Name:                 {self.modelName}
+        - Device:                     {self.device}
+        - Checkpoint Directory:       {self.checkpointDir}
+        - Mlflow Logging:             {self.mlflow_logging}
 
         SETTINGS
 
-        - Number of Epochs:        {self.num_of_epochs}
-        - Trainer Mode:            {'OPTUNA' if self.OPTUNA_MODE else 'NORMAL'}
-        - Initial Learning Rate:   {self.initial_lr:0.8g}
-        - Optimizer:               {self.optimizer.__class__.__name__}
+        - Number of Epochs:           {self.num_of_epochs}
+        - Trainer Mode:               {'OPTUNA' if self.OPTUNA_MODE else 'NORMAL'}
+        - Initial Learning Rate:      {self.initial_lr:0.8g}
+        - Optimizer:                  {self.optimizer.__class__.__name__}
+        - Scheduler:                  {self.lr_scheduler.__class__.__name__ if self.lr_scheduler is not None else 'None'}
+        - Default batch size:         {self.batch_size}
+        - Keep-best strategy:         {self.keep_best}
+        - Kornia augs in validation:  {self.kornia_augs_in_validation}
         """
         print(formatted_output)
 
@@ -1661,7 +1667,7 @@ def ModelTrainingManager_test_():
 
     def DefineOptimStrategy(trial:optuna.Trial = None):
         if trial is not None:
-            initial_lr = trial.suggest_loguniform('initial_lr', 1E-5, 1E-1)
+            initial_lr = trial.suggest_loguniform('initial_lr', 1E-2, 1E-1)
         
         else:
             initial_lr = 1E-3
@@ -1688,10 +1694,10 @@ def ModelTrainingManager_test_():
     #optimizer = torch.optim.Adam(
     #    model.parameters(), lr=initial_lr, fused=fused)
 
-    #optimizer = torch.optim.SGD(
-    #    model.parameters(), lr=initial_lr)
+    optimizer = torch.optim.SGD(
+        model.parameters(), lr=initial_lr)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=0.01)
+    #optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=0.01)
     
     # Define dataloader index for training
     train_loader, validation_loader = DefineDataloaders()  # With defaul batch size
@@ -1704,9 +1710,12 @@ def ModelTrainingManager_test_():
     #    print(f"Epoch TEST: {epoch}/{numOfEpochs-1}")
     #    TrainModel(dataloaderIndex.getTrainLoader(), model2, lossFcn, optimizer2, 0)
     #    ValidateModel(dataloaderIndex.getValidationLoader(), model2, lossFcn)
+
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+
     # Define model training manager config  (dataclass init)
     trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
-                                               initial_lr=initial_lr, lr_scheduler=None,
+                                               initial_lr=initial_lr, lr_scheduler=lr_scheduler,
                                                num_of_epochs=numOfEpochs, optimizer=optimizer,
                                                batch_size=train_loader.batch_size)
 
@@ -1717,11 +1726,12 @@ def ModelTrainingManager_test_():
 
     # Test overriding of optimizer
     optimizer = torch.optim.SGD(
-        model.parameters(), lr=initial_lr)
+        model.parameters(), lr=initial_lr, momentum=0.9)
      
+    
     # Define model training manager instance
     trainer = ModelTrainingManager(
-        model=model, lossFcn=lossFcn, config=trainerConfig, optimizer=optimizer)
+        model=model, lossFcn=lossFcn, config=trainerConfig)
     print("\nModelTrainingManager instance:", trainer)
 
     # Set dataloaders for training and validation
