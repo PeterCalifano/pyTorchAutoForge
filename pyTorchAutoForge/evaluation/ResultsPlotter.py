@@ -4,6 +4,7 @@ from enum import Enum
 import numpy as np
 from dataclasses import dataclass, field 
 import os
+from typing import Union
 
 class backend_module(Enum):
     MATPLOTLIB = "Use matplotlib for plotting",
@@ -53,7 +54,7 @@ class ResultsPlotter():
             setattr(self, key, value)
     
     def histPredictionErrors(self, stats: dict = None, entriesNames: list = None, units: list = None,
-                             unit_scalings: dict = None, colours: list = None, num_of_bins: int = 100) -> None:
+                             unit_scalings: Union[dict, list, np.ndarray] = None, colours: list = None, num_of_bins: int = 100) -> None:
         """
         Method to plot histogram of prediction errors per component without absolute value. EvaluateRegressor() must be called first.
         Requires matplotlib to work in Interactive Mode.
@@ -130,12 +131,22 @@ class ResultsPlotter():
                 entryName = "Component " + str(idEntry)
 
             # SCALING: Check if scaling required
-            if unit_scalings != None and entryName in unit_scalings:
-                unit_scaler = unit_scalings[entryName]
-            elif self.unit_scalings != None and entryName in self.unit_scalings:
-                unit_scaler = self.unit_scalings[entryName]
+            if isinstance(unit_scalings, dict) and entryName in unit_scalings:
+                if unit_scalings != None and entryName in unit_scalings:
+                    unit_scaler = unit_scalings[entryName]
+                elif self.unit_scalings != None and entryName in self.unit_scalings:
+                    unit_scaler = self.unit_scalings[entryName]
+                else:
+                    unit_scaler = 1.0
+            elif isinstance(unit_scalings, list):
+                unit_scaler = unit_scalings[idEntry]
+
+            elif isinstance(unit_scalings, np.ndarray):
+                unit_scaler = unit_scalings[idEntry]
             else:
-                unit_scaler = 1.0
+                if unit_scalings is not None:
+                    raise ValueError("Invalid unit_scalings input provided: must be a dictionary, a list, a np.array or a scalar.")
+
 
             # Define figure and title
             plt.figure(idEntry)
