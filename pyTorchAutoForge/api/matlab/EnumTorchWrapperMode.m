@@ -1,6 +1,6 @@
 classdef EnumTorchWrapperMode
     enumeration
-        tcp
-        pyenv
+        TCP
+        PYENV
     end
 end

@@ -17,27 +17,50 @@ classdef CTorchModelWrapper < handle
     properties (SetAccess = protected, GetAccess = public)
         pyenv_modules = dictionary;
         python_env;
-        api_mode; % 'tcp', 'pyenv' (define enum)
-        device = 'cpu';
+        charModelPath;
+        enumAPI_MODE; % 'TCP', 'PYENV' (define enum)
+        charDevice = 'cpu';
+        objCommHandler
     end
 
     methods (Access = public)
-        % CONSTRUCTOR
-        function self = CTorchModelWrapper(model_path, device, kwargs)
+        %% CONSTRUCTOR
+        function self = CTorchModelWrapper(charModelPath, charDevice, enumAPI_MODE, kwargs)
             arguments
-                model_path (1,1) string 
-                device (1,1) string = 'cpu'
+                charModelPath (1,1) string 
+                charDevice    (1,1) string = 'cpu'
+                enumAPI_MODE  (1,1) EnumTorchWrapperMode {isa(enumAPI_MODE, 'EnumTorchWrapperMode')}= EnumTorchWrapperMode.TCP
             end
-
             arguments
-                kwargs.charPythonEnvPath (1,1) = ''
+                kwargs.charPythonEnvPath     (1,1) = ''
+                kwargs.charServerAddress     (1,1) = '127.0.0.1' % Assumes localhost server
+                kwargs.int32PortNumber       (1,1) = 50005       % Assumes free port number
+                kwargs.charInterfaceFcnsPath (1,1) string = '/home/peterc/devDir/MachineLearning_PeterCdev/matlab/LimbBasedNavigationAtMoon'
             end
+            
+            % Assign properties
+            self.charDevice = charDevice;
+            self.enumAPI_MODE = enumAPI_MODE;
+            self.charModelPath = charModelPath;
 
-            [self] = init_pyenv(self);
+            if enumAPI_MODE == EnumTorchWrapperMode.PYENV
+
+                % assert(kwargs.charPythonEnvPath ~= '', 'Selected PYENV API mode: kwargs.charPythonEnvPath cannot be empty!')
+                self = init_pyenv(kwargs.charPythonEnvPath);
+
+            elseif enumAPI_MODE == EnumTorchWrapperMode.TCP
+                
+                assert(isfolder(kwargs.charInterfaceFcnsPath), 'Non-existent kwargs.charInterfaceFcnsPath. You need to provide a valid location of functions to manage communication with AutoForge TCP server.')
+                self = init_tcpInterface(kwargs.charServerAddress, kwargs.int16PortNumber, kwargs.charInterfaceFcnsPath);
+    
+            else
+                error('Invalid API mode.')
+            end
 
         end
-
-
+        
+        %% PUBLIC METHODS
+        % Method to perform inference
         function Y = forward(self, X)
             arguments
                 self
@@ -48,8 +71,8 @@ classdef CTorchModelWrapper < handle
         end
     end
 
-
-    methods (Access=protected)
+    %% PROTECTED METHODS
+    methods (Access = protected)
 
         function [self] = init_pyenv(self, charPythonEnvPath)
             arguments
@@ -63,6 +86,8 @@ classdef CTorchModelWrapper < handle
 
             if pyenv().Status == matlab.pyclient.Status.Terminated || pyenv().Status == matlab.pyclient.Status.NotLoaded
                 self.python_env = pyenv(Version = charPythonEnvPath);
+                pause(1);
+                pyenv;
 
             elseif pyenv().Status == matlab.pyclient.Status.Loaded
                 warning('Running python environment detected (Loaded state). Wrapper will use it.')
@@ -70,7 +95,7 @@ classdef CTorchModelWrapper < handle
             end
         
             fprintf('\nUsing python environment:\n');
-            disp(self.python_env)
+            disp(self.python_env);
 
             % Create modules objects
             self.pyenv_modules('np') = py.importlib.import_module('numpy');
@@ -88,12 +113,21 @@ classdef CTorchModelWrapper < handle
             fprintf("\n");
         end
 
-
-        function [self, flags] = init_tcpInterface(self)
+        
+        function [self] = init_tcpInterface(self, charServerAddress, int32PortNumber, charInterfaceFcnsPath, dCommTimeout)
             arguments
                 self
+                charServerAddress     (1,1) string 
+                int32PortNumber       (1,1) int32 
+                charInterfaceFcnsPath (1,1) string
+                dCommTimeout          (1,1) double = 20
             end
-            error('Not implemented yet')
+            
+            % Add path to interface functions
+            addpath(genpath(charInterfaceFcnsPath));
+            
+            % Create communication handler and initialize directly
+            self.objCommHandler = CommManager(charServerAddress, int32PortNumber, dCommTimeout, "bInitInPlace", true);
 
         end
     end
