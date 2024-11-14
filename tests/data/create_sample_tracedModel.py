@@ -22,7 +22,8 @@ def create_sample_tracedModel_():
     input_tensor = torch.randn(1, 3, 256, 256)
 
     # Trace the model
-    traced_model = torch.jit.trace(model, input_tensor)
+    device = 'cuda:0'
+    traced_model = torch.jit.trace(model, input_tensor).to(device)
 
     # Get working directory
     import os
@@ -30,7 +31,7 @@ def create_sample_tracedModel_():
     print("Saving pt file to: ", file_dir)
 
     # Save the traced model
-    traced_model.save(os.path.join(file_dir, "sample_cnn_traced.pt"))
+    traced_model.save(os.path.join(file_dir, "sample_cnn_traced_" + device + ".pt"))
 
 if __name__ == '__main__':
     create_sample_tracedModel_()

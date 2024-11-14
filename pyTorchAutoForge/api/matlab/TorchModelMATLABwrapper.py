@@ -13,6 +13,7 @@ class MatlabWrapperConfig():
     DEBUG_MODE: bool = False
     device = GetDevice()
     input_shape_validation: list = None # None for no validation
+    loadingMode: str = 'traced' # 'traced' or 'state_dict'
     
 
 # %% MATLAB wrapper class for Torch models evaluation - 11-06-2024 # TODO: update class
@@ -20,8 +21,13 @@ class TorchModelMATLABwrapper():
     '''Class to wrap a trained PyTorch model for evaluation in MATLAB'''
 
     def __init__(self, trainedModel: Union[str, nn.Module, torchModel], 
-                 wrapperConfig: MatlabWrapperConfig = MatlabWrapperConfig()) -> None:
+                 wrapperConfig: MatlabWrapperConfig = MatlabWrapperConfig(),
+                 modelArch: Union[callable, nn.Module] = None) -> None:
+        
         '''Constructor for TorchModelMATLABwrapper'''
+
+        if wrapperConfig == MatlabWrapperConfig():
+            print('Using default wrapper configuration...')
 
         # Initialize using configuration class
         self.DEBUG_MODE = wrapperConfig.DEBUG_MODE
@@ -29,26 +35,18 @@ class TorchModelMATLABwrapper():
         self.enable_warning = True # To disable warning for batch size
         self.input_shape_validation = wrapperConfig.input_shape_validation
 
-        # Load model as traced 
-        if isinstance(trainedModel, str):
 
-            # Get extension of model file
-            filepath_noext, extension = os.path.splitext(str(trainedModel))
+        # Define flag for model loading mode
+        traced_loading = True if self.loadingMode.lower() == 'traced' else False
+        
+        # Check modelArch is provided if state_dict loading mode is selected
+        if self.loadingMode.lower() == 'state_dict' and modelArch is None:
+            raise ValueError(
+                'Model architecture must be provided for state_dict loading mode. Please provide modelArch as nn.Module or callable function with modelArch as output.')
 
-            # Check if extension is provided
-            if extension != '.pt' and extension == '.pth':
-                raise ValueError('Please provide a .pt file. This function only supports traced models at current stage and cannot load .pth state dict.')
-            elif extension != '.pt' and extension == '':
-                print('No extension provided. Assuming .pt extension for model file.')
-                trainedModelPath = trainedModel + ".pt"  # Assume .pt extension
-            elif extension == '.pt':
-                trainedModelPath = trainedModel
-            else:
-                raise ValueError('Invalid model file extension. Please provide a .pt file. This function only supports traced models at current stage.')
 
-            # Load model and set to eval()
-            self.trainedModel = LoadTorchModel(None, trainedModelPath, loadAsTraced=True).to(self.device)
-            (self.trainedModel).eval()
+        self.trainedModel = LoadTorchModel(None, self.trainedModelPath, loadAsTraced= traced_loading).to(self.device)
+        (self.trainedModel).eval()
 
         # Print model data
         if self.DEBUG_MODE:
@@ -112,13 +110,43 @@ class TorchModelMATLABwrapper():
 
         return Y.detach().cpu().numpy()  # Move to cpu and convert to numpy before returning
 
+    def ValidateModelPath(self, trainedModel):
+        # Load model as traced
+        if isinstance(trainedModel, str):
+
+            # Get extension of model file
+            filepath_noext, extension = os.path.splitext(str(trainedModel))
+
+            # Check if extension is provided
+            if extension != '.pt' and extension == '.pth':
+                raise ValueError(
+                    'Please provide a .pt file. This function only supports traced models at current stage and cannot load .pth state dict.')
+
+            elif extension != '.pt' and extension == '' and self.loadingMode.lower() == 'traced':
+                print(
+                    'No extension provided. Assuming .pt extension for model file (traced).')
+                self.trainedModelPath = trainedModel + ".pt"  # Assume .pt extension
+
+            elif extension != '.pt' and extension == '' and self.loadingMode.lower() == 'state_dict':
+                print(
+                    'No extension provided. Assuming .pth extension for model file (state_dict).')
+                self.trainedModelPath = trainedModel + ".pth"  # Assume .pth extension
+
+            elif (extension == '.pt' and self.loadingMode.lower() == 'traced') or (extension == '.pth' and self.loadingMode.lower() == 'state_dict'):
+                self.trainedModelPath = trainedModel
+
+            else:
+                raise ValueError(
+                    'Invalid configuration: provided extesion does not match loadingMode configuration. Valid cases: .pt with loadingMode=traced, .pth with loadingMode=state_dict')
+
 
 def test_TorchModelMATLABwrapper():
     # Get script path
     import os
     file_dir = os.path.dirname(os.path.realpath(__file__))
 
-    module_path = os.path.join('/home/peterc/devDir/pyTorchAutoForge/tests/data/sample_cnn_traced')
+    module_path = os.path.join('/home/peterc/devDir/pyTorchAutoForge/tests/data/sample_cnn_traced_cpu')
+    print(module_path)
 
     # Check if model exists
     if not os.path.isfile(module_path + '.pt'):
