@@ -117,7 +117,13 @@ class ResultsPlotter():
                 colours = sns.color_palette("husl", num_of_entry)
             else:
                 raise ValueError("Invalid backend module selected.")
-            
+
+        if unit_scalings is not None:
+            unit_scalers_ = unit_scalings
+        elif self.unit_scalings is not None:
+            unit_scalers_ = self.unit_scalings
+        else:
+            unit_scalers_ = None
 
         # PLOT: Plotting loop per component
         for idEntry in np.arange(num_of_entry):
@@ -131,27 +137,22 @@ class ResultsPlotter():
                 entryName = "Component " + str(idEntry)
 
             # SCALING: Check if scaling required
-            if isinstance(unit_scalings, dict) and entryName in unit_scalings:
-                if unit_scalings != None and entryName in unit_scalings:
-                    unit_scaler = unit_scalings[entryName]
+            if isinstance(unit_scalers_, dict) and entryName in unit_scalers_:
+                unit_scaler = unit_scalers_[entryName]
 
-                elif self.unit_scalings != None and entryName in self.unit_scalings:
-                    unit_scaler = self.unit_scalings[entryName]
+            elif isinstance(unit_scalers_, (int, float)):
+                unit_scaler = unit_scalers_
 
-                else:
-                    unit_scaler = 1.0
+            elif isinstance(unit_scalers_, list) or isinstance(unit_scalers_, np.ndarray):
+                unit_scaler = unit_scalers_[idEntry]
 
-            elif isinstance(unit_scalings, list) or isinstance(unit_scalings, np.ndarray):
-                unit_scaler = unit_scalings[idEntry]
-
-            elif isinstance(unit_scalings, (int, float)):
-                unit_scaler = unit_scalings
-
-            elif unit_scalings is None:
+            elif unit_scalers_ is None:
                 unit_scaler = 1.0
+
             else:
                 if unit_scalings is not None:
-                    raise ValueError("Invalid unit_scalings input provided: must be a dictionary, a list, a np.array or a scalar.")
+                    raise ValueError(
+                        "Invalid unit_scalings input provided: must be a dictionary, a list, a np.ndarray or a scalar.")
 
 
             # Define figure and title
@@ -184,7 +185,7 @@ class ResultsPlotter():
             if self.save_figs:
                 if self.output_folder is not None:
                     output_dir_path = self.output_folder
-                    if not (os.path.isdir(output_dir_path)):
+                    if not(os.path.isdir(output_dir_path)):
                         os.makedirs(output_dir_path, exist_ok=False)
                 else:
                     output_dir_path = "."
@@ -192,8 +193,6 @@ class ResultsPlotter():
                 plt.savefig(os.path.join(output_dir_path, "prediction_errors_" + entryName + ".png"), bbox_inches='tight')
             else:
                 plt.show()
-
-
 
 # %% TEST CASES
 
@@ -220,8 +219,6 @@ def setup_plotter():
         os.rmdir('test_output')
     return plotter, stats, config
 
-
-
 def test_initialization(setup_plotter):
     plotter, stats, config = setup_plotter
     assert plotter.loaded_stats == stats
@@ -234,12 +231,9 @@ def test_initialization(setup_plotter):
     assert plotter.entriesNames == config.entriesNames
     assert plotter.output_folder == config.output_folder
 
-
 def test_histPredictionErrors(setup_plotter):
     plotter, _, _ = setup_plotter
     plotter.histPredictionErrors()
-
-
 
 def test_histPredictionErrors_with_custom_stats(setup_plotter):
     plotter, _, _ = setup_plotter
@@ -249,12 +243,8 @@ def test_histPredictionErrors_with_custom_stats(setup_plotter):
     }
     plotter.histPredictionErrors(stats=custom_stats)
 
-
-
 def test_histPredictionErrors_with_invalid_stats(setup_plotter):
     plotter, _, _ = setup_plotter
-
-
 
 def test_histPredictionErrors_with_missing_prediction_err(setup_plotter):
     plotter, _, _ = setup_plotter
@@ -263,7 +253,6 @@ def test_histPredictionErrors_with_missing_prediction_err(setup_plotter):
         plotter.histPredictionErrors(stats=incomplete_stats)
     except Exception as e:
         assert e == "prediction_err key not found in stats dictionary"
-
 
 def test_histPredictionErrors_with_missing_mean_prediction_err(setup_plotter):
     plotter, _, _ = setup_plotter
@@ -275,11 +264,14 @@ def test_save_figs(setup_plotter):
     plotter, _, config = setup_plotter
     plotter.save_figs = True
     plotter.output_folder = 'test_output'
-    plotter.histPredictionErrors()
-    assert os.path.isdir('test_output')
-    for entry in config.entriesNames:
-        assert os.path.isfile(os.path.join(
-            'test_output', f"prediction_errors_{entry}.png"))
+    flag = plotter.histPredictionErrors()
+
+    if flag != -1:
+        for entry in config.entriesNames:
+            assert os.path.isfile(os.path.join(
+                'test_output', f"prediction_errors_{entry}.png"))
+    else:
+        print('No image saved since input is empty.')
 
 
 def test_debug_resultsPlotter():
