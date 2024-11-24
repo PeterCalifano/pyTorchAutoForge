@@ -5,7 +5,8 @@ classdef CTorchModelWrapper < handle
     % pyTorchAutoForge.api module).
     % -------------------------------------------------------------------------------------------------------------
     %% CHANGELOG
-    % 06-11-2024        Pietro Califano         First prototype implementation for pyenv 
+    % 06-11-2024    Pietro Califano    First prototype implementation for pyenv 
+    % 14-11-2024    Pietro Califano    Completed prototype of tcp interface initialization and class constructor
     % -------------------------------------------------------------------------------------------------------------
     %% DEPENDENCIES
     % [-]
@@ -18,40 +19,41 @@ classdef CTorchModelWrapper < handle
         pyenv_modules = dictionary;
         python_env;
         charModelPath;
-        enumAPI_MODE; % 'TCP', 'PYENV' (define enum)
+        enumTorchWrapperMode; % 'TCP', 'PYENV' (define enum)
         charDevice = 'cpu';
-        objCommHandler
+        objTensorCommHandler
+        charPTAF_HOME = '/home/peterc/devDir/pyTorchAutoForge'
     end
 
     methods (Access = public)
         %% CONSTRUCTOR
-        function self = CTorchModelWrapper(charModelPath, charDevice, enumAPI_MODE, kwargs)
+        function self = CTorchModelWrapper(charModelPath, charDevice, kwargs)
             arguments
                 charModelPath (1,1) string 
                 charDevice    (1,1) string = 'cpu'
-                enumAPI_MODE  (1,1) EnumTorchWrapperMode {isa(enumAPI_MODE, 'EnumTorchWrapperMode')}= EnumTorchWrapperMode.TCP
             end
             arguments
-                kwargs.charPythonEnvPath     (1,1) = ''
-                kwargs.charServerAddress     (1,1) = '127.0.0.1' % Assumes localhost server
-                kwargs.int32PortNumber       (1,1) = 50005       % Assumes free port number
+                kwargs.enumTorchWrapperMode  (1,1) EnumTorchWrapperMode {isa(kwargs.enumTorchWrapperMode, 'EnumTorchWrapperMode')} = EnumTorchWrapperMode.TCP
+                kwargs.charPythonEnvPath     (1,1) string = ''
+                kwargs.charServerAddress     (1,1) string = '127.0.0.1' % Assumes localhost server
+                kwargs.i32PortNumber         (1,1) int32 = 50005       % Assumes free port number
                 kwargs.charInterfaceFcnsPath (1,1) string = '/home/peterc/devDir/MachineLearning_PeterCdev/matlab/LimbBasedNavigationAtMoon'
             end
             
             % Assign properties
             self.charDevice = charDevice;
-            self.enumAPI_MODE = enumAPI_MODE;
+            self.enumTorchWrapperMode = kwargs.enumTorchWrapperMode;
             self.charModelPath = charModelPath;
 
-            if enumAPI_MODE == EnumTorchWrapperMode.PYENV
+            if self.enumTorchWrapperMode == EnumTorchWrapperMode.PYENV
 
                 % assert(kwargs.charPythonEnvPath ~= '', 'Selected PYENV API mode: kwargs.charPythonEnvPath cannot be empty!')
-                self = init_pyenv(kwargs.charPythonEnvPath);
+                self = self.init_pyenv(kwargs.charPythonEnvPath);
 
-            elseif enumAPI_MODE == EnumTorchWrapperMode.TCP
+            elseif self.enumTorchWrapperMode == EnumTorchWrapperMode.TCP
                 
                 assert(isfolder(kwargs.charInterfaceFcnsPath), 'Non-existent kwargs.charInterfaceFcnsPath. You need to provide a valid location of functions to manage communication with AutoForge TCP server.')
-                self = init_tcpInterface(kwargs.charServerAddress, kwargs.int16PortNumber, kwargs.charInterfaceFcnsPath);
+                self = self.init_tcpInterface(kwargs.i32PortNumber, kwargs.charServerAddress);
     
             else
                 error('Invalid API mode.')
@@ -66,8 +68,25 @@ classdef CTorchModelWrapper < handle
                 self
                 X
             end
-
+                        
             % Call forward method of model depending on mode
+            switch self.enumTorchWrapperMode
+                case EnumTorchWrapperMode.TCP
+                    
+                    % Call TensorCommManager to forward data
+                    self.objTensorCommHandler.WriteBuffer(X);
+
+                    % Read buffer from server with output
+                    [Y, self.objTensorCommHandler] = self.objTensorCommHandler.ReadBuffer(X);
+
+
+                case EnumTorchWrapperMode.PYENV
+                    error('NOT IMPLEMENTED/WORKING YET')
+
+                otherwise
+                    error('Invalid Torch Wrapper Mode.')
+            end
+
         end
     end
 
@@ -114,20 +133,23 @@ classdef CTorchModelWrapper < handle
         end
 
         
-        function [self] = init_tcpInterface(self, charServerAddress, int32PortNumber, charInterfaceFcnsPath, dCommTimeout)
+        function [self] = init_tcpInterface(self, i32PortNumber, charServerAddress, dCommTimeout)
             arguments
                 self
-                charServerAddress     (1,1) string 
-                int32PortNumber       (1,1) int32 
-                charInterfaceFcnsPath (1,1) string
-                dCommTimeout          (1,1) double = 20
+                i32PortNumber      (1,1) int32 
+                charServerAddress  (1,1) string = '127.0.0.1' % Localhost is default
+                dCommTimeout       (1,1) double = 60
             end
             
             % Add path to interface functions
-            addpath(genpath(charInterfaceFcnsPath));
-            
+            charInterfacePath = fullfile(self.charPTAF_HOME, 'lib', 'CommManager4MATLAB', 'src');
+            addpath(genpath(charInterfacePath));
+            bIsModuleAvailable = not(isempty(which('CommManager.m')));
+
+            assert(bIsModuleAvailable, 'ERROR: CommManager not found. Have you initialized the submodules?')
+
             % Create communication handler and initialize directly
-            self.objCommHandler = CommManager(charServerAddress, int32PortNumber, dCommTimeout, "bInitInPlace", true);
+            self.objTensorCommHandler = TensorCommManager(charServerAddress, i32PortNumber, dCommTimeout, "bInitInPlace", true);
 
         end
     end
