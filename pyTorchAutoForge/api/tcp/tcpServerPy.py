@@ -6,6 +6,8 @@ import socketserver
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import Any
+from enum import Enum
+
 # Check documentation page before coding: https://docs.python.org/3/library/abc.html
 class DataProcessingBaseFcn(ABC):
     # TODO: class to constraint implementation of data processing functions DataProcessor uses (sort of abstract class)
@@ -17,39 +19,54 @@ class DataProcessingBaseFcn(ABC):
         pass
 
 
+class PreProcessingMode(Enum):
+    '''Enum class for data processing modes'''
+    NONE = 0
+    TENSOR = 1
+
+
 # %% Data processing function wrapper as generic interface in RequestHandler for TCP servers - PeterC - 15-06-2024
 class DataProcessor():
     '''Data processing function wrapper as generic interface in RequestHandler for TCP servers. Input/output for numerical data: numpy.ndarray'''
-    def __init__(self, processDataFcn:callable, inputTargetType:Any = np.float32, BufferSizeInBytes:int = -1, ENDIANNESS:str='little', DYNAMIC_BUFFER_MODE:bool=False):
+    def __init__(self, processDataFcn:callable, inputTargetType:Any = np.float32, BufferSizeInBytes:int = -1, ENDIANNESS:str='little', 
+                 DYNAMIC_BUFFER_MODE: bool = False, PRE_PROCESSING_MODE: PreProcessingMode = PreProcessingMode.NONE) -> None:
         '''Constructor'''
         self.processDataFcn = processDataFcn
         self.inputTargetType = inputTargetType
         self.BufferSizeInBytes = BufferSizeInBytes
         self.DYNAMIC_BUFFER_MODE = DYNAMIC_BUFFER_MODE
         self.ENDIANNESS = ENDIANNESS
+        self.PRE_PROCESSING_MODE = PreProcessingMode.NONE
 
     def process(self, inputData):
         '''Processing method running specified processing function'''
 
         # Decode inputData
-        decodedData, numBatches = self.decode(inputData)
+        decodedData, numBatches = self.decode(inputData)  # DEVNOTE: numBatches will now be directly "encoded" in tensor shape
+
+        if self.PRE_PROCESSING_MODE == PreProcessingMode.TENSOR:
+            # Convert input data to tensor shape
+            decodedData = self.AdaptiveBufferToTensor(decodedData)
+        
         # Execute processing function
         processedData = self.processDataFcn(decodedData, numBatches) # DEVNOTE TODO: replace by standard class method call
-
         # TODO: replace temporary input with a structured type like a dict to avoid multiple inputs and keep the function interface generic --> better to define a data class?
+       
+        if self.PRE_PROCESSING_MODE == PreProcessingMode.TENSOR:
+            # Convert processed data to adaptive buffer
+            processedData = self.TensorToAdaptiveBuffer(processedData)
 
         return self.encode(processedData)
     
-    def decode(self, inputData):
+    def decode(self, inputData): # REQUIRES UPDATE
         '''Data conversion function from raw bytes stream to specified target numpy type'''
         if not isinstance(inputData, self.inputTargetType):
             try:
-                numBatches = int.from_bytes(inputData[:4], self.ENDIANNESS)
+                numBatches = int.from_bytes(inputData[:4], self.ENDIANNESS) # TO REMOVE
                 print(f"Received number of batches:\t{numBatches}")
                 dataArray = np.array(np.frombuffer(inputData[4:], dtype=self.inputTargetType), dtype=self.inputTargetType)
                 print(f"Received data array:\t{dataArray}")
                 
-                # REsh
             except Exception as errMsg:
                 raise TypeError('Data conversion from raw data array to specified target type {targetType} failed with error: \n'.format(targetType=self.inputTargetType) + str(errMsg))
         return dataArray, numBatches
@@ -57,6 +74,17 @@ class DataProcessor():
     def encode(self, processedData):
         '''Data conversion function from numpy array to raw bytes stream'''
         return processedData.tobytes()
+    
+    def AdaptiveBufferToTensor(self, inputData):
+        '''Function to convert input data to tensor shape'''
+        raise NotImplementedError('AdaptiveBufferToTensor method not implemented in DataProcessor class!')
+        pass
+
+    def TensorToAdaptiveBuffer(self, processedData):
+        '''Function to convert tensor to adaptive buffer'''
+        raise NotImplementedError('TensorToAdaptiveBuffer method not implemented in DataProcessor class!')
+        pass
+
 
 # %% Request handler class - PeterC + GPT4o- 15-06-2024
 class pytcp_requestHandler(socketserver.BaseRequestHandler):
@@ -141,7 +169,7 @@ class pytcp_requestHandler(socketserver.BaseRequestHandler):
             print(f"Connection with {self.client_address} closed")
 
 
-# %% TCP server class - PeterC -15-06-2024
+# %% TCP server class - PeterC - 15-06-2024
 class pytcp_server(socketserver.TCPServer):
     allow_reuse_address = True
     '''Python-based custom tcp server class using socketserver module'''
