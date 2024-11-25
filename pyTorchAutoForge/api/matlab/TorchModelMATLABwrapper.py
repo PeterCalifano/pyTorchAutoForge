@@ -20,7 +20,6 @@ class MatlabWrapperConfig():
 # %% MATLAB wrapper class for Torch models evaluation - 11-06-2024 # TODO: update class
 class TorchModelMATLABwrapper():
     '''Class to wrap a trained PyTorch model for evaluation in MATLAB'''
-
     def __init__(self, trainedModel: Union[str, nn.Module, torchModel], 
                  wrapperConfig: MatlabWrapperConfig = MatlabWrapperConfig(),
                  modelArch: Union[callable, nn.Module] = None) -> None:
@@ -35,15 +34,16 @@ class TorchModelMATLABwrapper():
         self.device = wrapperConfig.device
         self.enable_warning = True # To disable warning for batch size
         self.input_shape_validation = wrapperConfig.input_shape_validation
-
+        self.loading_mode = wrapperConfig.loading_mode
+        self.trained_model_path = wrapperConfig.trained_model_path
 
         # Define flag for model loading mode
         traced_loading = True if self.loading_mode.lower() == 'traced' else False
         
         # Check modelArch is provided if state_dict loading mode is selected
-        if self.loading_mode.lower() == 'state_dict' and modelArch is None:
-            raise ValueError(
-                'Model architecture must be provided for state_dict loading mode. Please provide modelArch as nn.Module or callable function with modelArch as output.')
+        #if self.loading_mode.lower() == 'state_dict' and modelArch is None:
+        #    raise ValueError(
+        #        'Model architecture must be provided for state_dict loading mode. Please provide modelArch as nn.Module or callable function with modelArch as output.')
 
         if isinstance(trainedModel, (nn.Module, torchModel)) and self.loading_mode is None:
             self.trainedModel = trainedModel # Assume model is already loaded and provided
@@ -56,7 +56,8 @@ class TorchModelMATLABwrapper():
             self.trainedModel = LoadTorchModel(
                 trainedModel, self.trained_model_path, loadAsTraced=traced_loading).to(self.device)
         else:
-            raise ValueError('Invalid input for trainedModel, trained_model_path. Please provide a valid model path or nn.Module object.')
+            raise ValueError(
+                'Invalid input for trainedModel, trained_model_path and loading_mode or invalid combination. Please provide a valid model path or nn.Module object.')
         
         (self.trainedModel).eval()
 
@@ -64,7 +65,9 @@ class TorchModelMATLABwrapper():
         if self.DEBUG_MODE:
             print("The following model has been loaded and will be used in forward() call: \n", self.trainedModel)
 
-    def forward(self, inputSample: Union[np.ndarray, torch.Tensor], numBatches: int = None, inputShape: list[int] = None):
+
+
+    def forward(self, inputSample: Union[np.ndarray, torch.Tensor], numBatches: int = None, inputShape: list[int] = None) -> np.ndarray:
         '''Forward method to perform inference on N sample input using loaded trainedModel. Batch size assumed as 1 if not given.'''
         
         if self.DEBUG_MODE:
