@@ -13,7 +13,8 @@ class MatlabWrapperConfig():
     DEBUG_MODE: bool = False
     device = GetDevice()
     input_shape_validation: list = None # None for no validation
-    loadingMode: str = 'traced' # 'traced' or 'state_dict'
+    loading_mode: str = None # 'traced', 'state_dict', None
+    trained_model_path: str = None
     
 
 # %% MATLAB wrapper class for Torch models evaluation - 11-06-2024 # TODO: update class
@@ -37,15 +38,26 @@ class TorchModelMATLABwrapper():
 
 
         # Define flag for model loading mode
-        traced_loading = True if self.loadingMode.lower() == 'traced' else False
+        traced_loading = True if self.loading_mode.lower() == 'traced' else False
         
         # Check modelArch is provided if state_dict loading mode is selected
-        if self.loadingMode.lower() == 'state_dict' and modelArch is None:
+        if self.loading_mode.lower() == 'state_dict' and modelArch is None:
             raise ValueError(
                 'Model architecture must be provided for state_dict loading mode. Please provide modelArch as nn.Module or callable function with modelArch as output.')
 
+        if isinstance(trainedModel, (nn.Module, torchModel)) and self.loading_mode is None:
+            self.trainedModel = trainedModel # Assume model is already loaded and provided
 
-        self.trainedModel = LoadTorchModel(None, self.trainedModelPath, loadAsTraced= traced_loading).to(self.device)
+        elif isinstance(trainedModel, (nn.Module, torchModel)) and self.loading_mode == 'traced':
+            self.trainedModel = LoadTorchModel(
+                None, self.trained_model_path, loadAsTraced=traced_loading).to(self.device)
+
+        elif isinstance(trainedModel, (nn.Module, torchModel)) and self.loading_mode == 'state_dict':
+            self.trainedModel = LoadTorchModel(
+                trainedModel, self.trained_model_path, loadAsTraced=traced_loading).to(self.device)
+        else:
+            raise ValueError('Invalid input for trainedModel, trained_model_path. Please provide a valid model path or nn.Module object.')
+        
         (self.trainedModel).eval()
 
         # Print model data
@@ -122,22 +134,22 @@ class TorchModelMATLABwrapper():
                 raise ValueError(
                     'Please provide a .pt file. This function only supports traced models at current stage and cannot load .pth state dict.')
 
-            elif extension != '.pt' and extension == '' and self.loadingMode.lower() == 'traced':
+            elif extension != '.pt' and extension == '' and self.loading_mode.lower() == 'traced':
                 print(
                     'No extension provided. Assuming .pt extension for model file (traced).')
-                self.trainedModelPath = trainedModel + ".pt"  # Assume .pt extension
+                self.trained_model_path = trainedModel + ".pt"  # Assume .pt extension
 
-            elif extension != '.pt' and extension == '' and self.loadingMode.lower() == 'state_dict':
+            elif extension != '.pt' and extension == '' and self.loading_mode.lower() == 'state_dict':
                 print(
                     'No extension provided. Assuming .pth extension for model file (state_dict).')
-                self.trainedModelPath = trainedModel + ".pth"  # Assume .pth extension
+                self.trained_model_path = trainedModel + ".pth"  # Assume .pth extension
 
-            elif (extension == '.pt' and self.loadingMode.lower() == 'traced') or (extension == '.pth' and self.loadingMode.lower() == 'state_dict'):
-                self.trainedModelPath = trainedModel
+            elif (extension == '.pt' and self.loading_mode.lower() == 'traced') or (extension == '.pth' and self.loading_mode.lower() == 'state_dict'):
+                self.trained_model_path = trainedModel
 
             else:
                 raise ValueError(
-                    'Invalid configuration: provided extesion does not match loadingMode configuration. Valid cases: .pt with loadingMode=traced, .pth with loadingMode=state_dict')
+                    'Invalid configuration: provided extesion does not match loading_mode configuration. Valid cases: .pt with loading_mode=traced, .pth with loading_mode=state_dict')
 
 
 def test_TorchModelMATLABwrapper():
