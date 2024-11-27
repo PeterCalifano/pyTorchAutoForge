@@ -19,71 +19,106 @@ class DataProcessingBaseFcn(ABC):
         pass
 
 
-class PreProcessingMode(Enum):
+class ProcessingMode(Enum):
     '''Enum class for data processing modes'''
     NONE = 0
     TENSOR = 1
+    MULTI_TENSOR = 2
 
 
 # %% Data processing function wrapper as generic interface in RequestHandler for TCP servers - PeterC - 15-06-2024
 class DataProcessor():
     '''Data processing function wrapper as generic interface in RequestHandler for TCP servers. Input/output for numerical data: numpy.ndarray'''
     def __init__(self, processDataFcn:callable, inputTargetType:Any = np.float32, BufferSizeInBytes:int = -1, ENDIANNESS:str='little', 
-                 DYNAMIC_BUFFER_MODE: bool = False, PRE_PROCESSING_MODE: PreProcessingMode = PreProcessingMode.NONE) -> None:
+                 DYNAMIC_BUFFER_MODE: bool = False, PRE_PROCESSING_MODE: ProcessingMode = ProcessingMode.MULTI_TENSOR) -> None:
         '''Constructor'''
         self.processDataFcn = processDataFcn
         self.inputTargetType = inputTargetType
         self.BufferSizeInBytes = BufferSizeInBytes
         self.DYNAMIC_BUFFER_MODE = DYNAMIC_BUFFER_MODE
         self.ENDIANNESS = ENDIANNESS
-        self.PRE_PROCESSING_MODE = PreProcessingMode.NONE
+        self.PROCESSING_MODE = ProcessingMode.MULTI_TENSOR
 
-    def process(self, inputData):
+    def process(self, inputDataBuffer):
         '''Processing method running specified processing function'''
 
         # Decode inputData
-        decodedData, numBatches = self.decode(inputData)  # DEVNOTE: numBatches will now be directly "encoded" in tensor shape
+        decodedData, numBatches = self.decode(inputDataBuffer)  # DEVNOTE: numBatches will now be directly "encoded" in tensor shape
 
-        if self.PRE_PROCESSING_MODE == PreProcessingMode.TENSOR:
-            # Convert input data to tensor shape
-            decodedData = self.AdaptiveBufferToTensor(decodedData)
-        
         # Execute processing function
         processedData = self.processDataFcn(decodedData, numBatches) # DEVNOTE TODO: replace by standard class method call
         # TODO: replace temporary input with a structured type like a dict to avoid multiple inputs and keep the function interface generic --> better to define a data class?
        
-        if self.PRE_PROCESSING_MODE == PreProcessingMode.TENSOR:
-            # Convert processed data to adaptive buffer
-            processedData = self.TensorToAdaptiveBuffer(processedData)
-
         return self.encode(processedData)
     
-    def decode(self, inputData): # REQUIRES UPDATE
-        '''Data conversion function from raw bytes stream to specified target numpy type'''
-        if not isinstance(inputData, self.inputTargetType):
-            try:
-                numBatches = int.from_bytes(inputData[:4], self.ENDIANNESS) # TO REMOVE
-                print(f"Received number of batches:\t{numBatches}")
-                dataArray = np.array(np.frombuffer(inputData[4:], dtype=self.inputTargetType), dtype=self.inputTargetType)
-                print(f"Received data array:\t{dataArray}")
-                
-            except Exception as errMsg:
-                raise TypeError('Data conversion from raw data array to specified target type {targetType} failed with error: \n'.format(targetType=self.inputTargetType) + str(errMsg))
-        return dataArray, numBatches
+    def decode(self, inputDataBuffer):
+        '''Data conversion function from raw bytes stream to specified target numpy type with specified shape'''
+        if not isinstance(inputDataBuffer, self.inputTargetType):
+
+            if self.PROCESSING_MODE == ProcessingMode.TENSOR:
+                # Convert input data to tensor shape
+                [dataArray, dataArrayShape] = self.BytesBufferToTensor(inputDataBuffer)
+            elif self.PROCESSING_MODE == ProcessingMode.MULTI_TENSOR:
+
+                [dataArray, dataArrayShape] = self.BytesBufferToMultiTensor(inputDataBuffer)
+
+            else:
+                #dataArray = np.array(np.frombuffer(inputDataBuffer[4:], dtype=self.inputTargetType), dtype=self.inputTargetType)
+                dataArrayBuffer = inputDataBuffer
+                try:
+                    dataArray = np.array(np.frombuffer(dataArrayBuffer, dtype=self.inputTargetType), dtype=self.inputTargetType)
+                    dataArrayShape = dataArray.shape
+
+                except Exception as errMsg:
+                    raise TypeError('Data conversion from raw data array to specified target type {targetType} failed with error: {errMsg}\n'.format(
+                        targetType=self.inputTargetType, errMsg = str(errMsg)))
+            
+            print(f"Received tensor with shape:\t{dataArrayShape}")
+
+        return dataArray, dataArrayShape
     
     def encode(self, processedData):
         '''Data conversion function from numpy array to raw bytes stream'''
-        return processedData.tobytes()
+        if self.PROCESSING_MODE == ProcessingMode.TENSOR:
+            # Convert processed data to adaptive buffer
+            processedData = self.TensorToBytesBuffer(processedData)
+            return processedData
+        else:
+            return processedData.tobytes()
     
-    def AdaptiveBufferToTensor(self, inputData):
+    def BytesBufferToTensor(self, inputDataBuffer):
         '''Function to convert input data to tensor shape'''
-        raise NotImplementedError('AdaptiveBufferToTensor method not implemented in DataProcessor class!')
-        pass
+        # Get number of dimensions
+        numOfDims = int.from_bytes(inputDataBuffer[:4], self.ENDIANNESS)  # TO REMOVE
+        # Get shape of tensor
+        dataArrayShape = tuple(int.from_bytes(inputDataBuffer[4:4+4*numOfDims], self.ENDIANNESS) for i in range(numOfDims))
+        # Convert buffer to numpy array with specified shape (REQUIRES TESTING)
+        dataArray = np.array(np.frombuffer(inputDataBuffer[4+4*numOfDims:], dtype=self.inputTargetType), dtype=self.inputTargetType).reshape(dataArrayShape)
 
-    def TensorToAdaptiveBuffer(self, processedData):
+        return dataArray, dataArrayShape
+
+    def TensorToBytesBuffer(self, processedData):
         '''Function to convert tensor to adaptive buffer'''
-        raise NotImplementedError('TensorToAdaptiveBuffer method not implemented in DataProcessor class!')
-        pass
+        # Get shape of tensor
+        dataArrayShape = processedData.shape
+        # Get number of dimensions
+        numOfDims = len(dataArrayShape)
+        # Convert column-major flattened numpy array to buffer (REQUIRES TESTING)
+        dataArrayBuffer = processedData.reshape(-1, order='F').tobytes()
+
+        # Create buffer with shape and data
+        outputBuffer = numOfDims.to_bytes(4, self.ENDIANNESS) + b''.join([dim.to_bytes(4, self.ENDIANNESS) for dim in dataArrayShape]) + dataArrayBuffer
+
+        return outputBuffer
+    
+
+    def BytesBufferToMultiTensor(self, inputDataBuffer):
+        '''Function to convert input data to tensor shape'''
+        raise NotImplementedError('Multi-tensor processing mode is not implemented yet. Please use TENSOR mode for now.')
+    
+    def MultiTensorToBytesBuffer(self, processedData):
+        '''Function to convert tensor to adaptive buffer'''
+        raise NotImplementedError('Multi-tensor processing mode is not implemented yet. Please use TENSOR mode for now.')
 
 
 # %% Request handler class - PeterC + GPT4o- 15-06-2024

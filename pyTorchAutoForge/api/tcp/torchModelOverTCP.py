@@ -42,7 +42,7 @@ def main():
     numOfBytes = 56*4 # Length of input * number of bytes in double --> not used if DYNAMIC_BUFFER_MODE is True # TODO: modify this
     dataProcessorObj = tcpServerPy.DataProcessor(torchWrapper.forward, np.float32, numOfBytes, 
                                                  ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, 
-                                                 PRE_PROCESSING_MODE=tcpServerPy.PreProcessingMode.TENSOR)
+                                                 PRE_PROCESSING_MODE=tcpServerPy.ProcessingMode.TENSOR)
 
     # Initialize TCP server and keep it running
     with tcpServerPy.pytcp_server((HOST, PORT), tcpServerPy.pytcp_requestHandler, dataProcessorObj, bindAndActivate=True) as server:
