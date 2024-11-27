@@ -17,7 +17,7 @@ from dataclasses import dataclass, asdict, fields, Field, MISSING
 
 from pyTorchAutoForge.datasets import DataloaderIndex
 from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
-from pyTorchAutoForge.api.torch import SaveTorchModel
+from pyTorchAutoForge.api.torch import SaveTorchModel, LoadTorchModel
 from pyTorchAutoForge.optimization import CustomLossFcn
 
 # import datetime
@@ -74,6 +74,9 @@ class ModelTrainingManagerConfig():
     initial_lr: float = 1e-4
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
     optimizer: Any = torch.optim.Adam  # optimizer class
+
+    # Model checkpoint if any
+    checkpoint_to_load: str = None  # Path to model checkpoint to load
 
     # Hardware settings
     device: str = GetDevice()  # Default device is GPU if available
@@ -218,6 +221,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             os.makedirs(self.checkpointDir)
         
         # Initialize ModelTrainingManager-specific attributes
+        if self.checkpoint_to_load is not None:
+            # Load model checkpoint
+            try:
+                self.model = LoadTorchModel(model, self.checkpoint_to_load, False)
+            except Exception as errMsg:
+                Warning(f"Model checkpoint loading failed with error: {errMsg}")
+                user_input = input("Continue without loading model checkpoint? [Y/n]: ").lower()
+                if user_input != 'y':
+                    raise ValueError("Got stop command. Termination signal...")
+                
+
         self.model = (model).to(self.device)
         self.bestModel = None
         self.lossFcn = lossFcn
