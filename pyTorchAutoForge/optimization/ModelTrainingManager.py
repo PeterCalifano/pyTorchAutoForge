@@ -226,6 +226,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             try:
                 self.model = LoadTorchModel(model, self.checkpoint_to_load, False)
             except Exception as errMsg:
+                # DEVNOTE: here there should be a timer to automatically stop if no input is given for TBD seconds. Need a second thread though.
                 Warning(f"Model checkpoint loading failed with error: {errMsg}")
                 user_input = input("Continue without loading model checkpoint? [Y/n]: ").lower()
                 if user_input != 'y':
