@@ -5,7 +5,7 @@
 import socketserver
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Union
 from enum import Enum
 
 # Check documentation page before coding: https://docs.python.org/3/library/abc.html
@@ -39,7 +39,7 @@ class DataProcessor():
         self.ENDIANNESS = ENDIANNESS
         self.PROCESSING_MODE = ProcessingMode.MULTI_TENSOR
 
-    def process(self, inputDataBuffer):
+    def process(self, inputDataBuffer: bytes) -> bytes:
         '''Processing method running specified processing function'''
 
         # Decode inputData
@@ -58,9 +58,13 @@ class DataProcessor():
             if self.PROCESSING_MODE == ProcessingMode.TENSOR:
                 # Convert input data to tensor shape
                 [dataArray, dataArrayShape] = self.BytesBufferToTensor(inputDataBuffer)
+                print(f"Received tensor of shape:\t{dataArrayShape}")
+
             elif self.PROCESSING_MODE == ProcessingMode.MULTI_TENSOR:
 
-                [dataArray, dataArrayShape] = self.BytesBufferToMultiTensor(inputDataBuffer)
+                # Convert input data to multi-tensor list
+                [dataArray, dataArrayShape, numOfTensors] = self.BytesBufferToMultiTensor(inputDataBuffer)
+                print(f"Received list of tensors of length:\t{numOfTensors}")
 
             else:
                 #dataArray = np.array(np.frombuffer(inputDataBuffer[4:], dtype=self.inputTargetType), dtype=self.inputTargetType)
@@ -73,32 +77,44 @@ class DataProcessor():
                     raise TypeError('Data conversion from raw data array to specified target type {targetType} failed with error: {errMsg}\n'.format(
                         targetType=self.inputTargetType, errMsg = str(errMsg)))
             
-            print(f"Received tensor with shape:\t{dataArrayShape}")
 
         return dataArray, dataArrayShape
     
     def encode(self, processedData):
         '''Data conversion function from numpy array to raw bytes stream'''
         if self.PROCESSING_MODE == ProcessingMode.TENSOR:
-            # Convert processed data to adaptive buffer
+            # Convert processed data to tensor-convention buffer
             processedData = self.TensorToBytesBuffer(processedData)
             return processedData
+        
+        elif self.PROCESSING_MODE == ProcessingMode.MULTI_TENSOR:
+
+            # Convert processed data multi-tensor to tensor-convention buffer
+            processedData = self.MultiTensorToBytesBuffer(processedData)
+            return processedData
+        
         else:
             return processedData.tobytes()
     
-    def BytesBufferToTensor(self, inputDataBuffer):
+    def BytesBufferToTensor(self, inputDataBuffer: bytes) -> tuple[np.ndarray, tuple[int]]:
         '''Function to convert input data to tensor shape'''
+        # DEVNOTE TODO modify conversion to add "ptrEnd" computed from shape and number of dimensions --> check consistency
+
         # Get number of dimensions
-        numOfDims = int.from_bytes(inputDataBuffer[:4], self.ENDIANNESS)  # TO REMOVE
-        # Get shape of tensor
-        dataArrayShape = tuple(int.from_bytes(inputDataBuffer[4:4+4*numOfDims], self.ENDIANNESS) for i in range(numOfDims))
+        numOfDims = int.from_bytes(inputDataBuffer[:4], self.ENDIANNESS)  #
+        # Get shape of tensor ( TO VERIFY IF THIS WORKS) 
+        dataArrayShape = tuple(int.from_bytes(inputDataBuffer[4:8+4*(idx)], self.ENDIANNESS) for idx in range(numOfDims))
         # Convert buffer to numpy array with specified shape (REQUIRES TESTING)
         dataArray = np.array(np.frombuffer(inputDataBuffer[4+4*numOfDims:], dtype=self.inputTargetType), dtype=self.inputTargetType).reshape(dataArrayShape)
 
         return dataArray, dataArrayShape
 
-    def TensorToBytesBuffer(self, processedData):
+    def TensorToBytesBuffer(self, processedData: np.ndarray) -> bytes:
         '''Function to convert tensor to adaptive buffer'''
+
+        if not isinstance(processedData, np.ndarray):
+            raise TypeError('Input data must be a numpy array.')
+                            
         # Get shape of tensor
         dataArrayShape = processedData.shape
         # Get number of dimensions
@@ -111,14 +127,66 @@ class DataProcessor():
 
         return outputBuffer
     
-
-    def BytesBufferToMultiTensor(self, inputDataBuffer):
+    def BytesBufferToMultiTensor(self, inputDataBuffer: bytes) -> tuple[list[np.ndarray], list[tuple[int]], int]:
         '''Function to convert input data to tensor shape'''
-        raise NotImplementedError('Multi-tensor processing mode is not implemented yet. Please use TENSOR mode for now.')
+        # Get number of tensors
+        numOfTensors = int.from_bytes(inputDataBuffer[:4], self.ENDIANNESS)  
+
+        # Initialize list to store tensors
+        dataArray = []
+        dataArrayShape = []
+
+        # Construct extraction ptrs
+        ptrStart = 4 # First data message starts at byte 4 (after number of tensors)
+        # ACHTUNG: need rework to get size of tensor data from ndims and shape!
+        ptrEnd = 4 + int.from_bytes(inputDataBuffer[4:8], self.ENDIANNESS) # Get length of first tensor directly to start loop
+        raise NotImplementedError('Function not completed yet. Please implement it first.')
     
-    def MultiTensorToBytesBuffer(self, processedData):
-        '''Function to convert tensor to adaptive buffer'''
-        raise NotImplementedError('Multi-tensor processing mode is not implemented yet. Please use TENSOR mode for now.')
+        for idx in range(numOfTensors):
+
+            # Call function to convert each tensor
+            tensor, tensorShape = self.BytesBufferToTensor(inputDataBuffer[ptrStart:ptrEnd])
+
+            # Append data to list
+            dataArray.append(tensor)
+            dataArrayShape.append(tensorShape)
+
+            # Update ptrs for next tensor
+            ptrStart = ptrEnd
+            ptrEnd = ptrStart + 4 + int.from_bytes(inputDataBuffer[ptrStart:ptrStart+4], self.ENDIANNESS)
+                                   
+        return dataArray, dataArrayShape, numOfTensors
+
+
+    def MultiTensorToBytesBuffer(self, processedData: Union[list, dict, tuple]) -> bytes:
+        '''Function to convert multiple tensors in a python container to multiple buffer messages of tensor convention'''
+
+        # Process container according to type
+        # Get size of container
+        numOfTensors = len(processedData)
+        print(f"Number of tensors to process: {numOfTensors}")
+
+        if isinstance(processedData, [list, tuple]):
+
+            # Convert each tensor to buffer
+            processedDataBufferList = [self.TensorToBytesBuffer(tensor) for tensor in processedData]
+
+            # Concatenate all buffers
+            outputBuffer = b''.join(*processedDataBufferList)
+
+        elif isinstance(processedData, dict):
+ 
+            # Convert each tensor to buffer
+            processedDataBufferList = [self.TensorToBytesBuffer(tensor) for tensor in processedData.values()]
+            # Concatenate all buffers
+            outputBuffer = b''.join(*processedDataBufferList)
+        else:
+            raise TypeError('Input data container type not recognized. Please provide a list, tuple or dict.')
+        
+        return outputBuffer
+        
+
+
 
 
 # %% Request handler class - PeterC + GPT4o- 15-06-2024
