@@ -71,7 +71,6 @@ pyarrow==15.0.2
 Pygments==2.18.0
 pyparsing==3.1.4
 python-dateutil==2.9.0.post0
-pyTorchAutoForge @ file:///home/peterc/devDir/pyTorchAutoForge
 pytz==2024.2
 PyYAML==6.0.2
 querystring-parser==1.2.4
