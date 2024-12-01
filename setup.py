@@ -29,7 +29,6 @@ setup(
         "numpy==1.26.4",
         "onnx==1.16.1",
         "onnxscript==0.1.0.dev20240609",
-        "psutil==5.9.8",
         "tensorboard==2.16.2",
         "tensorboard-data-server==0.7.2",
         "optuna==3.6.1",
