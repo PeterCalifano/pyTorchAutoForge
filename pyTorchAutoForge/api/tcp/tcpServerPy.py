@@ -357,14 +357,48 @@ def dummy_processing_function(data, num_batches):
 
 # Test DataProcessor class
 
-def test_data_processor():
-    processor = DataProcessor(
-        dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=1024)
-    input_data = np.array([1.0, 2.0, 3.0], dtype=np.float32).tobytes()
-    output_data = processor.process(input_data)
-    expected_output = (
-        np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
+def test_data_processor_tensor_mode():
+    processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little', 
+                              DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.TENSOR)
+    
+    def process_wrapper(input_data, processor):
+        # Convert input data to bytes buffer
+        input_data_bytes = processor.TensorToBytesBuffer(input_data)
+        # Process the input data
+        output_data = processor.process(input_data_bytes)
+
+        return output_data
+
+    # Create dummy input data (1D tensor)
+    input_data = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    output_data = process_wrapper(input_data, processor)
+    expected_output = (np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
+
     assert output_data == expected_output
+    print('1D tensor processing test passed!')
+
+    # Create dummy input data (2D tensor)
+    input_data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    output_data = process_wrapper(input_data, processor)
+    expected_output = (np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32) * 2).tobytes()
+
+    assert output_data == expected_output
+    print('2D tensor processing test passed!')
+
+    # Create dummy large size input data (4D tensor)
+    input_data = np.random.rand(2, 3, 4, 5).astype(np.float32)
+    output_data = process_wrapper(input_data, processor)
+    expected_output = (input_data * 2).tobytes()
+
+    assert output_data == expected_output
+    print('4D tensor processing test passed!')
+
+
+
+
+
+
+
 
 
 def test_tcp_server():
@@ -403,5 +437,5 @@ def test_tcp_server():
 
 
 if __name__ == "__main__":
-    test_data_processor()   
+    test_data_processor_tensor_mode()
     test_tcp_server()
