@@ -8,6 +8,9 @@ from abc import ABC, abstractmethod
 from typing import Any, Union
 from enum import Enum
 
+import socket
+import threading
+
 # Check documentation page before coding: https://docs.python.org/3/library/abc.html
 class DataProcessingBaseFcn(ABC):
     # TODO: class to constraint implementation of data processing functions DataProcessor uses (sort of abstract class)
@@ -97,8 +100,17 @@ class DataProcessor():
             return processedData.tobytes()
     
     def BytesBufferToTensor(self, inputDataBuffer: bytes) -> tuple[np.ndarray, tuple[int]]:
-        '''Function to convert input data to tensor shape'''
-        # DEVNOTE TODO modify conversion to add "ptrEnd" computed from shape and number of dimensions --> check consistency
+        """Function to convert input data message from bytes to tensor shape. The buffer is expected to be in the following format:
+        - 4 bytes: number of dimensions (int)
+        - 4 bytes per dimension: shape of tensor (int)
+        - remaining bytes: flattened tensor data (float32), column-major order
+
+        Args:
+            inputDataBuffer (bytes): Input bytes buffer
+
+        Returns:
+            tuple[np.ndarray, tuple[int]]: Tuple containing the tensor data and its shape
+        """
 
         # Get number of dimensions
         numOfDims = int.from_bytes(inputDataBuffer[:4], self.ENDIANNESS)  #
@@ -106,11 +118,27 @@ class DataProcessor():
         dataArrayShape = tuple(int.from_bytes(inputDataBuffer[4:8+4*(idx)], self.ENDIANNESS) for idx in range(numOfDims))
         # Convert buffer to numpy array with specified shape (REQUIRES TESTING)
         dataArray = np.array(np.frombuffer(inputDataBuffer[4+4*numOfDims:], dtype=self.inputTargetType), dtype=self.inputTargetType).reshape(dataArrayShape)
-
+        
         return dataArray, dataArrayShape
 
+
+
     def TensorToBytesBuffer(self, processedData: np.ndarray) -> bytes:
-        '''Function to convert tensor to adaptive buffer'''
+        """Function to convert input tensor to buffer message. The buffer is generated according to the following format:
+        - 4 bytes: message length (int)
+        - 4 bytes: number of dimensions (int)
+        - 4 bytes per dimension: shape of tensor (int)
+        - remaining bytes: flattened tensor data (float32), column-major order reshaping
+
+        Args:
+            processedData (np.ndarray): Input tensor data
+
+        Raises:
+            TypeError: If input data is not a numpy array
+
+        Returns:
+            bytes: Output bytes buffer
+        """
 
         if not isinstance(processedData, np.ndarray):
             raise TypeError('Input data must be a numpy array.')
@@ -120,15 +148,32 @@ class DataProcessor():
         # Get number of dimensions
         numOfDims = len(dataArrayShape)
         # Convert column-major flattened numpy array to buffer (REQUIRES TESTING)
-        dataArrayBuffer = processedData.reshape(-1, order='F').tobytes()
+        dataArrayBuffer = processedData.reshape(-1, order='F').tobytes() 
 
         # Create buffer with shape and data
-        outputBuffer = numOfDims.to_bytes(4, self.ENDIANNESS) + b''.join([dim.to_bytes(4, self.ENDIANNESS) for dim in dataArrayShape]) + dataArrayBuffer
+        outputBuffer = numOfDims.to_bytes(4, self.ENDIANNESS) + (b''.join([dim.to_bytes(4, self.ENDIANNESS) for dim in dataArrayShape])) + dataArrayBuffer
+
+        # Add message length to buffer
+        outputBuffer = len(outputBuffer).to_bytes(4, self.ENDIANNESS) + outputBuffer
 
         return outputBuffer
     
     def BytesBufferToMultiTensor(self, inputDataBuffer: bytes) -> tuple[list[np.ndarray], list[tuple[int]], int]:
-        '''Function to convert input data to tensor shape'''
+        """Function to convert a message containing multiple tensors in a buffer to a list of tensors. The buffer is expected to be in the following format:
+        - 4 bytes: number of tensors (messages) (int)
+        - for each tensor:
+            - 4 bytes: message length (int)
+            - 4 bytes: number of dimensions (int)
+            - 4 bytes per dimension: shape of tensor (int)
+            - remaining bytes: flattened tensor data (float32), column-major order
+        Each tensor message is stacked in the buffer one after the other.
+        
+        Args:
+            inputDataBuffer (bytes): Input bytes buffer
+
+        Returns:
+            tuple[list[np.ndarray], list[tuple[int]], int]: Tuple containing the list of tensors, their shapes and the number of tensors
+        """
         # Get number of tensors
         numOfTensors = int.from_bytes(inputDataBuffer[:4], self.ENDIANNESS)  
 
@@ -138,28 +183,46 @@ class DataProcessor():
 
         # Construct extraction ptrs
         ptrStart = 4 # First data message starts at byte 4 (after number of tensors)
-        # ACHTUNG: need rework to get size of tensor data from ndims and shape!
-        ptrEnd = 4 + int.from_bytes(inputDataBuffer[4:8], self.ENDIANNESS) # Get length of first tensor directly to start loop
-        raise NotImplementedError('Function not completed yet. Please implement it first.')
     
         for idx in range(numOfTensors):
+            
+            # Get length of tensor message
+            tensorMessageLength = int.from_bytes(inputDataBuffer[ptrStart:ptrStart+4], self.ENDIANNESS)
 
-            # Call function to convert each tensor
-            tensor, tensorShape = self.BytesBufferToTensor(inputDataBuffer[ptrStart:ptrEnd])
+            # Extract sub-message from buffer
+            subTensorMessage = inputDataBuffer[(ptrStart + 4) : (ptrStart + 4) + tensorMessageLength]
+
+            # Call function to convert each tensor message to tensor
+            tensor, tensorShape = self.BytesBufferToTensor(subTensorMessage)
 
             # Append data to list
             dataArray.append(tensor)
             dataArrayShape.append(tensorShape)
 
-            # Update ptrs for next tensor
-            ptrStart = ptrEnd
-            ptrEnd = ptrStart + 4 + int.from_bytes(inputDataBuffer[ptrStart:ptrStart+4], self.ENDIANNESS)
+            # Update buffer ptr for next tensor message
+            ptrStart += ptrStart + 4 + tensorMessageLength 
                                    
         return dataArray, dataArrayShape, numOfTensors
 
 
     def MultiTensorToBytesBuffer(self, processedData: Union[list, dict, tuple]) -> bytes:
-        '''Function to convert multiple tensors in a python container to multiple buffer messages of tensor convention'''
+        """Function to convert multiple tensors in a python container to multiple buffer messages of tensor convention:
+        - 4 bytes: number of tensors (messages) (int)
+        - for each tensor:
+            - 4 bytes: message length (int)
+            - 4 bytes: number of dimensions (int)
+            - 4 bytes per dimension: shape of tensor (int)
+            - remaining bytes: flattened tensor data (float32), column-major order        
+
+        Args:
+            processedData (Union[list, dict, tuple]): Input data container
+        
+        Raises:
+            TypeError: If input data container type is not recognized
+
+        Returns:
+            bytes: Output bytes buffer
+        """
 
         # Process container according to type
         # Get size of container
@@ -170,7 +233,6 @@ class DataProcessor():
 
             # Convert each tensor to buffer
             processedDataBufferList = [self.TensorToBytesBuffer(tensor) for tensor in processedData]
-
             # Concatenate all buffers
             outputBuffer = b''.join(*processedDataBufferList)
 
@@ -289,11 +351,57 @@ class pytcp_server(socketserver.TCPServer):
 
 # %% TEST SCRIPTS
 
-def test_server_implementation():
-    pass 
+# Dummy processing function for testing
+def dummy_processing_function(data, num_batches):
+    return data * 2
 
-def test_data_processor_base():
-    pass
+# Test DataProcessor class
+
+def test_data_processor():
+    processor = DataProcessor(
+        dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=1024)
+    input_data = np.array([1.0, 2.0, 3.0], dtype=np.float32).tobytes()
+    output_data = processor.process(input_data)
+    expected_output = (
+        np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
+    assert output_data == expected_output
+
+
+def test_tcp_server():
+    HOST, PORT = "localhost", 9999
+
+    # Create a DataProcessor instance
+    processor = DataProcessor(
+        dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=1024)
+
+    # Create and start the server in a separate thread
+    server = pytcp_server((HOST, PORT), pytcp_requestHandler, processor)
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon = True
+    server_thread.start()
+
+    # Create a client socket to connect to the server
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+        client.connect((HOST, PORT))
+
+        # Send the length of the data
+        input_data = np.array([1.0, 2.0, 3.0], dtype=np.float32).tobytes()
+        client.sendall(len(input_data).to_bytes(4, 'little'))
+
+        # Send the actual data
+        client.sendall(input_data)
+
+        # Receive the length of the processed data
+        data_length = int.from_bytes(client.recv(4), 'little')
+
+        # Receive the processed data
+        processed_data = client.recv(data_length)
+
+        expected_output = (
+            np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
+        assert processed_data == expected_output
+
 
 if __name__ == "__main__":
-    test_server_implementation()
+    test_data_processor()   
+    test_tcp_server()
