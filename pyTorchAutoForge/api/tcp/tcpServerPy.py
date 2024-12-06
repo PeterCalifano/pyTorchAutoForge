@@ -249,8 +249,6 @@ class DataProcessor():
         
 
 
-
-
 # %% Request handler class - PeterC + GPT4o- 15-06-2024
 class pytcp_requestHandler(socketserver.BaseRequestHandler):
     '''Request Handler class for tcp server'''
@@ -392,11 +390,6 @@ def test_data_processor_tensor_mode():
 
     assert output_data == expected_output
     print('4D tensor processing test passed!')
-
-
-
-
-
 
 
 
