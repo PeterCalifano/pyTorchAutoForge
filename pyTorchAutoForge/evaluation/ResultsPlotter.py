@@ -146,13 +146,12 @@ class ResultsPlotter():
             elif isinstance(unit_scalers_, list) or isinstance(unit_scalers_, np.ndarray):
                 unit_scaler = unit_scalers_[idEntry]
 
-            elif unit_scalers_ is None:
+            elif unit_scalers_ is None or unit_scalers_ == {}:
+                # Set to one if None or empty
                 unit_scaler = 1.0
-
             else:
-                if unit_scalings is not None:
-                    raise ValueError(
-                        "Invalid unit_scalings input provided: must be a dictionary, a list, a np.ndarray or a scalar.")
+                raise ValueError(
+                    "Failed resolution of unit_scalings: must be a dictionary, a list, a np.ndarray or a scalar. Check input first. If the issue persists, please report it.")
 
 
             # Define figure and title
