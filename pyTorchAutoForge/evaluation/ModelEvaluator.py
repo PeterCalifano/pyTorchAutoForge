@@ -140,9 +140,10 @@ class ModelEvaluator():
 
         return self.stats
 
-    def plotResults(self) -> None:
+    def plotResults(self, entriesNames: list = None, units: list = None,
+                    unit_scalings: Union[dict, list, np.ndarray, float, int] = None, colours: list = None, num_of_bins: int = 100) -> None:
         if self.plotter is not None:
-            self.plotter.histPredictionErrors(self.stats)
+            self.plotter.histPredictionErrors(self.stats, entriesNames=entriesNames, units=units, unit_scalings=unit_scalings, colours=colours, num_of_bins=num_of_bins)
         else:
             Warning('No plotter object provided. Cannot plot results.')
         

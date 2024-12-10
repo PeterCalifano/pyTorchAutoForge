@@ -127,7 +127,7 @@ class ResultsPlotter():
 
         # PLOT: Plotting loop per component
         for idEntry in np.arange(num_of_entry):
-            
+
             # ENTRY NAME: Check if entry name is provided
             if entriesNames != None:
                 entryName = entriesNames[idEntry]
@@ -137,8 +137,12 @@ class ResultsPlotter():
                 entryName = "Component " + str(idEntry)
 
             # SCALING: Check if scaling required
-            if isinstance(unit_scalers_, dict) and entryName in unit_scalers_:
-                unit_scaler = unit_scalers_[entryName]
+            if isinstance(unit_scalers_, dict):
+                if entryName in unit_scalers_:
+                    unit_scaler = unit_scalers_[entryName]
+                else:
+                    raise ValueError(
+                        "Failed resolution of unit_scaler: input is instance of dict, but key not found in dictionary. Ensure that the key matches the corresponding entry name.")
 
             elif isinstance(unit_scalers_, (int, float)):
                 unit_scaler = unit_scalers_
