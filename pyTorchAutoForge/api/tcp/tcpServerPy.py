@@ -46,7 +46,7 @@ class DataProcessor():
         '''Processing method running specified processing function'''
 
         # Decode inputData
-        decodedData, numBatches = self.decode(inputDataBuffer)  # DEVNOTE: numBatches will now be directly "encoded" in tensor shape
+        decodedData, numBatches = self.decode(inputDataBuffer[4:])  # DEVNOTE: numBatches will now be directly "encoded" in tensor shape
 
         # Execute processing function
         processedData = self.processDataFcn(decodedData, numBatches) # DEVNOTE TODO: replace by standard class method call
@@ -175,6 +175,7 @@ class DataProcessor():
             tuple[list[np.ndarray], list[tuple[int]], int]: Tuple containing the list of tensors, their shapes and the number of tensors
         """
         # Get number of tensors
+        # TBC: inputDataBuffer may be provided to decode function without the first 4 bytes (message length)
         numOfTensors = int.from_bytes(inputDataBuffer[:4], self.ENDIANNESS)  
 
         # Initialize list to store tensors
@@ -183,14 +184,15 @@ class DataProcessor():
 
         # Construct extraction ptrs
         ptrStart = 4 # First data message starts at byte 4 (after number of tensors)
-    
+        __SIZE_OF_FLOAT32__ = 4 # Size of float32 in bytes
+
         for idx in range(numOfTensors):
             
             # Get length of tensor message
             tensorMessageLength = int.from_bytes(inputDataBuffer[ptrStart:ptrStart+4], self.ENDIANNESS)
 
             # Extract sub-message from buffer
-            subTensorMessage = inputDataBuffer[(ptrStart + 4) : (ptrStart + 4) + tensorMessageLength]
+            subTensorMessage = inputDataBuffer[:(ptrStart + 4) + tensorMessageLength * __SIZE_OF_FLOAT32__]
 
             # Call function to convert each tensor message to tensor
             tensor, tensorShape = self.BytesBufferToTensor(subTensorMessage)
@@ -200,7 +202,7 @@ class DataProcessor():
             dataArrayShape.append(tensorShape)
 
             # Update buffer ptr for next tensor message
-            ptrStart += ptrStart + 4 + tensorMessageLength 
+            ptrStart += ptrStart + 4 + (tensorMessageLength * __SIZE_OF_FLOAT32__)
                                    
         return dataArray, dataArrayShape, numOfTensors
 
