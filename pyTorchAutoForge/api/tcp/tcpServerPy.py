@@ -76,8 +76,8 @@ class DataProcessor():
                     dataArray = np.array(np.frombuffer(dataArrayBuffer, dtype=self.inputTargetType), dtype=self.inputTargetType)
                     dataArrayShape = dataArray.shape
 
-                except Exception as errMsg:
-                    raise TypeError('Data conversion from raw data array to specified target type {targetType} failed with error: {errMsg}\n'.format(
+                except TypeError as errMsg:
+                    print('Data conversion from raw data array to specified target type {targetType} failed with error: {errMsg}\n'.format(
                         targetType=self.inputTargetType, errMsg = str(errMsg)))
             
 
@@ -155,7 +155,7 @@ class DataProcessor():
 
         # Add message length to buffer
         outputBuffer = len(outputBuffer).to_bytes(4, self.ENDIANNESS) + outputBuffer
-
+        
         return outputBuffer
     
     def BytesBufferToMultiTensor(self, inputDataBuffer: bytes) -> tuple[list[np.ndarray], list[tuple[int]], int]:
@@ -359,7 +359,7 @@ def test_data_processor_tensor_mode():
     processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little', 
                               DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.TENSOR)
     
-    def process_wrapper(input_data, processor):
+    def packAsBuffer_and_process_wrapper(input_data, processor):
         # Convert input data to bytes buffer
         input_data_bytes = processor.TensorToBytesBuffer(input_data)
         # Process the input data
@@ -369,7 +369,9 @@ def test_data_processor_tensor_mode():
 
     # Create dummy input data (1D tensor)
     input_data = np.array([1.0, 2.0, 3.0], dtype=np.float32)
-    output_data = process_wrapper(input_data, processor)
+
+    # Call process method of DataProcessor 
+    output_data = packAsBuffer_and_process_wrapper(input_data, processor)
     expected_output = (np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
 
     assert output_data == expected_output
@@ -377,7 +379,7 @@ def test_data_processor_tensor_mode():
 
     # Create dummy input data (2D tensor)
     input_data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
-    output_data = process_wrapper(input_data, processor)
+    output_data = packAsBuffer_and_process_wrapper(input_data, processor)
     expected_output = (np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32) * 2).tobytes()
 
     assert output_data == expected_output
@@ -385,7 +387,7 @@ def test_data_processor_tensor_mode():
 
     # Create dummy large size input data (4D tensor)
     input_data = np.random.rand(2, 3, 4, 5).astype(np.float32)
-    output_data = process_wrapper(input_data, processor)
+    output_data = packAsBuffer_and_process_wrapper(input_data, processor)
     expected_output = (input_data * 2).tobytes()
 
     assert output_data == expected_output
