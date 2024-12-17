@@ -10,6 +10,7 @@ from enum import Enum
 from torch import Tensor
 import socket
 import threading
+import time
 
 # Check documentation page before coding: https://docs.python.org/3/library/abc.html
 class DataProcessingBaseFcn(ABC):
@@ -33,7 +34,7 @@ class ProcessingMode(Enum):
 class DataProcessor():
     '''Data processing function wrapper as generic interface in RequestHandler for TCP servers. Input/output for numerical data: numpy.ndarray'''
     def __init__(self, processDataFcn:callable, inputTargetType:Any = np.float32, BufferSizeInBytes:int = -1, ENDIANNESS:str='little', 
-                 DYNAMIC_BUFFER_MODE: bool = False, PRE_PROCESSING_MODE: ProcessingMode = ProcessingMode.MULTI_TENSOR) -> None:
+                 DYNAMIC_BUFFER_MODE: bool = True, PRE_PROCESSING_MODE: ProcessingMode = ProcessingMode.MULTI_TENSOR) -> None:
         '''Constructor'''
         self.processDataFcn = processDataFcn
         self.inputTargetType = inputTargetType
@@ -108,7 +109,7 @@ class DataProcessor():
         else:
             return processedData.tobytes()
     
-    def BytesBufferToTensor(self, inputDataBuffer: bytes, standalone_mode:bool = True) -> tuple[np.ndarray, tuple[int]]:
+    def BytesBufferToTensor(self, inputDataBuffer: bytes) -> tuple[np.ndarray, tuple[int]]:
         """Function to convert input data message from bytes to tensor shape. The buffer is expected to be in the following format:
         - 4 bytes: number of dimensions (int)
         - 4 bytes per dimension: shape of tensor (int)
@@ -207,7 +208,7 @@ class DataProcessor():
             subTensorMessage = inputDataBuffer[ptrStart+4:(ptrStart + 4) + tensorMessageLength] # Extract sub-message in bytes
 
             # Call function to convert each tensor message to tensor
-            tensor, tensorShape = self.BytesBufferToTensor(subTensorMessage, standalone_mode=False)
+            tensor, tensorShape = self.BytesBufferToTensor(subTensorMessage)
 
             # Append data to list
             dataArray.append(tensor)
@@ -371,8 +372,7 @@ class pytcp_server(socketserver.TCPServer):
         '''Function evaluating Request Handler'''
         self.RequestHandlerClass(request, client_address, self, self.DataProcessor)
 
-# %% TEST SCRIPTS
-
+# %% TEST CODES
 # Dummy processing function for testing
 def dummy_processing_function(data):
     if isinstance(data, Union[list, tuple]):
@@ -412,8 +412,7 @@ def test_data_processor_tensor_mode_1D():
         4, 'little') for shape in input_data.shape]) + (input_data * 2).tobytes()
 
     assert output_data[4:] == expected_output, 'Processed data does not match expected output!'
-    print('1D tensor processing test passed!')
-
+    print('\n1D tensor processing test passed!\n')
 
 def test_data_processor_tensor_mode_2D():
     processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little',
@@ -428,8 +427,7 @@ def test_data_processor_tensor_mode_2D():
     assert output_data[:4] == expected_output[:4], 'Message length does not match!'
     # Check processed data
     assert output_data[4:] == expected_output[4:], 'Message data do not match'  # If multi-tensor --> first data starts at byte 20 (numOfTensors, 1st msg length, numOfDims, shape_for_each_dim), else starts at byte 12
-    print('2D tensor processing test passed!')
-
+    print('\n2D tensor processing test passed!\n')
 
 def test_data_processor_tensor_mode_4D():
     processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little',
@@ -445,7 +443,7 @@ def test_data_processor_tensor_mode_4D():
     # If multi-tensor --> first data starts at byte 20 (numOfTensors, 1st msg length, numOfDims, shape_for_each_dim), else starts at byte 12
     assert output_data[:20] == expected_output[:20], 'Message length and number of dimensions do not match!'
     assert output_data[20:] == expected_output[20:], 'Processed data does not match expected output!'
-    print('4D tensor processing test passed!')
+    print('\n4D tensor processing test passed!\n')
 
 def test_data_processor_multi_tensor_mode_2D():
     processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little',
@@ -488,31 +486,36 @@ def test_data_processor_multi_tensor_mode_2D():
     assert output_data[8 : msg1_length + 4] == msg1_bytes[4:], 'Message 1 shape sizes and data does not match!'
     assert output_data[msg1_length + 4 + 4:] == msg2_bytes[4:], 'Message 2 shape sizes and data does not match!'
 
+    print('\nMulti-tensor processing test passed!\n')
 
-# TODO
-def test_tcp_server():
+def BuildMessage(input_data, processor):
+    if isinstance(input_data, Union[np.ndarray, Tensor]):
+        # Convert input data to bytes buffer
+        input_data_bytes = processor.TensorToBytesBuffer(input_data)
+    elif isinstance(input_data, Union[list, dict, tuple]):
+        # Convert input data to bytes buffer using multi tensor mode
+        input_data_bytes = processor.MultiTensorToBytesBuffer(
+            input_data)
+
+    # Add message length to buffer
+    input_data_bytes = len(input_data_bytes).to_bytes(
+        4, 'little') + input_data_bytes
+
+    return input_data_bytes
+    
+def test_tcp_server_tensor_mode():
     HOST, PORT = "localhost", 9999
 
     # Create a DataProcessor instance
-    processor = DataProcessor(
-        dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=1024)
+    processor_tensor = DataProcessor(
+        dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=1024, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.TENSOR)
 
     # Create and start the server in a separate thread
-    server = pytcp_server((HOST, PORT), pytcp_requestHandler, processor)
+    server = pytcp_server((HOST, PORT), pytcp_requestHandler, processor_tensor)
     server_thread = threading.Thread(target=server.serve_forever)
     server_thread.daemon = True
     server_thread.start()
 
-    def BuildMessage(input_data):
-        if isinstance(input_data, Union[np.ndarray, Tensor]):
-            # Convert input data to bytes buffer
-            input_data_bytes = processor.TensorToBytesBuffer(input_data)
-        elif isinstance(input_data, Union[list, dict, tuple]):
-            # Convert input data to bytes buffer using multi tensor mode
-            input_data_bytes = processor.MultiTensorToBytesBuffer(input_data)
-
-        return input_data_bytes
-    
     # Create a client socket to connect to the server
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
         client.connect((HOST, PORT))
@@ -521,24 +524,106 @@ def test_tcp_server():
         input_data_1D = np.array([1.0, 2.0, 3.0], dtype=np.float32)
         input_data_2D = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
         input_data_4D = np.random.rand(2, 3, 4, 5).astype(np.float32)
-        input_data_multi_tensor = [np.zeros((100, 100), dtype=np.float32), np.ones((100, 100), dtype=np.float32)]
 
         # TEST MESSAGE 1
         # Send message 1 to server 
-        client.sendall(BuildMessage(input_data_1D))
+        client.sendall(BuildMessage(input_data_1D, processor_tensor))
 
         # Receive processed data from server
         data_length = int.from_bytes(client.recv(4), 'little')
         processed_data = client.recv(data_length)
  
         # Assert processed data
-        #expected_output = (np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
-        #assert processed_data == expected_output
+        expected_output = processor_tensor.TensorToBytesBuffer(2.0*input_data_1D)
+        assert processed_data == expected_output
 
+        # TEST MESSAGE 2
+        # Send message 2 to server
+        client.sendall(BuildMessage(input_data_2D, processor_tensor))
+
+        # Receive processed data from server
+        data_length = int.from_bytes(client.recv(4), 'little')
+        processed_data = client.recv(data_length)
+
+        # Assert processed data
+        expected_output = processor_tensor.TensorToBytesBuffer(2.0*input_data_2D)
+        assert processed_data == expected_output
+
+        # TEST MESSAGE 3
+        # Send message 3 to server
+        client.sendall(BuildMessage(input_data_4D, processor_tensor))
+
+        # Receive processed data from server
+        data_length = int.from_bytes(client.recv(4), 'little')
+        processed_data = client.recv(data_length)
+
+        # Assert processed data
+        expected_output = processor_tensor.TensorToBytesBuffer(2.0*input_data_4D)
+        assert processed_data == expected_output
+
+        time.sleep(2)
+        print('\nTensor processing test passed!\n')
+
+    server.shutdown()
+    server.server_close()
+
+def test_tcp_server_multi_tensor_mode():
+    HOST, PORT = "localhost", 9998
+
+    # Create a DataProcessor instance
+    processor_multitensor = DataProcessor(
+        dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=1024, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MULTI_TENSOR)
+
+    # Create and start the server in a separate thread
+    server = pytcp_server((HOST, PORT), pytcp_requestHandler, processor_multitensor)
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon = True
+    server_thread.start()
+    
+    # Create a client socket to connect to the server
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+        client.connect((HOST, PORT))
+
+        # Build test messages
+        input_data_multi_tensor = [np.zeros((100, 100), dtype=np.float32), np.ones((100, 100), dtype=np.float32)]
+
+        # TEST MESSAGE 1
+        # Send message 1 to server 
+        client.sendall(BuildMessage(input_data_multi_tensor, processor_multitensor))
+
+        # Receive processed data from server
+        data_length = int.from_bytes(client.recv(4), 'little')
+        processed_data = client.recv(data_length)
+ 
+        # Assert processed
+        expected_output_num_msg = (len(input_data_multi_tensor)).to_bytes(4, 'little')
+        msg1_bytes = processor_multitensor.TensorToBytesBuffer(2.0 * input_data_multi_tensor[0])
+        msg2_bytes = processor_multitensor.TensorToBytesBuffer(2.0 * input_data_multi_tensor[1])
+
+        # Get length of each message
+        msg1_length = len(msg1_bytes)
+
+        # Check expected output sizes and msg lengths
+        assert processed_data[:4] == expected_output_num_msg[:4], 'Number of messages does not match!'
+        assert processed_data[4:8] == msg1_bytes[:4], 'Message 1 length does not match!'
+        assert processed_data[4 + msg1_length: 4 + msg1_length + 4] == msg2_bytes[:4], 'Message 2 length does not match!'
+        # Check data
+        assert processed_data[8 : msg1_length + 4] == msg1_bytes[4:], 'Message 1 shape sizes and data does not match!'
+        assert processed_data[msg1_length + 4 + 4:] == msg2_bytes[4:], 'Message 2 shape sizes and data does not match!'
+        
+        time.sleep(2)
+        print('\nMulti-tensor processing test passed!\n')
+
+    server.shutdown()
+    server.server_close()
 
 if __name__ == "__main__":
     test_data_processor_tensor_mode_1D()
     test_data_processor_tensor_mode_2D()
     test_data_processor_tensor_mode_4D()
     test_data_processor_multi_tensor_mode_2D()
-    test_tcp_server()
+    test_tcp_server_tensor_mode()
+    test_tcp_server_multi_tensor_mode()
+
+    print('All tests passed!')
+    
