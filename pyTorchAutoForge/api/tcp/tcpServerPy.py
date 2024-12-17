@@ -272,8 +272,6 @@ class DataProcessor():
         
         return outputBuffer
         
-
-
 # %% Request handler class - PeterC + GPT4o- 15-06-2024
 class pytcp_requestHandler(socketserver.BaseRequestHandler):
     '''Request Handler class for tcp server'''
