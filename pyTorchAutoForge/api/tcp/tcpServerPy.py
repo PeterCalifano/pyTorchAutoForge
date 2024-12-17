@@ -7,7 +7,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import Any, Union
 from enum import Enum
-
+from torch import Tensor
 import socket
 import threading
 
@@ -40,27 +40,36 @@ class DataProcessor():
         self.BufferSizeInBytes = BufferSizeInBytes
         self.DYNAMIC_BUFFER_MODE = DYNAMIC_BUFFER_MODE
         self.ENDIANNESS = ENDIANNESS
-        self.PROCESSING_MODE = ProcessingMode.MULTI_TENSOR
+        self.PROCESSING_MODE = PRE_PROCESSING_MODE
 
     def process(self, inputDataBuffer: bytes) -> bytes:
-        '''Processing method running specified processing function'''
+        """Function to process input data buffer. It expects the buffer to be passed in the following format:
+        - Without the initial 4 bytes of the length of the whole buffer, used by recv
+        - Composition of messages in the "multi-tensor" format or a message directly convertible to a numpy array using frombuffer()
+        This convention is assumed by decode() functionalities.
 
+        Args:
+            inputDataBuffer (bytes): _description_
+
+        Returns:
+            bytes: _description_
+        """        
         # Decode inputData
-        decodedData, numBatches = self.decode(inputDataBuffer[4:])  # DEVNOTE: numBatches will now be directly "encoded" in tensor shape
+        decodedData, dataArrayShape = self.decode(inputDataBuffer)
 
         # Execute processing function
-        processedData = self.processDataFcn(decodedData, numBatches) # DEVNOTE TODO: replace by standard class method call
+        processedData = self.processDataFcn(decodedData) # DEVNOTE TODO: replace by standard class method call
         # TODO: replace temporary input with a structured type like a dict to avoid multiple inputs and keep the function interface generic --> better to define a data class?
        
         return self.encode(processedData)
     
-    def decode(self, inputDataBuffer):
+    def decode(self, inputDataBuffer: bytes) -> tuple[np.ndarray, tuple[int]]:
         '''Data conversion function from raw bytes stream to specified target numpy type with specified shape'''
         if not isinstance(inputDataBuffer, self.inputTargetType):
 
             if self.PROCESSING_MODE == ProcessingMode.TENSOR:
                 # Convert input data to tensor shape
-                [dataArray, dataArrayShape] = self.BytesBufferToTensor(inputDataBuffer)
+                [dataArray, dataArrayShape] = self.BytesBufferToTensor(inputDataBuffer[4:])
                 print(f"Received tensor of shape:\t{dataArrayShape}")
 
             elif self.PROCESSING_MODE == ProcessingMode.MULTI_TENSOR:
@@ -99,7 +108,7 @@ class DataProcessor():
         else:
             return processedData.tobytes()
     
-    def BytesBufferToTensor(self, inputDataBuffer: bytes) -> tuple[np.ndarray, tuple[int]]:
+    def BytesBufferToTensor(self, inputDataBuffer: bytes, standalone_mode:bool = True) -> tuple[np.ndarray, tuple[int]]:
         """Function to convert input data message from bytes to tensor shape. The buffer is expected to be in the following format:
         - 4 bytes: number of dimensions (int)
         - 4 bytes per dimension: shape of tensor (int)
@@ -114,11 +123,13 @@ class DataProcessor():
 
         # Get number of dimensions
         numOfDims = int.from_bytes(inputDataBuffer[:4], self.ENDIANNESS)  #
+
         # Get shape of tensor ( TO VERIFY IF THIS WORKS) 
-        dataArrayShape = tuple(int.from_bytes(inputDataBuffer[4:8+4*(idx)], self.ENDIANNESS) for idx in range(numOfDims))
-        # Convert buffer to numpy array with specified shape (REQUIRES TESTING)
-        dataArray = np.array(np.frombuffer(inputDataBuffer[4+4*numOfDims:], dtype=self.inputTargetType), dtype=self.inputTargetType).reshape(dataArrayShape)
-        
+        dataArrayShape = tuple(int.from_bytes(inputDataBuffer[4+4*(idx):8+4*(idx)], self.ENDIANNESS) for idx in range(numOfDims))
+
+        # Convert buffer to numpy array with specified shape 
+        dataArray = np.array(np.frombuffer(inputDataBuffer[8+4*(numOfDims-1):], dtype=self.inputTargetType), dtype=self.inputTargetType).reshape(dataArrayShape)
+            
         return dataArray, dataArrayShape
 
 
@@ -189,10 +200,10 @@ class DataProcessor():
         for idx in range(numOfTensors):
             
             # Get length of tensor message
-            tensorMessageLength = int.from_bytes(inputDataBuffer[ptrStart:ptrStart+4], self.ENDIANNESS)
+            tensorMessageLength = int.from_bytes(inputDataBuffer[ptrStart:ptrStart+4], self.ENDIANNESS) # In bytes
 
             # Extract sub-message from buffer
-            subTensorMessage = inputDataBuffer[:(ptrStart + 4) + tensorMessageLength * __SIZE_OF_FLOAT32__]
+            subTensorMessage = inputDataBuffer[ptrStart+4:(ptrStart + 4) + tensorMessageLength] # Extract sub-message in bytes
 
             # Call function to convert each tensor message to tensor
             tensor, tensorShape = self.BytesBufferToTensor(subTensorMessage)
@@ -202,7 +213,7 @@ class DataProcessor():
             dataArrayShape.append(tensorShape)
 
             # Update buffer ptr for next tensor message
-            ptrStart += ptrStart + 4 + (tensorMessageLength * __SIZE_OF_FLOAT32__)
+            ptrStart += ptrStart + 4 + (tensorMessageLength)
                                    
         return dataArray, dataArrayShape, numOfTensors
 
@@ -226,24 +237,34 @@ class DataProcessor():
             bytes: Output bytes buffer
         """
 
+        # Automatic encapsulation if instance is single tensor/array
+        if isinstance(processedData, Union[np.ndarray, Tensor]):
+            processedData = [processedData] # Convert to list
+
         # Process container according to type
         # Get size of container
+        
         numOfTensors = len(processedData)
         print(f"Number of tensors to process: {numOfTensors}")
 
-        if isinstance(processedData, [list, tuple]):
-
+        if isinstance(processedData, Union[list, tuple]):
+            
             # Convert each tensor to buffer
             processedDataBufferList = [self.TensorToBytesBuffer(tensor) for tensor in processedData]
+
             # Concatenate all buffers
-            outputBuffer = b''.join(*processedDataBufferList)
+            #outputBuffer = b''.join(processedDataBufferList)
+
+            outputBuffer = numOfTensors.to_bytes(4, self.ENDIANNESS) + b''.join(processedDataBufferList)
+
 
         elif isinstance(processedData, dict):
  
             # Convert each tensor to buffer
             processedDataBufferList = [self.TensorToBytesBuffer(tensor) for tensor in processedData.values()]
             # Concatenate all buffers
-            outputBuffer = b''.join(*processedDataBufferList)
+            outputBuffer = numOfTensors.to_bytes(4, self.ENDIANNESS) + b''.join(processedDataBufferList)
+
         else:
             raise TypeError('Input data container type not recognized. Please provide a list, tuple or dict.')
         
@@ -352,50 +373,104 @@ class pytcp_server(socketserver.TCPServer):
 # %% TEST SCRIPTS
 
 # Dummy processing function for testing
-def dummy_processing_function(data, num_batches):
-    return data * 2
+def dummy_processing_function(data):
+    if isinstance(data, Union[list, tuple]):
+        return 2.0*data[0] # Achtung: input "data" is a list --> what happens is duplication 
+    elif isinstance(data, np.ndarray):
+        return 2.0*data
+    else:
+        raise TypeError('Input data must be a list or numpy array.')
 
 # Test DataProcessor class
+def packAsBuffer_and_process_wrapper(input_data, processor):
 
-def test_data_processor_tensor_mode():
+    if isinstance(input_data, Union[np.ndarray, Tensor]):
+        # Convert input data to bytes buffer
+        input_data_bytes = processor.TensorToBytesBuffer(input_data)
+    elif isinstance(input_data, Union[list, dict, tuple]):
+        # Convert input data to bytes buffer using multi tensor mode
+        input_data_bytes = processor.MultiTensorToBytesBuffer(input_data)
+
+    # Process the input data
+    output_data = processor.process(input_data_bytes)
+
+    return output_data
+
+def test_data_processor_tensor_mode_1D():
     processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little', 
                               DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.TENSOR)
     
-    def packAsBuffer_and_process_wrapper(input_data, processor):
-        # Convert input data to bytes buffer
-        input_data_bytes = processor.TensorToBytesBuffer(input_data)
-        # Process the input data
-        output_data = processor.process(input_data_bytes)
-
-        return output_data
-
     # Create dummy input data (1D tensor)
     input_data = np.array([1.0, 2.0, 3.0], dtype=np.float32)
 
     # Call process method of DataProcessor 
     output_data = packAsBuffer_and_process_wrapper(input_data, processor)
-    expected_output = (np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
 
-    assert output_data == expected_output
+    # Check bytes stream according to how it is constructed
+    expected_output = (len(input_data.shape)).to_bytes(4, 'little') + b''.join([shape.to_bytes(
+        4, 'little') for shape in input_data.shape]) + (input_data * 2).tobytes()
+
+    assert output_data[4:] == expected_output
     print('1D tensor processing test passed!')
+
+
+def test_data_processor_tensor_mode_2D():
+    processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little',
+                              DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.TENSOR)
 
     # Create dummy input data (2D tensor)
     input_data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
     output_data = packAsBuffer_and_process_wrapper(input_data, processor)
-    expected_output = (np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32) * 2).tobytes()
+    expected_output = (len(input_data.shape)).to_bytes(4, 'little') + b''.join([shape.to_bytes(
+        4, 'little') for shape in input_data.shape]) + (input_data * 2).tobytes()
 
-    assert output_data == expected_output
+    assert output_data[4:] == expected_output  # If multi-tensor --> first data starts at byte 20 (numOfTensors, 1st msg length, numOfDims, shape_for_each_dim), else starts at byte 12
     print('2D tensor processing test passed!')
+
+
+def test_data_processor_tensor_mode_4D():
+    processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little',
+                              DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.TENSOR)
+
 
     # Create dummy large size input data (4D tensor)
     input_data = np.random.rand(2, 3, 4, 5).astype(np.float32)
     output_data = packAsBuffer_and_process_wrapper(input_data, processor)
-    expected_output = (input_data * 2).tobytes()
 
-    assert output_data == expected_output
+    expected_output = processor.TensorToBytesBuffer(2.0*input_data)
+
+    # If multi-tensor --> first data starts at byte 20 (numOfTensors, 1st msg length, numOfDims, shape_for_each_dim), else starts at byte 12
+    assert output_data[:20] == expected_output[:20], 'Message length and number of dimensions do not match!'
+    assert output_data[20:] == expected_output[20:], 'Processed data does not match expected output!'
     print('4D tensor processing test passed!')
 
+def test_data_processor_multi_tensor_mode_2D():
+    processor = DataProcessor(dummy_processing_function, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little',
+                            DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MULTI_TENSOR)
+        
+    # Define image-like arrays with a circle in the middle
+    image1 = np.zeros((100, 100), dtype=np.float32) # Black background with white circle
+    # Create a white circle in the middle
+    for i in range(100):
+        for j in range(100):
+            if (i-50)**2 + (j-50)**2 <= 25**2:
+                image1[i, j] = 1.0
 
+    image2 = np.ones((100, 100), dtype=np.float32) # White background with black circle
+    # Create a black circle in the middle
+    for i in range(100):
+        for j in range(100):
+            if (i-50)**2 + (j-50)**2 <= 25**2:
+                image2[i, j] = 0.0
+
+    # Encode data to buffer and process
+    input_data = [image1, image2]
+    output_data = packAsBuffer_and_process_wrapper(input_data, processor)
+
+    # Check bytes stream according to how it is constructed
+    expected_output = (len(input_data)).to_bytes(4, 'little') + processor.TensorToBytesBuffer(image1) + processor.TensorToBytesBuffer(image2)
+    
+    
 
 
 def test_tcp_server():
@@ -434,5 +509,7 @@ def test_tcp_server():
 
 
 if __name__ == "__main__":
-    test_data_processor_tensor_mode()
+    test_data_processor_tensor_mode_1D()
+    test_data_processor_tensor_mode_2D()
+    test_data_processor_tensor_mode_4D()
     test_tcp_server()
