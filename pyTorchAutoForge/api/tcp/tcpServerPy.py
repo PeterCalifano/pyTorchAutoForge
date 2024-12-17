@@ -202,18 +202,19 @@ class DataProcessor():
             # Get length of tensor message
             tensorMessageLength = int.from_bytes(inputDataBuffer[ptrStart:ptrStart+4], self.ENDIANNESS) # In bytes
 
+            print(f"Processing Tensor message of length: {tensorMessageLength}")
             # Extract sub-message from buffer
             subTensorMessage = inputDataBuffer[ptrStart+4:(ptrStart + 4) + tensorMessageLength] # Extract sub-message in bytes
 
             # Call function to convert each tensor message to tensor
-            tensor, tensorShape = self.BytesBufferToTensor(subTensorMessage)
+            tensor, tensorShape = self.BytesBufferToTensor(subTensorMessage, standalone_mode=False)
 
             # Append data to list
             dataArray.append(tensor)
             dataArrayShape.append(tensorShape)
 
             # Update buffer ptr for next tensor message
-            ptrStart += ptrStart + 4 + (tensorMessageLength)
+            ptrStart = (ptrStart + 4) + tensorMessageLength
                                    
         return dataArray, dataArrayShape, numOfTensors
 
@@ -375,7 +376,7 @@ class pytcp_server(socketserver.TCPServer):
 # Dummy processing function for testing
 def dummy_processing_function(data):
     if isinstance(data, Union[list, tuple]):
-        return 2.0*data[0] # Achtung: input "data" is a list --> what happens is duplication 
+        return [2.0*data_ for data_ in data] # Achtung: input "data" is a list --> what happens is duplication 
     elif isinstance(data, np.ndarray):
         return 2.0*data
     else:
@@ -468,11 +469,26 @@ def test_data_processor_multi_tensor_mode_2D():
     output_data = packAsBuffer_and_process_wrapper(input_data, processor)
 
     # Check bytes stream according to how it is constructed
-    expected_output = (len(input_data)).to_bytes(4, 'little') + processor.TensorToBytesBuffer(image1) + processor.TensorToBytesBuffer(image2)
-    
-    
+    expected_output_num_msg = (len(input_data)).to_bytes(4, 'little')
+    msg1_bytes = processor.TensorToBytesBuffer(2.0 * image1)
+    msg2_bytes = processor.TensorToBytesBuffer(2.0 * image2)
+
+    # Get length of each message
+    msg1_length = len(msg1_bytes)
+    msg2_length = len(msg2_bytes)
+
+    # Check expected output sizes and msg lengths
+    assert output_data[:4] == expected_output_num_msg[:4]
+    assert output_data[4:8] == msg1_bytes[:4]
+    assert output_data[4 + msg1_length: 4 + msg1_length + 4] == msg2_bytes[:4]
+
+    # Check data
+    assert output_data[8 : msg1_length + 4] == msg1_bytes[4:]
+    assert output_data[msg1_length + 4 + 4:] == msg2_bytes[4:]
 
 
+
+# TODO
 def test_tcp_server():
     HOST, PORT = "localhost", 9999
 
@@ -509,7 +525,8 @@ def test_tcp_server():
 
 
 if __name__ == "__main__":
-    test_data_processor_tensor_mode_1D()
-    test_data_processor_tensor_mode_2D()
-    test_data_processor_tensor_mode_4D()
+    #test_data_processor_tensor_mode_1D()
+    #test_data_processor_tensor_mode_2D()
+    #test_data_processor_tensor_mode_4D()
+    test_data_processor_multi_tensor_mode_2D()
     test_tcp_server()
