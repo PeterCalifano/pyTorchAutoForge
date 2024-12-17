@@ -128,7 +128,7 @@ class DataProcessor():
         dataArrayShape = tuple(int.from_bytes(inputDataBuffer[4+4*(idx):8+4*(idx)], self.ENDIANNESS) for idx in range(numOfDims))
 
         # Convert buffer to numpy array with specified shape 
-        dataArray = np.array(np.frombuffer(inputDataBuffer[8+4*(numOfDims-1):], dtype=self.inputTargetType), dtype=self.inputTargetType).reshape(dataArrayShape)
+        dataArray = np.array(np.frombuffer(inputDataBuffer[8+4*(numOfDims-1):], dtype=self.inputTargetType), dtype=self.inputTargetType).reshape(dataArrayShape, order='F')
             
         return dataArray, dataArrayShape
 
@@ -411,7 +411,7 @@ def test_data_processor_tensor_mode_1D():
     expected_output = (len(input_data.shape)).to_bytes(4, 'little') + b''.join([shape.to_bytes(
         4, 'little') for shape in input_data.shape]) + (input_data * 2).tobytes()
 
-    assert output_data[4:] == expected_output
+    assert output_data[4:] == expected_output, 'Processed data does not match expected output!'
     print('1D tensor processing test passed!')
 
 
@@ -478,14 +478,13 @@ def test_data_processor_multi_tensor_mode_2D():
     msg2_length = len(msg2_bytes)
 
     # Check expected output sizes and msg lengths
-    assert output_data[:4] == expected_output_num_msg[:4]
-    assert output_data[4:8] == msg1_bytes[:4]
-    assert output_data[4 + msg1_length: 4 + msg1_length + 4] == msg2_bytes[:4]
+    assert output_data[:4] == expected_output_num_msg[:4], 'Number of messages does not match!'
+    assert output_data[4:8] == msg1_bytes[:4], 'Message 1 length does not match!'
+    assert output_data[4 + msg1_length: 4 + msg1_length + 4] == msg2_bytes[:4], 'Message 2 length does not match!'
 
     # Check data
-    assert output_data[8 : msg1_length + 4] == msg1_bytes[4:]
-    assert output_data[msg1_length + 4 + 4:] == msg2_bytes[4:]
-
+    assert output_data[8 : msg1_length + 4] == msg1_bytes[4:], 'Message 1 shape sizes and data does not match!'
+    assert output_data[msg1_length + 4 + 4:] == msg2_bytes[4:], 'Message 2 shape sizes and data does not match!'
 
 
 # TODO
@@ -527,6 +526,6 @@ def test_tcp_server():
 if __name__ == "__main__":
     #test_data_processor_tensor_mode_1D()
     #test_data_processor_tensor_mode_2D()
-    #test_data_processor_tensor_mode_4D()
+    test_data_processor_tensor_mode_4D()
     test_data_processor_multi_tensor_mode_2D()
     test_tcp_server()
