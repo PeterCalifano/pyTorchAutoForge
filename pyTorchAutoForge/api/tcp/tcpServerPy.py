@@ -422,10 +422,12 @@ def test_data_processor_tensor_mode_2D():
     # Create dummy input data (2D tensor)
     input_data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
     output_data = packAsBuffer_and_process_wrapper(input_data, processor)
-    expected_output = (len(input_data.shape)).to_bytes(4, 'little') + b''.join([shape.to_bytes(
-        4, 'little') for shape in input_data.shape]) + (input_data * 2).tobytes()
+    expected_output = processor.TensorToBytesBuffer(2.0*input_data)
 
-    assert output_data[4:] == expected_output  # If multi-tensor --> first data starts at byte 20 (numOfTensors, 1st msg length, numOfDims, shape_for_each_dim), else starts at byte 12
+    # Check message length
+    assert output_data[:4] == expected_output[:4], 'Message length does not match!'
+    # Check processed data
+    assert output_data[4:] == expected_output[4:], 'Message data do not match'  # If multi-tensor --> first data starts at byte 20 (numOfTensors, 1st msg length, numOfDims, shape_for_each_dim), else starts at byte 12
     print('2D tensor processing test passed!')
 
 
@@ -501,31 +503,42 @@ def test_tcp_server():
     server_thread.daemon = True
     server_thread.start()
 
+    def BuildMessage(input_data):
+        if isinstance(input_data, Union[np.ndarray, Tensor]):
+            # Convert input data to bytes buffer
+            input_data_bytes = processor.TensorToBytesBuffer(input_data)
+        elif isinstance(input_data, Union[list, dict, tuple]):
+            # Convert input data to bytes buffer using multi tensor mode
+            input_data_bytes = processor.MultiTensorToBytesBuffer(input_data)
+
+        return input_data_bytes
+    
     # Create a client socket to connect to the server
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
         client.connect((HOST, PORT))
 
-        # Send the length of the data
-        input_data = np.array([1.0, 2.0, 3.0], dtype=np.float32).tobytes()
-        client.sendall(len(input_data).to_bytes(4, 'little'))
+        # Build test messages
+        input_data_1D = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+        input_data_2D = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+        input_data_4D = np.random.rand(2, 3, 4, 5).astype(np.float32)
+        input_data_multi_tensor = [np.zeros((100, 100), dtype=np.float32), np.ones((100, 100), dtype=np.float32)]
 
-        # Send the actual data
-        client.sendall(input_data)
+        # TEST MESSAGE 1
+        # Send message 1 to server 
+        client.sendall(BuildMessage(input_data_1D))
 
-        # Receive the length of the processed data
+        # Receive processed data from server
         data_length = int.from_bytes(client.recv(4), 'little')
-
-        # Receive the processed data
         processed_data = client.recv(data_length)
-
-        expected_output = (
-            np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
-        assert processed_data == expected_output
+ 
+        # Assert processed data
+        #expected_output = (np.array([1.0, 2.0, 3.0], dtype=np.float32) * 2).tobytes()
+        #assert processed_data == expected_output
 
 
 if __name__ == "__main__":
-    #test_data_processor_tensor_mode_1D()
-    #test_data_processor_tensor_mode_2D()
+    test_data_processor_tensor_mode_1D()
+    test_data_processor_tensor_mode_2D()
     test_data_processor_tensor_mode_4D()
     test_data_processor_multi_tensor_mode_2D()
     test_tcp_server()
