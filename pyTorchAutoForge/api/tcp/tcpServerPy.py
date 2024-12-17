@@ -561,7 +561,7 @@ def test_tcp_server_tensor_mode():
         expected_output = processor_tensor.TensorToBytesBuffer(2.0*input_data_4D)
         assert processed_data == expected_output
 
-        time.sleep(2)
+        time.sleep(3)
         print('\nTensor processing test passed!\n')
 
     server.shutdown()
@@ -611,7 +611,7 @@ def test_tcp_server_multi_tensor_mode():
         assert processed_data[8 : msg1_length + 4] == msg1_bytes[4:], 'Message 1 shape sizes and data does not match!'
         assert processed_data[msg1_length + 4 + 4:] == msg2_bytes[4:], 'Message 2 shape sizes and data does not match!'
         
-        time.sleep(2)
+        time.sleep(5)
         print('\nMulti-tensor processing test passed!\n')
 
     server.shutdown()
