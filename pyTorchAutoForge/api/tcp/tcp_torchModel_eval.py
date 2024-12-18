@@ -1,5 +1,4 @@
-"""! Prototype script for torch model instantiation and evaluation over TCP, created by PeterC - 15-06-2024
-ACHTUNG: this is legacy code. It is suggested NOT to use it."""
+"""TODO"""
 
 # Python imports
 #import sys, os

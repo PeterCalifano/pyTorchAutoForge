@@ -1,8 +1,10 @@
-"""! Prototype TCP server script created by PeterC - 15-06-2024"""
+"""! Prototype TCP server script created by PeterC - 15-06-2024
+ACHTUNG: sockerServer works in a http-like manner (open-handle-close client connections). his implementation is modified to use a while loop in the 
+handle method, which processes an arbitracy number of the same requests from the same client. The server is kept busy in the meantime."""
 # NOTE: the current implementation allows one request at a time, since it is thought for the evaluation of torch models in MATLAB.
 
 # Python imports
-import socketserver
+import socketserver 
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import Any, Union
