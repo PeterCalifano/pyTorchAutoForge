@@ -15,10 +15,7 @@ class tcp_socket_server():
         self.host = host
         self.port = port
 
-
-
 # %% UNIT TESTS
-
 def main():
     pass
 

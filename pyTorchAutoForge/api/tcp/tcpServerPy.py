@@ -14,6 +14,11 @@ import socket
 import threading
 import time
 
+
+# TODO by gdd:
+# Modify handling --> Specialize each handle instead of passing the function to process.
+# tcp server does not require specialization to store data processor. 
+
 # Check documentation page before coding: https://docs.python.org/3/library/abc.html
 class DataProcessingBaseFcn(ABC):
     # TODO: class to constraint implementation of data processing functions DataProcessor uses (sort of abstract class)
