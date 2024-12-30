@@ -1,4 +1,4 @@
 {
     "python.terminal.executeInFileDir": true,
-    "python.analysis.typeCheckingMode": "off",
+    "python.analysis.typeCheckingMode": "basic",
 }
