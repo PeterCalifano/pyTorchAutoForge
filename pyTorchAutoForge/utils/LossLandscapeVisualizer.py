@@ -5,7 +5,7 @@ import torch
 
 # TODO
 class LossLandscapeVisualizer():
-    def __init__() -> None:
+    def __init__(self) -> None:
         pass
 
 

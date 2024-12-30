@@ -3,7 +3,7 @@ import pynvml
 import warnings
 
 # GetDevice:
-def GetDevice():
+def GetDeviceMulti():
     '''Function to get device to run models on. Used by most modules of pyTorchAutoForge'''
 
     MIN_FREE_MEM_RATIO = 0.3
