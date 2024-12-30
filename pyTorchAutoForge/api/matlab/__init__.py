@@ -1,1 +1,1 @@
-from .TorchModelMATLABwrapper import *
+from .TorchModelMATLABwrapper import MatlabWrapperConfig, TorchModelMATLABwrapper
