@@ -10,9 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Union
 from enum import Enum
 from torch import Tensor
-import socket
-import threading
-import time
+import socket, time, threading, sys, msgpack
 
 
 # TODO by gdd:
@@ -35,7 +33,7 @@ class ProcessingMode(Enum):
     NONE = 0
     TENSOR = 1
     MULTI_TENSOR = 2
-
+    MSG_PACK = 3
 
 # %% Data processing function wrapper as generic interface in RequestHandler for TCP servers - PeterC - 15-06-2024
 class DataProcessor():
@@ -77,28 +75,38 @@ class DataProcessor():
 
             if self.PROCESSING_MODE == ProcessingMode.TENSOR:
                 # Convert input data to tensor shape
-                [dataArray, dataArrayShape] = self.BytesBufferToTensor(inputDataBuffer[4:])
-                print(f"Received tensor of shape:\t{dataArrayShape}")
+                [dataStruct, dataStructShape] = self.BytesBufferToTensor(inputDataBuffer[4:])
+                print(f"Received tensor of shape:\t{dataStructShape}")
 
             elif self.PROCESSING_MODE == ProcessingMode.MULTI_TENSOR:
 
                 # Convert input data to multi-tensor list
-                [dataArray, dataArrayShape, numOfTensors] = self.BytesBufferToMultiTensor(inputDataBuffer)
+                [dataStruct, dataStructShape, numOfTensors] = self.BytesBufferToMultiTensor(inputDataBuffer)
                 print(f"Received list of tensors of length:\t{numOfTensors}")
+
+            elif self.PROCESSING_MODE == ProcessingMode.MSG_PACK:
+                
+                # Call msg_pack method for decoding
+                [dataStruct] = self.BytesBufferToMsgPack(inputDataBuffer)
+
+                if 'shape' in dataStruct.keys():
+                    dataStructShape = dataStruct['shape']
+                else:
+                    dataStructShape = None
 
             else:
                 #dataArray = np.array(np.frombuffer(inputDataBuffer[4:], dtype=self.inputTargetType), dtype=self.inputTargetType)
                 dataArrayBuffer = inputDataBuffer
                 try:
-                    dataArray = np.array(np.frombuffer(dataArrayBuffer, dtype=self.inputTargetType), dtype=self.inputTargetType)
-                    dataArrayShape = dataArray.shape
+                    dataStruct = np.array(np.frombuffer(dataArrayBuffer, dtype=self.inputTargetType), dtype=self.inputTargetType)
+                    dataStructShape = dataStruct.shape
 
                 except TypeError as errMsg:
                     print('Data conversion from raw data array to specified target type {targetType} failed with error: {errMsg}\n'.format(
                         targetType=self.inputTargetType, errMsg = str(errMsg)))
             
 
-        return dataArray, dataArrayShape
+        return dataStruct, dataStructShape
     
     def encode(self, processedData):
         '''Data conversion function from numpy array to raw bytes stream'''
@@ -113,6 +121,12 @@ class DataProcessor():
             processedData = self.MultiTensorToBytesBuffer(processedData)
             return processedData
         
+        elif self.PROCESSING_MODE == ProcessingMode.MSG_PACK:
+
+            # Call msg_pack method for encoding
+            processedData = self.MsgPackToBytesBuffer(processedData)
+            return processedData
+
         else:
             return processedData.tobytes()
     
@@ -139,8 +153,6 @@ class DataProcessor():
         dataArray = np.array(np.frombuffer(inputDataBuffer[8+4*(numOfDims-1):], dtype=self.inputTargetType), dtype=self.inputTargetType).reshape(dataArrayShape, order='F')
             
         return dataArray, dataArrayShape
-
-
 
     def TensorToBytesBuffer(self, processedData: np.ndarray) -> bytes:
         """Function to convert input tensor to buffer message. The buffer is generated according to the following format:
@@ -226,7 +238,6 @@ class DataProcessor():
                                    
         return dataArray, dataArrayShape, numOfTensors
 
-
     def MultiTensorToBytesBuffer(self, processedData: Union[list, dict, tuple]) -> bytes:
         """Function to convert multiple tensors in a python container to multiple buffer messages of tensor convention:
         - 4 bytes: number of tensors (messages) (int)
@@ -278,6 +289,42 @@ class DataProcessor():
             raise TypeError('Input data container type not recognized. Please provide a list, tuple or dict.')
         
         return outputBuffer
+
+    def MsgPackToBytesBuffer(self, processedData: dict) -> bytes:
+        """Function to convert a dictionary to a message pack buffer. The dictionary is expected to contain the following keys:
+        - 'data': numpy array data
+        - 'shape': tuple of data shape
+
+        Args:
+            processedData (dict): Input data dictionary # TBC input data
+
+        Returns:
+            bytes: Output bytes buffer
+        """
+
+        if not isinstance(processedData, dict):
+            raise TypeError('Input data must be a dictionary.')
+        
+        # Convert input data to message pack buffer
+        outputBuffer = msgpack.packb(processedData)
+        
+        return outputBuffer
+
+    def BytesBufferToMsgPack(self, inputDataBuffer: bytes) -> dict:
+        """Function to convert a message pack buffer to a dictionary. The buffer is expected to be in the message pack format.
+
+        Args:
+            inputDataBuffer (bytes): Input bytes buffer
+
+        Returns:
+            dict: Output data dictionary
+        """
+
+        # Convert message pack buffer to dictionary
+        outputData = msgpack.unpackb(inputDataBuffer)
+
+        return outputData
+
         
 # %% Request handler class - PeterC + GPT4o- 15-06-2024
 class pytcp_requestHandler(socketserver.BaseRequestHandler):
