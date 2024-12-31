@@ -71,12 +71,32 @@ def defineModelForEval():
     
     return model
          
-def test_TorchWrapperComm():
+def test_TorchWrapperComm_OPNAVlimbBased():
     HOST, PORT = "localhost", 50001
     PORT_MSGPACK = 50002
 
     model = defineModelForEval() # From optuna dbase (hardcoded for testing purposes or quick-n-dirty use)
+
+    '''
+    import json
+    # Test model using same image as in MATLAB script before running server
+    strDataPath = os.path.join("..", "..", "data")
+    ui8Image = ocv.imread(os.path.join(strDataPath, "moon_image_testing.png"))
+
+    with open(os.path.join(strDataPath, "moon_labels_testing.json"), 'r') as f:
+        strImageLabels = json.load(f)
+
+    # Show image
+    ocv.imshow('Input image', ui8Image)
+    ocv.waitKey(1000)
     
+    # Convert image to tensor
+    input_image = torch.tensor(ui8Image, dtype=torch.float32)
+    input_image = input_image.permute(2, 0, 1).unsqueeze(0)
+
+    ocv.destroyAllWindows()
+    '''
+
     def forward_wrapper(inputData, model, processingMode: ProcessingMode):
         
         if processingMode == ProcessingMode.MULTI_TENSOR:
@@ -106,12 +126,18 @@ def test_TorchWrapperComm():
 
         # Evaluate model on input data
         with torch.no_grad():
+
+            # Normalize input image to [0, 1] range
+            input_image = input_image / 255.0
+
+            # Evaluate model
             model.eval()
             print('Input shape: ', input_image.shape)
             print('Input datatype: ', input_image.dtype)
             output = model(input_image)
             print('Model output:', output)
 
+            # Return output
             return output.detach().cpu().numpy()
         
     predictCentroidRange = partial(forward_wrapper, model=model, processingMode=ProcessingMode.MULTI_TENSOR)
@@ -154,6 +180,9 @@ def test_TorchWrapperComm():
         server_msgpack.shutdown()
         server_msgpack.server_close()
     
+
+def test_TorchWrapperComm_FeatureMatching():
+    raise NotImplementedError("Feature matching test not implemented yet.")
 
 # MAIN SCRIPT
 def main():
@@ -198,7 +227,8 @@ def main():
 
 
 if __name__ == "__main__":
-    test_TorchWrapperComm()
+    test_TorchWrapperComm_OPNAVlimbBased()
+    #test_TorchWrapperComm_FeatureMatching()
     #main()
 
 
