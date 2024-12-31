@@ -22,33 +22,64 @@ end
 % Define wrapper object
 % charAddress = "https://dkd7j3xr-50000.euw.devtunnels.ms/";
 charAddress = "127.0.0.1";
-i32PortNumber_multi = 50001;
-
-
-% Define image array to send over TCP
-strDataPath = fullfile("..", "..", "data");
-ui8Image = imread(fullfile(strDataPath, "moon_image_testing.png"));
-[strImageLabels] = JSONdecoder(fullfile(strDataPath, "moon_labels_testing.json"));
+i32PortNumber_multi = 50003; % 50001
 
 %% TEST: evaluating model directly through TensorCommManager
 % Define TensorCommManager instance
-tensorCommManager_multi = TensorCommManager(charAddress, i32PortNumber_multi, 15, "bInitInPlace", true, ...
-                                      "bMULTI_TENSOR", true);
+tensorCommManager_multi = TensorCommManager(charAddress, i32PortNumber_multi, 100, "bInitInPlace", true, ...
+    "bMULTI_TENSOR", true);
 
-% Test send to server of array (auto-wrapping)
-ui8TensorShapedImage = zeros(1,1,size(ui8Image, 1), size(ui8Image, 2), 'uint8');
-ui8TensorShapedImage(1,1,:,:) = ui8Image;
+ui8TestID = 1;
 
-writtenBytes = tensorCommManager_multi.WriteBuffer(ui8TensorShapedImage);
+if ui8TestID == 0
+    % Define image array to send over TCP
+    strDataPath = fullfile("..", "..", "data");
+    ui8Image = imread(fullfile(strDataPath, "moon_image_testing.png"));
+    [strImageLabels] = JSONdecoder(fullfile(strDataPath, "moon_labels_testing.json"));
 
-% Get data back from server
-[cellTensorArray, tensorCommManager_multi] = tensorCommManager_multi.ReadBuffer();
 
-disp(cellTensorArray);
-strCentroidRangePredictions = cell2struct(cellTensorArray, {'Predictions'});
-ShowCentroidRangePredictions(ui8Image, strCentroidRangePredictions, strImageLabels);
+    % Test send to server of array (auto-wrapping)
+    ui8TensorShapedImage = zeros(1,1,size(ui8Image, 1), size(ui8Image, 2), 'uint8');
+    ui8TensorShapedImage(1,1,:,:) = ui8Image;
 
+    writtenBytes = tensorCommManager_multi.WriteBuffer(ui8TensorShapedImage);
+
+    % Get data back from server
+    [cellTensorArray, tensorCommManager_multi] = tensorCommManager_multi.ReadBuffer();
+
+    disp(cellTensorArray);
+    strCentroidRangePredictions = cell2struct(cellTensorArray, {'Predictions'});
+    ShowCentroidRangePredictions(ui8Image, strCentroidRangePredictions, strImageLabels);
+
+elseif ui8TestID == 1
+
+    % Define image array to send over TCP
+    strDataPath = fullfile("/home/peterc/devDir/ML-repos/pyTorchAutoForge/tests/data/test_images", "Bennu");
+    ui8Frame_1 = imread(fullfile(strDataPath, "000001.png"));
+    ui8Frame_2 = imread(fullfile(strDataPath, "000001.png"));
+
+        
+    % Test send to server of array (auto-wrapping)
+    ui8TensorShapedFrame_1 = zeros(1,1,size(ui8Frame_1, 1), size(ui8Frame_1, 2), 'uint8');
+    ui8TensorShapedFrame_2 = zeros(1,1,size(ui8Frame_2, 1), size(ui8Frame_2, 2), 'uint8');
+
+    ui8TensorShapedFrame_1(1,1,:,:) = ui8Frame_1;
+    ui8TensorShapedFrame_2(1,1,:,:) = ui8Frame_2;
+
+    cellTensorImages = {ui8TensorShapedFrame_1, ui8TensorShapedFrame_2};
+
+    writtenBytes = tensorCommManager_multi.WriteBuffer(cellTensorImages);
+
+    % Get data back from server
+    [cellTensorArray, tensorCommManager_multi] = tensorCommManager_multi.ReadBuffer();
+
+    disp(cellTensorArray);
+    ShowFeatureMatchingsPredictions(ui8Frame_1, ui8Frame_2, ...
+        cellTensorArray{1}, cellTensorArray{4});
+
+end
 return
+
 %% TEST: using Torch wrapper object
 % Define torch wrapper
 try
@@ -96,11 +127,11 @@ plot(dxCircle_GT, dyCircle_GT, 'b-', 'DisplayName', 'GroundTruth conic');
 % Add text to display range prediction
 textPosition1 = [10, 10]; % Position for text on the image
 textString1 = sprintf(['Predictions:\n' ...
-                       '  Centroid: [%.2f, %.2f]\n' ...
-                       '  Apparent Radius: %.2f\n' ...
-                       '  Range: %.2f'], ...
-                      dCentroidPrediction(1), dCentroidPrediction(2), ...
-                      dApparentRadiusPrediction, dRangePrediction);
+    '  Centroid: [%.2f, %.2f]\n' ...
+    '  Apparent Radius: %.2f\n' ...
+    '  Range: %.2f'], ...
+    dCentroidPrediction(1), dCentroidPrediction(2), ...
+    dApparentRadiusPrediction, dRangePrediction);
 text(textPosition1(1), textPosition1(2), textString1, 'Color', 'yellow', 'FontSize', 10, 'FontWeight', 'bold', 'VerticalAlignment', 'top');
 
 % Add text to display labels from strImageLabels
