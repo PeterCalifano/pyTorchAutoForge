@@ -367,6 +367,10 @@ def build_block(block_config: BlockConfig) -> nn.Module:
     return nn.Sequential(*layers)
 
 
+
+
+# %% TESTS
+
 def test_block_builder():
     # Define a simple block configuration
     block_config = BlockConfig(

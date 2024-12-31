@@ -167,8 +167,11 @@ class MultiHeadRegressor(nn.Module):
 # %% ModelAutoBuilder class implementation
 
 class ModelAutoBuilder():
-    def __init__(self, modelConfig: Union[ModelConfig]):
+    def __init__(self, modelConfig: ModelConfig):
         self.modelConfig = modelConfig
 
     def build(self):
         pass  # TODO
+
+
+

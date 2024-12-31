@@ -2,14 +2,17 @@
 import torch.nn as nn
 from typing import Union
 from pyTorchAutoForge.api.torch import * 
-from pyTorchAutoForge.modelBuilding.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize
+from pyTorchAutoForge.modelBuilding.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, enumMultiHeadOutMode, MultiHeadRegressor
 from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel, LoadTorchModel
 from pyTorchAutoForge.modelBuilding.modelBuildingFunctions import build_activation_layer
+from pyTorchAutoForge.modelBuilding.ModelMutatorBNtoGN import ModelMutatorBNtoGN
 import inspect, pytest
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as torchFunc
-
+import torch, optuna, os
+import numpy as np
+from torchvision import models
 
 # DEVNOTE TODO change name of this file to "modelBuildingBlocks.py" and move the OLD classes to the file "modelClasses.py" for compatibility with legacy codebase
  
@@ -377,9 +380,506 @@ class TemplateDeepNet_experimental(torchModel):
         return x 
 
 
+class EfficientNetBackbone(nn.Module):
+    def __init__(self, efficient_net_ID, output_type: str = 'last', device='cpu'):
+        super(EfficientNetBackbone, self).__init__()
+
+        self.output_type = output_type
+        self.device = device
+        self.features = []
+
+        if efficient_net_ID == 0:
+            self.modelType = models.efficientnet_b0
+        elif efficient_net_ID == 1:
+            self.modelType = models.efficientnet_b1
+
+        # Remove last Linear classifier and dropout layer (Classifier nn.Sequential module)
+        if self.output_type == 'last':
+            self.feature_extractor = nn.ModuleList(nn.Sequential(
+                *list((self.modelType(weights=True).to(self.device)).children())[:-1]))
+
+        elif self.output_type == 'features':
+            # self._register_hooks()
+            self.feature_extractor = nn.ModuleList(
+                list((self.modelType(weights=True).to(self.device)).children())[0].children())
+
+    def _register_hooks(self):
+        def get_activation(name):
+            def hook(model, input, output):
+                self.features[name] = output
+            return hook
+
+        for name, layer in self.feature_extractor.named_children():
+            if 'blocks' in name:  # Register hook for each block layer
+                for idx, block in enumerate(layer):
+                    block.register_forward_hook(get_activation(f'block_{idx}'))
+
+    def forward(self, x):
+        self.features = []  # Reset features list state
+        for module in self.feature_extractor:
+            # Evaluate each module in the feature extractor
+            x = module(x)
+            # If output type is 'features', append to list to store intermediate features
+            if self.output_type == 'features':
+                self.features.append(x)
+
+        return x if self.output_type == 'last' else self.features
+
 # %% TEST CODE
 def test_model_classes_def():
     pass
 
 if __name__ == "__main__":
     test_model_classes_def()
+
+
+# %% TEMPORARY DEV (from OPERATIVE-DEVELOP)
+
+class MultiScaleRangeRegressor(nn.Module):
+    def __init__(self, headRange_config: dict):
+        super(MultiScaleRangeRegressor, self).__init__()
+
+        self.feature_merger = FeatureMerger_tailoredForV2()  # TODO
+        self.headRange = TemplateDeepNet(headRange_config)
+
+    def forward(self, Xfeatures: list):
+        x = self.feature_merger(Xfeatures)
+        return self.headRange(x)
+
+
+
+class MultiHead_CentroidRange_V1(MultiHeadRegressor):
+    # Centroid head: straight DNN from last layer of backbone
+    # Range head:  straight DNN from last layer of backbone
+    def __init__(self, model_heads: Union[nn.ModuleList, nn.ModuleDict, nn.Module, dict]):
+        super().__init__(model_heads, enumMultiHeadOutMode.Concatenate)
+
+    def forward(self, Xfeatures : Union[list, dict, torch.tensor]):
+        if isinstance(Xfeatures, dict):
+            raise NotImplementedError("Not implemented yet")
+            X = Xfeatures[''] # Get features from last layer of backbone
+
+        elif isinstance(Xfeatures, list):   
+            X = Xfeatures[-1] # Get features from last layer of backbone
+        elif isinstance(Xfeatures, torch.Tensor):
+            X = Xfeatures
+        else:
+            raise ValueError("Input type not supported")
+        
+        return super().forward(X) 
+        
+class MultiHead_CentroidRange_V2(MultiHeadRegressor):
+    # Centroid head: straight DNN from last layer of backbone
+    # Model using features from last layer after adaptive pooling fused with first layer output
+    def __init__(self, heads: Union[nn.ModuleList, nn.ModuleDict, nn.Module, dict]):
+        super().__init__(heads, enumMultiHeadOutMode.Concatenate)
+
+        self.adaptiveAvgPool_size24 = nn.AdaptiveAvgPool2d(output_size=24) # Define adaptive pooling layer to reduce size of last layer output 
+        self.adaptiveAvgPool_size1 = nn.AdaptiveAvgPool2d(output_size=1)
+
+    def forward(self, Xfeatures:  Union[list, dict]):
+
+        # Manually extract entries from Xfeatures
+        if isinstance(Xfeatures, dict):
+            raise NotImplementedError("Not implemented yet")
+            X = Xfeatures['']  # Get features from last layer of backbone
+
+        elif isinstance(Xfeatures, list):
+            
+            # Get features from last layer of backbone
+            Xlast_resized = self.adaptiveAvgPool_size24(Xfeatures[-1])
+            
+            # Manually extract entries from Xfeatures
+            # Use features from last layer of backbone
+            # Use features from last layer of backbone
+            Y_centroid = self.heads[0](
+                self.adaptiveAvgPool_size1(Xlast_resized))
+
+            # Use features from first and last layer of backbone
+            list_of_features = [*Xfeatures[:-1], Xlast_resized]
+            Y_range = self.heads[1](list_of_features)
+
+        else:
+            raise ValueError("Input type not supported")
+
+        return torch.cat((Y_centroid, Y_range), 1)
+        
+
+
+class MultiHead_CentroidRange_V3(MultiHeadRegressor):
+    # Centroid head: straight DNN from last layer of backbone
+    # Range head: Model using features from all layers of the backbone (full-multi scale)
+    def __init__(self, model_heads: Union[nn.ModuleList, nn.ModuleDict, nn.Module, dict]):
+        super().__init__(model_heads, enumMultiHeadOutMode.Concatenate)
+
+    def forward(self, Xfeatures: list):
+        Y_centroid = self.model_heads[0](Xfeatures[-1]) 
+        Y_range = self.model_heads[1](Xfeatures) # Use features from first and last layer of backbone
+        return torch.cat((Y_centroid, Y_range), 1)
+
+
+class MultiHead_CentroidRange_BiFPN(MultiHeadRegressor):
+    # Centroid head: straight DNN from last layer of backbone
+    # Range head: Model using features from all layers of the backbone fused through BiFPN structure
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict, output_mode: enumMultiHeadOutMode = enumMultiHeadOutMode.Concatenate, *args, **kwargs):
+        super().__init__(model_heads, output_mode, *args, **kwargs)
+        raise NotImplementedError("Not implemented yet")
+        pass 
+
+def build_multiHeadV1(feature_extractor: nn.Module, resAdapter: nn.Module, headCentroid_config: dict, headRange_config: dict) -> nn.Module:
+
+    module_list = nn.ModuleList()
+    module_list.append(TemplateDeepNet(headCentroid_config))
+    module_list.append(TemplateDeepNet(headRange_config))
+
+    # Define model
+    multihead = MultiHead_CentroidRange_V1(module_list)
+
+    model = nn.Sequential(resAdapter, feature_extractor, multihead)
+
+    return model
+
+
+# DEVNOTE TODO
+class FeatureMerger_tailoredForV2(nn.Module):
+    def __init__(self):
+        super(FeatureMerger_tailoredForV2, self).__init__()
+
+        self.adaptiveMaxPool112 = nn.AdaptiveMaxPool2d(112)
+
+        # Convolutional block for Layer 1 output processing
+        self.convBlock = nn.Sequential(
+            nn.Conv2d(kernel_size=7, in_channels=32,
+                      out_channels=64, stride=1, padding=0),
+            nn.BatchNorm2d(64),
+            nn.SiLU(),
+            nn.Conv2d(kernel_size=5, in_channels=64,
+                      out_channels=128, stride=1, padding=0),
+            nn.BatchNorm2d(128),
+            nn.Conv2d(kernel_size=5, in_channels=128,
+                      out_channels=256, stride=1, padding=0),
+            nn.BatchNorm2d(256),
+            nn.SiLU(),
+            nn.Conv2d(kernel_size=3, in_channels=256,
+                      out_channels=512, stride=2, padding=0),
+            nn.SiLU()
+        )
+
+        self.adaptiveMaxPool24 = nn.AdaptiveMaxPool2d(24)
+        self.convMerger = nn.Conv2d(
+            1280 + 512, 1280, kernel_size=1, stride=1, padding=0)
+
+        self.adaptiveAvgPool1 = nn.AdaptiveMaxPool2d(1)TemplateDeepNet
+        self.feature_merger = FeatureMerger_tailoredForV2()  # TODO
+        self.headRange = TemplateDeepNet(headRange_config)
+
+    def forward(self, Xfeatures: list):
+        x = self.feature_merger(Xfeatures)
+        return self.headRange(x)
+
+
+def build_multiHeadV2(feature_extractor: nn.Module, resAdapter: nn.Module, headCentroid_config: dict, headRange_config: dict) -> nn.Module:
+
+    module_list = nn.ModuleList()
+    module_list.append(TemplateDeepNet(headCentroid_config))
+    range_head = MultiScaleRangeRegressor(headRange_config)
+
+    module_list.append(range_head)  # TODO: Implement range head for V2
+
+    # Define multihead model
+    multihead = MultiHead_CentroidRange_V2(module_list)
+    model = nn.Sequential(resAdapter, feature_extractor, multihead)
+
+    return model
+
+
+# %% TEMPORARY DEV
+# TODO: make this function generic!
+def ReloadModelFromOptuna(trial: optuna.trial.FrozenTrial, other_params: dict, modelName: str, filepath: str) -> nn.Module:
+
+    num_of_epochs = 125
+    # other_params = dict()
+
+    # Sample decision parameters space
+    # Optimization strategy
+    initial_lr = trial.suggest_float('initial_lr', 1e-4, 1e-2, log=True)
+    batch_size = trial.suggest_int('batch_size', 2, 40, step=8)
+
+    # initial_lr = 5e-4
+    # other_params['initial_lr'] = initial_lr
+    # batch_size = 20
+    # other_params['batch_size'] = batch_size
+
+    # Model
+    # use_default_size = trial.suggest_int('use_default_size', 0, 1)
+    # efficient_net_ID = trial.suggest_int('efficient_net_ID', 0, 1)
+
+    try:
+        regressor_arch_version = trial.suggest_int(
+            'regressor_arch_version', 1, 2)
+    except:
+        other_params['regressor_arch_version'] = 1
+        regressor_arch_version = other_params['regressor_arch_version']
+
+    # dropout_coeff_multiplier = trial.suggest_int('dropout_coeff_multiplier', 0, 10, step=1)
+    dropout_coeff_multiplier = 0
+    use_batchnorm = 0
+
+    try:
+        image_adapter_strategy = trial.suggest_categorical(
+            'image_adapter_strategy', ['resize_copy', 'conv_adapter'])
+    except:
+        other_params['image_adapter_strategy'] = 'resize_copy'
+        image_adapter_strategy = other_params['image_adapter_strategy']
+
+    try:
+        mutate_to_groupnorm = trial.suggest_int('mutate_to_groupnorm', 0, 1)
+    except:
+        other_params['mutate_to_groupnorm'] = 1
+        mutate_to_groupnorm = other_params['mutate_to_groupnorm']
+
+    loss_type = trial.suggest_categorical('loss_type', ['mse', 'huber'])
+
+    # use_batchnorm = trial.suggest_int('use_batchnorm', 0, 1)
+    num_of_regressor_layers_H1 = trial.suggest_int(
+        'num_of_regressor_layers_H1', 3, 7)
+    num_of_regressor_layers_H2 = trial.suggest_int(
+        'num_of_regressor_layers_H2', 3, 7)
+
+    scheduler = trial.suggest_categorical(
+        'lr_scheduler_name', ['cosine_annealing_restarts', 'exponential_decay'])
+
+    if scheduler == 'cosine_annealing_restarts':
+        T0_WarmAnnealer = trial.suggest_int('T0_WarmAnnealer', np.floor(
+            0.85 * num_of_epochs), 3*num_of_epochs, step=5)
+        lr_min = trial.suggest_float('lr_min', 1e-8, 1e-5, log=True)
+
+    elif scheduler == 'exponential_decay':
+        gamma = trial.suggest_float('gamma', 0.900, 0.999, step=0.005)
+
+    # Define regressor architecture for centroid prediction
+    out_channels_sizes_H1 = []
+    out_channels_sizes_H1.append(2)  # Output layer
+
+    for i in range(num_of_regressor_layers_H1):
+        out_channels_sizes_H1.append(2**(i+5))
+
+    out_channels_sizes_H1.reverse()
+    other_params['out_channels_sizes_H1'] = out_channels_sizes_H1
+
+    out_channels_sizes_H2 = []
+    out_channels_sizes_H2.append(2)  # Output layer
+
+    # Define regressor architecture for range prediction
+    for i in range(num_of_regressor_layers_H2):
+        out_channels_sizes_H2.append(2**(i+5))
+
+    out_channels_sizes_H2.reverse()
+    other_params['out_channels_sizes_H2'] = out_channels_sizes_H2
+
+    # Build regression layers with decreasing number of channels as powers of 2
+    other_params['model_definition_mode'] = 'multihead'
+    model_definition_mode = other_params['model_definition_mode']
+
+    # Print the parameters
+    print(f"Parameters: \n"
+          f"initial_lr: {initial_lr}\n"
+          f"batch_size: {batch_size}\n"
+          f"dropout_coeff_multiplier: {dropout_coeff_multiplier}\n"
+          f"use_batchnorm: {use_batchnorm}\n"
+          f"mutate_to_groupnorm: {mutate_to_groupnorm}\n"
+          f"loss_type: {loss_type}\n"
+          f"num_of_regressor_layers_H1: {num_of_regressor_layers_H1}\n"
+          f"num_of_regressor_layers_H2: {num_of_regressor_layers_H2}\n"
+          f"lr_scheduler_name: {scheduler}\n"
+          f"out_channels_sizes_H1: {out_channels_sizes_H1}\n"
+          f"out_channels_sizes_H2: {out_channels_sizes_H2}\n"
+          f"model_definition_mode: {model_definition_mode}\n"
+          f"image_adapter_strategy: {image_adapter_strategy}\n"
+          f"regressor_arch_version: {regressor_arch_version}\n")
+
+    if scheduler == 'cosine_annealing_restarts':
+        print(f"T0_WarmAnnealer: {T0_WarmAnnealer}\n"
+              f"lr_min: {lr_min}\n")
+    elif scheduler == 'exponential_decay':
+        print(f"gamma: {gamma}\n")
+
+    # Define model
+    model = DefineModel(trial, other_params)
+
+    # Load model parameters
+    model = LoadTorchModel(model, os.path.join(filepath, modelName), False)
+
+    # Loading validation
+    validateDictLoading(model, modelName, filepath)
+
+    return model
+
+
+def validateDictLoading(model: nn.Module | nn.ModuleDict | nn.ModuleList, modelName: str, filepath: str):
+
+    # Load the saved state dict (just to compare)
+    checkpoint = torch.load(os.path.join(filepath, modelName+'.pth'))
+    saved_state_dict = checkpoint['state_dict'] if 'state_dict' in checkpoint else checkpoint
+
+    # Get the current state dict from the model
+    current_state_dict = model.state_dict()
+
+    # Check if the model's parameters match the saved parameters
+    for param_name in current_state_dict:
+        if not torch.equal(current_state_dict[param_name], saved_state_dict[param_name]):
+            raise ValueError(f"Mismatch found in parameter: {param_name}")
+
+    else:
+        print("All model parameters are correctly loaded.")
+
+
+def DefineModel(trial: optuna.trial.Trial | optuna.trial.FrozenTrial, other_params: dict):
+
+    # Decision parameters
+    # use_default_size = trial.params['use_default_size']
+    if 'efficient_net_ID' in trial.params.keys():
+        efficient_net_ID = trial.params['efficient_net_ID']
+    else:
+        efficient_net_ID = 0
+
+    if efficient_net_ID == 0:
+        input_size = 224
+    elif efficient_net_ID == 1:
+        input_size = 240
+
+    if 'input_size' in other_params.keys():
+        input_size = other_params['input_size']
+        print(f"Overriding backbone default input size. Using:", input_size)
+
+    # Define EfficientNet backbone output size
+    efficientNet_output_size = 1280
+    # DEVNOTE: EfficientNet architecture has 1280 feature maps from the last Conv2dNormActivation block.
+    # The adaptive average pooling synthesizes each feature map in a single value to avoid need for flattening or reshaping.
+
+    regressor_arch_version = trial.params['regressor_arch_version'] if 'regressor_arch_version' in trial.params.keys(
+    ) else other_params['regressor_arch_version']
+
+    if 'model_definition_mode' in other_params.keys():
+        model_definition = other_params['model_definition_mode']
+
+        if model_definition == 'multihead' and regressor_arch_version == 1:
+            output_type = 'last'
+        elif model_definition == 'multihead' and regressor_arch_version == 2:
+            output_type = 'features'
+        elif model_definition == 'centroid_only':
+            output_type = 'last'
+
+    else:
+        model_definition = 'centroid_only'
+        output_type = ' last'
+
+    feature_extractor = EfficientNetBackbone(
+        efficient_net_ID, output_type=output_type)
+
+    if 'dropout_probability' in trial.params.keys():
+        dropout_coeff = trial.params['dropout_probability']
+    else:
+        dropout_coeff = 0
+
+    if 'use_batchnorm' in trial.params.keys():
+        use_batchnorm = trial.params['use_batchnorm']
+    else:
+        use_batchnorm = 0
+
+    if "image_adapter_strategy" in trial.params.keys():
+        image_adapter_strategy = trial.params["image_adapter_strategy"]
+    elif "image_adapter_strategy" in other_params.keys():
+        image_adapter_strategy = other_params["image_adapter_strategy"]
+    else:
+        image_adapter_strategy = 'conv_adapter'
+
+    # Define adapter model to bring resolution down to feature_extractor input size
+    if image_adapter_strategy == 'conv_adapter':
+
+        if 'mutate_to_groupnorm' in trial.params.keys():
+            if trial.params['mutate_to_groupnorm'] == 1:
+                feature_extractor = (ModelMutatorBNtoGN(
+                    feature_extractor, 32)).MutateBNtoGN()
+
+        resAdapter = conv2dResolutionAdapter([input_size, input_size], [1, 3])
+
+    elif image_adapter_strategy == 'resize_copy':
+
+        # if 'mutate_to_groupnorm' in trial.params.keys():
+        #    if trial.params['mutate_to_groupnorm'] == 1:
+        #        mlflow.start_run() # Start new run to log that it is invalid
+        #        mlflow.log_param("invalid_trial", True)
+        #        mlflow.log_param("image_adapter_strategy", image_adapter_strategy)
+        #        mlflow.log_param("mutate_to_groupnorm", trial.params['mutate_to_groupnorm'])
+        #        mlflow.end_run(status="KILLED")
+        #        optuna.TrialPruned() # Prevent trial to be executed (Combination of parameters is not valid). Batch norm statistics must be preserved.
+
+        if 'mutate_to_groupnorm' in trial.params.keys():
+            if trial.params['mutate_to_groupnorm'] == 1:
+                feature_extractor = (ModelMutatorBNtoGN(
+                    feature_extractor, 32)).MutateBNtoGN()
+
+        resAdapter = resizeCopyAdapter(output_size=[input_size, input_size], num_channels=[
+                                       1, 3], interp_method='bicubic')  # ACHTUNG: trilinear is for volumetric data
+
+        # Freeze EfficientNet backbone in this strategy
+        # feature_extractor.requires_grad_(False)
+
+    # NOTE: expected input size is 240x240, 3 channels
+    # Expected output for EfficientNet-B1 feature extractor, the shape of the extracted features before the final classification layer
+    # will be approximately (batch_size, 1280, 7, 7) (which represents the spatial dimensions and channels of the last convolutional block)
+    # NOTE: but... does using only last layer output implies using only higher level features?
+    # print("EfficientNet B model: \n", feature_extractor)
+
+    if 'model_definition_mode' in other_params.keys():
+        model_definition = other_params['model_definition_mode']
+    else:
+        model_definition = 'centroid_only'
+
+    if model_definition == 'centroid_only':
+        out_channels_sizes = other_params['out_channels_sizes']
+
+        headCentroid_config = {
+            'input_size': efficientNet_output_size,
+            'useBatchNorm': use_batchnorm,
+            'alphaDropCoeff': dropout_coeff,
+            'alphaLeaky': 0.0,
+            'outChannelsSizes': out_channels_sizes
+        }
+
+        model = nn.Sequential(resAdapter, feature_extractor,
+                              TemplateDeepNet(headCentroid_config))
+        return model
+
+    elif model_definition == 'multihead':
+
+        out_channels_sizes_H1 = other_params['out_channels_sizes_H1']
+        out_channels_sizes_H2 = other_params['out_channels_sizes_H2']
+
+        headCentroid_config = {
+            'input_size': efficientNet_output_size,
+            'useBatchNorm': use_batchnorm,
+            'alphaDropCoeff': dropout_coeff,
+            'alphaLeaky': 0.0,
+            'outChannelsSizes': out_channels_sizes_H1
+        }
+
+        # Define Regression head
+        headRange_config = {
+            'input_size': efficientNet_output_size,
+            'useBatchNorm': use_batchnorm,
+            'alphaDropCoeff': dropout_coeff,
+            'alphaLeaky': 0.0,
+            'outChannelsSizes': out_channels_sizes_H2
+        }
+
+        if regressor_arch_version == 1:
+            model = build_multiHeadV1(
+                feature_extractor, resAdapter, headCentroid_config, headRange_config)
+
+        elif regressor_arch_version == 2:
+            model = build_multiHeadV2(
+                feature_extractor, resAdapter, headCentroid_config, headRange_config)
+
+        return model

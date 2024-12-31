@@ -3,9 +3,10 @@ from torch import nn
 from torch.utils.data import DataLoader
 from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding
 from pyTorchAutoForge.optimization.ModelTrainingManager import TrainModel, ValidateModel
-from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel
+from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel, LoadTorchModel
 import numpy as np
 import os, copy
+import torch
 
 
 class HyperParamOptimManagerConfig():
