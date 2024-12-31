@@ -9,10 +9,131 @@
 #sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/LimbBasedNavigationAtMoon'))
 
 import numpy as np
-
+import threading, os, sys, optuna
 # Custom imports
-import pyTorchAutoForge
-import tcpServerPy
+from pyTorchAutoForge.api.tcp import tcpServerPy
+from pyTorchAutoForge.api.tcp.tcpServerPy import DataProcessor, pytcp_server, pytcp_requestHandler, ProcessingMode
+import torch
+from torch import nn
+from pyTorchAutoForge.modelBuilding.modelClasses import ReloadModelFromOptuna
+from functools import partial
+
+# Define processing function for model evaluation (OPNAV limb based)
+
+def defineModelForEval():
+    # NOTE: before using this function make sure the paths are correct
+    hostname = os.uname().nodename
+    trial_ID = None
+
+    if hostname == 'peterc-desktopMSI':
+            OPTUNA_DB_PATH = '/media/peterc/6426d3ea-1f91-40b7-93ab-7f00d034e5cd/optuna_storage'
+            studyName = 'fullDiskRangeConvNet_HyperParamsOptim_ModelAdapterLossStrategy_GaussNoiseBlurShift_V6_19'
+            filepath = os.path.join(
+                "/media/peterc/6426d3ea-1f91-40b7-93ab-7f00d034e5cd/optuna_storage", "optuna_trials_best_models")
+
+    elif hostname == 'peterc-recoil':
+        OPTUNA_DB_PATH = '/home/peterc/devDir/operative/operative-develop/optuna_storage'
+        studyName = 'fullDiskRangeConvNet_HyperParamsOptim_ModelLossStrategy_IntensityGaussNoiseBlurShift_reducedV6_612450306419870030'
+        filepath = os.path.join(
+            OPTUNA_DB_PATH, "optuna_trials_best_models")
+    else:
+        raise ValueError("Hostname not recognized.")
+
+    # Check if the database exists
+    if not os.path.exists(os.path.join(OPTUNA_DB_PATH, studyName+'.db')):
+        raise ValueError(f"Database {studyName}.db not found.")
+
+    # Load the study from the database
+    study = optuna.load_study(study_name=studyName,
+                            storage='sqlite:///{studyName}.db'.format(studyName=os.path.join(OPTUNA_DB_PATH, studyName)))
+
+    # Get the trial
+    if trial_ID == None:
+        evaluation_trial = study.best_trial
+    else:
+        evaluation_trial = study.trials[trial_ID]
+
+    run_name = evaluation_trial.user_attrs['mlflow_name']
+
+    files = os.listdir(filepath)
+    # Find the file that starts with the run_name
+    matching_file = next(
+        (f for f in files if f.startswith(run_name)), None)
+
+    if matching_file:
+        print(f"Matching file: {matching_file}")
+    else:
+        raise ValueError("No matching file found.")
+
+    model = ReloadModelFromOptuna(
+        evaluation_trial, {}, matching_file.replace('.pth', ''), filepath)
+    
+    return model
+         
+def test_TorchWrapperComm():
+    HOST, PORT = "localhost", 50001
+    PORT_MSGPACK = 50002
+
+    model = defineModelForEval() # From optuna dbase (hardcoded for testing purposes or quick-n-dirty use)
+    
+    def forward_wrapper(model, inputData, processingMode: ProcessingMode):
+        
+        if processingMode == ProcessingMode.MULTI_TENSOR:
+            # Convert input data to torch tensor
+            input_image = torch.tensor(inputData[0], dtype=torch.float32)
+        elif processingMode == ProcessingMode.MSG_PACK:
+            # Convert input data to torch tensor
+            input_image = torch.tensor(inputData['data'], dtype=torch.float32)
+        else:
+            raise ValueError("Processing mode not recognized.")
+
+        # Evaluate model on input data
+        with torch.no_grad():
+            model.eval()
+            output = model(input_image)
+            print('Model output:', output)
+            return output
+        
+    predictCentroidRange = partial(forward_wrapper, model=model, processingMode=ProcessingMode.MULTI_TENSOR)
+
+    predictCentroidRange_msgpack = partial(
+        forward_wrapper, model=model, processingMode=ProcessingMode.MSG_PACK)
+
+    # Create a DataProcessor instance
+    processor_multitensor = DataProcessor(
+        predictCentroidRange, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MULTI_TENSOR)
+
+    processor_msgpack = DataProcessor(
+        predictCentroidRange_msgpack, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MSG_PACK)
+
+    # Create and start the server in a separate thread
+    server = pytcp_server(
+        (HOST, PORT), pytcp_requestHandler, processor_multitensor)
+    
+    server_msgpack = pytcp_server(
+        (HOST, PORT_MSGPACK), pytcp_requestHandler, processor_msgpack)
+    
+    # Run the server in a separate thread
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon = True # Exit the server thread when the main thread terminates
+    server_thread.start() # Start the server thread
+
+    server_thread_msgpack = threading.Thread(
+        target=server_msgpack.serve_forever)
+    server_thread_msgpack.daemon = True
+    server_thread_msgpack.start()
+
+    # NOTE: client is MATLAB-side in this case! Server must be closed manually
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print('Servers are shutting down...')
+        server.shutdown()
+        server.server_close()
+        server_msgpack.shutdown()
+        server_msgpack.server_close()
+    
 
 # MAIN SCRIPT
 def main():
@@ -54,7 +175,10 @@ def main():
             server.shutdown()
             server.server_close()
 
+
+
 if __name__ == "__main__":
-    main()
+    test_TorchWrapperComm()
+    #main()
 
 

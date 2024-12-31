@@ -864,10 +864,8 @@ def test_tcp_server_msgpack():
         assert (processed_shape == example_image.shape).all(), 'Processed data shape does not match!'
         assert processed_data_bytes == input_data_msgpack_bytes, 'Processed data dict does not match input data dict!'
 
-
     server.shutdown()
     server.server_close()
-
 
 if __name__ == "__main__":
     test_data_processor_tensor_mode_1D()
