@@ -16,11 +16,12 @@ import socket
 import time
 import threading
 import sys
-import msgpack
+import msgpack, msgpack_numpy
 
 # TODO by gdd:
 # Modify handling --> Specialize each handle instead of passing the function to process.
 # tcp server does not require specialization to store data processor.
+# TODO: Fix typing errors in the code
 
 # Check documentation page before coding: https://docs.python.org/3/library/abc.html
 
@@ -100,7 +101,7 @@ class DataProcessor():
             elif self.PROCESSING_MODE == ProcessingMode.MSG_PACK:
 
                 # Call msg_pack method for decoding
-                [dataStruct] = self.BytesBufferToMsgPack(inputDataBuffer)
+                dataStruct = self.BytesBufferToMsgPack(inputDataBuffer)
 
                 if 'shape' in dataStruct.keys():
                     dataStructShape = dataStruct['shape']
@@ -118,8 +119,9 @@ class DataProcessor():
                 except TypeError as errMsg:
                     print('Data conversion from raw data array to specified target type {targetType} failed with error: {errMsg}\n'.format(
                         targetType=self.inputTargetType, errMsg=str(errMsg)))
-
-        return dataStruct, dataStructShape
+            return dataStruct, dataStructShape
+        else:
+            return inputDataBuffer, inputDataBuffer.shape
 
     def serialize(self, processedData):
         '''Data conversion function from numpy array to raw bytes stream'''
@@ -316,7 +318,7 @@ class DataProcessor():
 
         return outputBuffer
 
-    def MsgPackToBytesBuffer(self, processedData: dict) -> bytes:
+    def MsgPackToBytesBuffer(self, processedData: dict | np.ndarray | Tensor ) -> bytes:
         """Function to convert a dictionary to a message pack buffer. The dictionary is expected to contain the following keys:
         - 'data': numpy array data
         - 'shape': tuple of data shape
@@ -328,8 +330,25 @@ class DataProcessor():
             bytes: Output bytes buffer
         """
 
-        if not isinstance(processedData, dict):
-            raise TypeError('Input data must be a dictionary.')
+        if not isinstance(processedData, dict) and isinstance(processedData, (np.ndarray, Tensor)):
+            # Attempt encapsulation if not a dictionary
+            processedData = {'data': processedData, 'shape': processedData.shape}
+
+        elif not isinstance(processedData, dict):
+            raise TypeError(
+                'Input data must be a dictionary object, a numpy.ndarray or a torch.tensor.')
+
+        # Perform type checking for entries of dictionary
+        for key, value in processedData.items():
+            if isinstance(value, (np.ndarray | Tensor)):
+                # If numpy arrays or torch tensors in dict, convert to lists
+                processedData[key] = value.tolist()
+            elif not(isinstance(value, (list, tuple, str, int, float))):
+                # If not another type known to msgpack, raise error
+                raise TypeError('Input data type must be known to msgpack!')
+            
+            elif isinstance(value, dict):
+                raise NotImplementedError('Throwing error to avoid incorrect serialization: input item type is dict, but recursive type checking is not implemented yet.')
 
         # Convert input data to message pack buffer
         outputBuffer = msgpack.packb(processedData)
@@ -348,6 +367,12 @@ class DataProcessor():
 
         # Convert message pack buffer to dictionary
         outputData = msgpack.unpackb(inputDataBuffer)
+
+        # Convert all lists to numpy arrays
+        for key, value in outputData.items():
+
+            if isinstance(value, (list | tuple)):
+                outputData[key] = np.array(value)
 
         return outputData
 
@@ -780,12 +805,12 @@ def test_tcp_server_msgpack():
     HOST, PORT = "localhost", 9998
 
     # Create a DataProcessor instance
-    processor_multitensor = DataProcessor(
+    processor_msgpack = DataProcessor(
         dummy_processing_function_msgpack, inputTargetType=np.float32, BufferSizeInBytes=1024, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MSG_PACK)
 
     # Create and start the server in a separate thread
     server = pytcp_server(
-        (HOST, PORT), pytcp_requestHandler, processor_multitensor)
+        (HOST, PORT), pytcp_requestHandler, processor_msgpack)
     server_thread = threading.Thread(target=server.serve_forever)
     server_thread.daemon = True
     server_thread.start()
@@ -808,13 +833,36 @@ def test_tcp_server_msgpack():
         input_data_msgpack = {'data': example_image, 'shape': example_image.shape}
 
         # Create a message pack buffer
-        input_data_msgpack_bytes = processor_multitensor.MsgPackToBytesBuffer(input_data_msgpack)
+        input_data_msgpack_bytes = processor_msgpack.MsgPackToBytesBuffer(
+            input_data_msgpack)
 
         # Send data to server
         client.sendall(len(input_data_msgpack_bytes).to_bytes(4, 'little') + input_data_msgpack_bytes)
+        time.sleep(0.5)
 
         # Receive processed data from server
         data_length = int.from_bytes(client.recv(4), 'little')
+        processed_data_bytes = client.recv(data_length)
+
+        # Convert from msgpack to dictionary
+        processed_data_dict = processor_msgpack.BytesBufferToMsgPack(
+            processed_data_bytes)
+
+        # Get data from dict
+        processed_data = processed_data_dict['data']
+        processed_shape = processed_data_dict['shape']
+
+        # Show image in dict
+        print('Processed data: ', processed_data.shape)
+        
+        import cv2 as ocv
+        ocv.imshow('Processed image', processed_data)
+        ocv.waitKey(2000)
+        ocv.destroyAllWindows()
+
+        # Assertions
+        assert (processed_shape == example_image.shape).all(), 'Processed data shape does not match!'
+        assert processed_data_bytes == input_data_msgpack_bytes, 'Processed data dict does not match input data dict!'
 
 
     server.shutdown()
