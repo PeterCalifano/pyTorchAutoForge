@@ -33,6 +33,8 @@ certifi==2024.8.30
 chardet==5.2.0
 charset-normalizer==3.3.2
 click==8.1.7
+opencv-contrib-python==4.10.0
+pynvml==12.0.0
 cloud-init==24.4
 cloudpickle==3.0.0
 colcon-argcomplete==0.3.3
