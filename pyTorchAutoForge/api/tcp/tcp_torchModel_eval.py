@@ -8,6 +8,7 @@
 #sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch'))
 #sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/LimbBasedNavigationAtMoon'))
 
+from socket import AI_PASSIVE
 import numpy as np
 import threading, os, sys, optuna
 # Custom imports
@@ -18,13 +19,16 @@ from torch import nn
 from pyTorchAutoForge.modelBuilding.modelClasses import ReloadModelFromOptuna
 from functools import partial
 import cv2 as ocv
+from pyTorchAutoForge.utils import GetDevice 
 
 # Define processing function for model evaluation (OPNAV limb based)
 
-def defineModelForEval():
+def defineModelForEval_OPNAVlimbBased():
     # NOTE: before using this function make sure the paths are correct
     hostname = os.uname().nodename
     trial_ID = None
+
+    torch.set_grad_enabled(mode=False)
 
     if hostname == 'peterc-desktopMSI':
             OPTUNA_DB_PATH = '/media/peterc/6426d3ea-1f91-40b7-93ab-7f00d034e5cd/optuna_storage'
@@ -69,13 +73,30 @@ def defineModelForEval():
     model = ReloadModelFromOptuna(
         evaluation_trial, {}, matching_file.replace('.pth', ''), filepath)
     
+    device = GetDevice()
+    print('Loaded model on device: ', device)
+    
+    return model.to(device=device)
+
+
+def defineModelEval_FeatureMatching():
+    # Define SuperGluePretrainedNetwork path
+    REPO_SUPERGLUE_PATH = '/home/peterc/devDir/ML-repos/SuperGluePretrainedNetwork_PeterCdev'
+    sys.path.append(REPO_SUPERGLUE_PATH)
+
+    from match_pairs_custom import DefineSuperPointSuperGlueModel
+
+    torch.set_grad_enabled(mode=False)
+
+    model = DefineSuperPointSuperGlueModel()
+
     return model
-         
+
 def test_TorchWrapperComm_OPNAVlimbBased():
     HOST, PORT = "localhost", 50001
     PORT_MSGPACK = 50002
 
-    model = defineModelForEval() # From optuna dbase (hardcoded for testing purposes or quick-n-dirty use)
+    model = defineModelForEval_OPNAVlimbBased() # From optuna dbase (hardcoded for testing purposes or quick-n-dirty use)
 
     '''
     import json
@@ -97,7 +118,7 @@ def test_TorchWrapperComm_OPNAVlimbBased():
     ocv.destroyAllWindows()
     '''
 
-    def forward_wrapper(inputData, model, processingMode: ProcessingMode):
+    def forward_wrapper_OPNAVlimbBased(inputData, model, processingMode: ProcessingMode):
         
         if processingMode == ProcessingMode.MULTI_TENSOR:
             # Check input data
@@ -140,10 +161,10 @@ def test_TorchWrapperComm_OPNAVlimbBased():
             # Return output
             return output.detach().cpu().numpy()
         
-    predictCentroidRange = partial(forward_wrapper, model=model, processingMode=ProcessingMode.MULTI_TENSOR)
+    predictCentroidRange = partial(forward_wrapper_OPNAVlimbBased, model=model, processingMode=ProcessingMode.MULTI_TENSOR)
 
     predictCentroidRange_msgpack = partial(
-        forward_wrapper, model=model, processingMode=ProcessingMode.MSG_PACK)
+        forward_wrapper_OPNAVlimbBased, model=model, processingMode=ProcessingMode.MSG_PACK)
 
     # Create a DataProcessor instance
     processor_multitensor = DataProcessor(
@@ -180,11 +201,69 @@ def test_TorchWrapperComm_OPNAVlimbBased():
         server_msgpack.shutdown()
         server_msgpack.server_close()
     
-
 def test_TorchWrapperComm_FeatureMatching():
-    raise NotImplementedError("Feature matching test not implemented yet.")
+    HOST, PORT = "localhost", 50003
 
-# MAIN SCRIPT
+    # Hardcoded for quick-n-dirty use
+    model = defineModelEval_FeatureMatching()
+
+    def forward_wrapper_FeatureMatching(inputData, model, processingMode: ProcessingMode):
+        if processingMode == ProcessingMode.MULTI_TENSOR:
+            
+            # Get input images pair
+            print('Input data type: ', type(inputData))
+            assert isinstance(inputData, list)
+
+            if isinstance(inputData, list | tuple):
+                assert len(inputData) == 2
+                # Convert input data to torch tensor and normalize to [0, 1] range
+                input_image1 = torch.tensor(inputData[0], dtype=torch.float32)/255.0
+
+                input_image2 = torch.tensor(inputData[1], dtype=torch.float32)/255.0
+            else:
+                raise ValueError("Input data type not valid. Must be a list or a tuple.")
+            
+        else:
+            raise ValueError("Processing mode not supported.")
+
+        # Evaluate model on input data and convert to ndarrays
+        predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2})
+        predictedMatchesDict = {k: v[0].cpu().numpy()
+                                for k, v in predictedMatchesDict.items()}
+
+        do_ransac_essential = False
+        if do_ransac_essential:
+            pass # TODO implement ransac step using essential matrix 
+
+        # Return output dictionary (keypoints0, keypoints1, matches0, matching_scores0)
+        return predictedMatchesDict
+        
+    # Define function for data processor
+    featureMatcherForward = partial(
+        forward_wrapper_FeatureMatching, model=model, processingMode=ProcessingMode.MULTI_TENSOR)
+
+    # Create a DataProcessor instance
+    processor_multitensor = DataProcessor(
+        featureMatcherForward, inputTargetType=np.float32, BufferSizeInBytes=1024, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MULTI_TENSOR)
+
+    # Create and start the server in a separate thread
+    server = pytcp_server(
+        (HOST, PORT), pytcp_requestHandler, processor_multitensor)
+
+    # Run the server in a separate thread
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon = True  # Exit the server thread when the main thread terminates
+    server_thread.start()  # Start the server thread
+
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print('Servers are shutting down...')
+        server.shutdown()
+        server.server_close()
+
+# MAIN SCRIPT (TODO: need to be adapted)
 def main():
     print('\n\n----------------------------------- RUNNING: torchModelOverTCP.py -----------------------------------\n')
     print("MAIN script operations: initialize always-on server --> listen to data from client --> if OK, evaluate model --> if OK, return output to client\n")
@@ -227,8 +306,8 @@ def main():
 
 
 if __name__ == "__main__":
-    test_TorchWrapperComm_OPNAVlimbBased()
-    #test_TorchWrapperComm_FeatureMatching()
+    #test_TorchWrapperComm_OPNAVlimbBased()
+    test_TorchWrapperComm_FeatureMatching()
     #main()
 
 

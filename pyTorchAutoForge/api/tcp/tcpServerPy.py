@@ -22,7 +22,7 @@ import msgpack, msgpack_numpy
 # Modify handling --> Specialize each handle instead of passing the function to process.
 # tcp server does not require specialization to store data processor.
 # TODO: Fix typing errors in the code
-
+# TODO: Add capability to transfer uint8 (for images) instead of floats (1/4 of bytes per pixel)
 # Check documentation page before coding: https://docs.python.org/3/library/abc.html
 
 
