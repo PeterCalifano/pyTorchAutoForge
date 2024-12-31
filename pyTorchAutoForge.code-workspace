@@ -4,10 +4,7 @@
 			"path": "."
 		},
 		{
-			"path": "../vbn-ai-dart"
-		},
-		{
-			"path": "../operative/operative-develop"
+			"path": "../../operative/operative-develop"
 		}
 	],
 	"settings": {}

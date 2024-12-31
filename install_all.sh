@@ -5,7 +5,7 @@ sudo apt install python3.11 python3.11-venv # Install python3-venv
 python3.11 -m venv .venvTorch # Create virtual environment
 source .venvTorch/bin/activate # Activate virtual environment
 pip install -r requirements.txt --require-virtualenv # Install dependencies
-pip install . --require-virtualenv # Install the package
+pip install . --require-virtualenv -e # Install the package in editable mode
 
 # Install sphinx and theme, and build the documentation
 pip install sphinx sphinx_rtd_theme --require-virtualenv

@@ -11,7 +11,7 @@ cd ../.. # Go to the root directory of the project
 python3.11 -m venv .venvTorch # Create virtual environment
 source .venvTorch/bin/activate # Activate virtual environment
 pip install -r $SCRIPT_DIR/requirements.txt --require-virtualenv # Install dependencies
-pip install $SCRIPT_DIR --require-virtualenv # Install the package
+pip install $SCRIPT_DIR --require-virtualenv -e # Install the package in editable mode
 cd $SCRIPT_DIR
 
 # Install sphinx and theme, and build the documentation
