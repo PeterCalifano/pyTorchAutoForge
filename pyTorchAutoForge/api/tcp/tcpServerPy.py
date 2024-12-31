@@ -81,7 +81,7 @@ class DataProcessor():
 
         return self.serialize(processedData)
 
-    def deserialize(self, inputDataBuffer: bytes) -> tuple[np.ndarray, tuple[int]]:
+    def deserialize(self, inputDataBuffer: bytes) -> tuple[np.ndarray | list[np.ndarray] | dict, tuple[int]]:
         '''Data conversion function from raw bytes stream to specified target numpy type with specified shape'''
         if not isinstance(inputDataBuffer, self.inputTargetType):
 

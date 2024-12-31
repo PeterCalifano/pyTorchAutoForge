@@ -79,9 +79,16 @@ def test_TorchWrapperComm():
     def forward_wrapper(model, inputData, processingMode: ProcessingMode):
         
         if processingMode == ProcessingMode.MULTI_TENSOR:
+            # Check input data
+            assert isinstance(inputData, list) and len(inputData) == 1
+
             # Convert input data to torch tensor
             input_image = torch.tensor(inputData[0], dtype=torch.float32)
+
         elif processingMode == ProcessingMode.MSG_PACK:
+            # Check input data
+            assert isinstance(inputData, dict) and 'data' in inputData
+            
             # Convert input data to torch tensor
             input_image = torch.tensor(inputData['data'], dtype=torch.float32)
         else:
