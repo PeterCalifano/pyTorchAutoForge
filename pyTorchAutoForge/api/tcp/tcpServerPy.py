@@ -428,7 +428,7 @@ class pytcp_requestHandler(socketserver.BaseRequestHandler):
                     dataBuffer += packet
 
                 # SERVER SHUTDOWN COMMAND HANDLING
-                if len(dataBuffer) == 8 and dataBuffer.deserialize('utf-8'.strip().lower()) == 'shutdown':
+                if len(dataBuffer) == 8 and dataBuffer.decode('utf-8'.strip().lower()) == 'shutdown':
                     print("Shutdown command received. Shutting down server...")
                     # Shut down the server
                     self.server.server_close()
