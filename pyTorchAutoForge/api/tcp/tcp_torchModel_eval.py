@@ -120,9 +120,9 @@ def test_TorchWrapperComm_OPNAVlimbBased():
         input_image_toshow = np.array(input_image_.permute(1, 2, 0).numpy().astype('uint8'))
 
         # Show received image
-        ocv.imshow('Input image', input_image_toshow)
-        ocv.waitKey(1000)
-        ocv.destroyAllWindows()
+        #ocv.imshow('Input image', input_image_toshow)
+        #ocv.waitKey(1000)
+        #ocv.destroyAllWindows()
 
         # Evaluate model on input data
         with torch.no_grad():
