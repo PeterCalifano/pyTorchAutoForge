@@ -25,6 +25,9 @@ Brotli==1.1.0
 opencv-python==4.10.0
 kornia==0.7.4
 seaborn==0.13.2
+colorama==0.4.6
+albumentations==1.4.24
+pytest==8.3.4
 cachetools==5.5.0
 certifi==2024.8.30
 chardet==5.2.0
