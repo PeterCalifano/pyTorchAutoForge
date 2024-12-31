@@ -76,7 +76,7 @@ def test_TorchWrapperComm():
 
     model = defineModelForEval() # From optuna dbase (hardcoded for testing purposes or quick-n-dirty use)
     
-    def forward_wrapper(model, inputData, processingMode: ProcessingMode):
+    def forward_wrapper(inputData, model, processingMode: ProcessingMode):
         
         if processingMode == ProcessingMode.MULTI_TENSOR:
             # Check input data
@@ -88,7 +88,7 @@ def test_TorchWrapperComm():
         elif processingMode == ProcessingMode.MSG_PACK:
             # Check input data
             assert isinstance(inputData, dict) and 'data' in inputData
-            
+
             # Convert input data to torch tensor
             input_image = torch.tensor(inputData['data'], dtype=torch.float32)
         else:
@@ -97,6 +97,8 @@ def test_TorchWrapperComm():
         # Evaluate model on input data
         with torch.no_grad():
             model.eval()
+            print('Input shape: ', input_image.shape)
+            print('Input datatype: ', input_image.dtype)
             output = model(input_image)
             print('Model output:', output)
             return output
