@@ -10,7 +10,7 @@ import inspect, pytest
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as torchFunc
-import torch, optuna, os
+import torch, optuna, os, kornia
 import numpy as np
 from torchvision import models
 
@@ -425,6 +425,66 @@ class EfficientNetBackbone(nn.Module):
 
         return x if self.output_type == 'last' else self.features
 
+# RESOLUTION ADAPTERS
+class conv2dResolutionAdapter(nn.Module):
+    """
+    conv2dResolutionAdapter _summary_
+
+    _extended_summary_
+
+    :param nn: _description_
+    :type nn: _type_
+    """
+
+    def __init__(self, targetDimsInPix: Union[list, np.ndarray, torch.Tensor],
+                 channelInOutSizes: Union[list, np.ndarray, torch.Tensor] = [1, 3]):
+        super().__init__()
+
+        # Perform 1D convolution to get three feature maps
+        self.channelExpander = torch.nn.Conv2d(
+            channelInOutSizes[0], channelInOutSizes[1], kernel_size=1, stride=2, padding=0, bias=False)
+
+        # Define adapter model to bring resolution down to feature_extractor input size
+        self.adaptive_pool_L0 = torch.nn.AdaptiveAvgPool2d(
+            output_size=(targetDimsInPix[0], targetDimsInPix[1]))
+
+    def forward(self, inputImage):
+
+        # Forward pass of the adapter model
+        x = self.channelExpander(inputImage)
+        x = self.adaptive_pool_L0(x)
+
+        return x
+
+
+
+class resizeCopyAdapter(nn.Module):
+    """
+    resizeCopyAdapter Torch module working as size and channels adapter for input images. It resizes input images to a target size (default: EfficientNet_B0 input size) and copies the data along the channel dimension if necessary.
+
+    :param nn: _description_
+    :type nn: _type_
+    """
+    def __init__(self, output_size: list = [224, 224], num_channels: list = [1, 3], interp_method: str = 'bilinear'):
+
+        super(resizeCopyAdapter, self).__init__()
+        self.output_size = output_size
+        self.input_channels, self.output_channels = num_channels
+        self.interp_method = interp_method
+
+    def forward(self, x):
+        # Resize to output size
+        x = kornia.geometry.transform.resize(
+            x, self.output_size, interpolation=self.interp_method)
+
+        # Copy tensor data along channels size if necessary
+        if self.output_channels > self.input_channels:
+            x = x.repeat(1, self.output_channels // self.input_channels, 1, 1)
+
+        return x
+
+
+
 # %% TEST CODE
 def test_model_classes_def():
     pass
@@ -569,7 +629,7 @@ class FeatureMerger_tailoredForV2(nn.Module):
         self.convMerger = nn.Conv2d(
             1280 + 512, 1280, kernel_size=1, stride=1, padding=0)
 
-        self.adaptiveAvgPool1 = nn.AdaptiveMaxPool2d(1)TemplateDeepNet
+        self.adaptiveAvgPool1 = nn.AdaptiveMaxPool2d(1)
         self.feature_merger = FeatureMerger_tailoredForV2()  # TODO
         self.headRange = TemplateDeepNet(headRange_config)
 
