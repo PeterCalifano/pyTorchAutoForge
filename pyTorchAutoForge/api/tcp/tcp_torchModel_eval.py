@@ -8,13 +8,15 @@
 #sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch'))
 #sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/LimbBasedNavigationAtMoon'))
 
+import XFeat  # ,LighterGlue
+from enum import Enum
 from socket import AI_PASSIVE
 import numpy as np
 import threading, os, sys, optuna
 # Custom imports
 from pyTorchAutoForge.api.tcp import tcpServerPy
 from pyTorchAutoForge.api.tcp.tcpServerPy import DataProcessor, pytcp_server, pytcp_requestHandler, ProcessingMode
-import torch
+import torch, kornia
 from torch import nn
 from pyTorchAutoForge.modelBuilding.modelClasses import ReloadModelFromOptuna
 from functools import partial
@@ -79,16 +81,37 @@ def defineModelForEval_OPNAVlimbBased():
     return model.to(device=device)
 
 
-def defineModelEval_FeatureMatching():
-    # Define SuperGluePretrainedNetwork path
-    REPO_SUPERGLUE_PATH = '/home/peterc/devDir/ML-repos/SuperGluePretrainedNetwork_PeterCdev'
-    sys.path.append(REPO_SUPERGLUE_PATH)
 
-    from match_pairs_custom import DefineSuperPointSuperGlueModel
+class EnumFeatureMatchingType(Enum):
+    SUPERPOINT_SUPERGLUE = 'SuperPoint_SuperGlue'
+    XFEAT_LIGHTGLUE = 'XFeat_LightGlue'
+
+
+def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatchingType = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE):
 
     torch.set_grad_enabled(mode=False)
 
-    model = DefineSuperPointSuperGlueModel()
+    if enumFeatureMatchingType == EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE:
+
+        # Define SuperGluePretrainedNetwork path    
+        REPO_SUPERGLUE_PATH = '/home/peterc/devDir/ML-repos/SuperGluePretrainedNetwork_PeterCdev'
+        sys.path.append(REPO_SUPERGLUE_PATH)
+
+        from match_pairs_custom import DefineSuperPointSuperGlueModel
+
+        # Define SuperPoint + SuperGlue model
+        model = DefineSuperPointSuperGlueModel()
+
+    elif enumFeatureMatchingType == EnumFeatureMatchingType.XFEAT_LIGHTGLUE:
+        REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_feature_PeterCdev'
+        sys.path.append(REPO_XFEAT_PATH)
+
+        from modules.xfeat import XFeatLightGlueWrapper
+        model = XFeatLightGlueWrapper()
+
+
+    else:
+        raise ValueError("Feature matching type not valid.")
 
     return model
 
