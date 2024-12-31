@@ -8,7 +8,6 @@
 #sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch'))
 #sys.path.append(os.path.join('/home/peterc/devDir/MachineLearning_PeterCdev/PyTorch/LimbBasedNavigationAtMoon'))
 
-import XFeat  # ,LighterGlue
 from enum import Enum
 from socket import AI_PASSIVE
 import numpy as np
@@ -79,8 +78,6 @@ def defineModelForEval_OPNAVlimbBased():
     print('Loaded model on device: ', device)
     
     return model.to(device=device)
-
-
 
 class EnumFeatureMatchingType(Enum):
     SUPERPOINT_SUPERGLUE = 'SuperPoint_SuperGlue'
@@ -249,17 +246,23 @@ def test_TorchWrapperComm_FeatureMatching():
         else:
             raise ValueError("Processing mode not supported.")
 
-        # Evaluate model on input data and convert to ndarrays
-        predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2})
-        predictedMatchesDict = {k: v[0].cpu().numpy()
-                                for k, v in predictedMatchesDict.items()}
+        with torch.no_grad():   
+            print('Evaluating model on images of shapes:', input_image1.shape, input_image2.shape)
+            # Evaluate model on input data and convert to ndarrays
+            predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2})
+            predictedMatchesDict = {k: v[0].detach().cpu().numpy()
+                                    for k, v in predictedMatchesDict.items()}
 
-        do_ransac_essential = False
-        if do_ransac_essential:
-            pass # TODO implement ransac step using essential matrix 
 
-        # Return output dictionary (keypoints0, keypoints1, matches0, matching_scores0)
-        return predictedMatchesDict
+            do_ransac_essential = False
+            if do_ransac_essential:
+                pass # TODO implement ransac step using essential matrix 
+            
+            print('Returning dictinary with keys:', predictedMatchesDict.keys())
+            print('Shapes of values:', [v.shape for v in predictedMatchesDict.values()])
+
+            # Return output dictionary (keypoints0, keypoints1, matches0, matching_scores0)
+            return predictedMatchesDict
         
     # Define function for data processor
     featureMatcherForward = partial(
