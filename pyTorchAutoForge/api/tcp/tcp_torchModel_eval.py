@@ -17,6 +17,7 @@ import torch
 from torch import nn
 from pyTorchAutoForge.modelBuilding.modelClasses import ReloadModelFromOptuna
 from functools import partial
+import cv2 as ocv
 
 # Define processing function for model evaluation (OPNAV limb based)
 
@@ -91,8 +92,17 @@ def test_TorchWrapperComm():
 
             # Convert input data to torch tensor
             input_image = torch.tensor(inputData['data'], dtype=torch.float32)
+
         else:
             raise ValueError("Processing mode not recognized.")
+
+        input_image_ = input_image[0,:,:,:].clone().detach().cpu()
+        input_image_toshow = np.array(input_image_.permute(1, 2, 0).numpy().astype('uint8'))
+
+        # Show received image
+        ocv.imshow('Input image', input_image_toshow)
+        ocv.waitKey(1000)
+        ocv.destroyAllWindows()
 
         # Evaluate model on input data
         with torch.no_grad():
@@ -101,7 +111,8 @@ def test_TorchWrapperComm():
             print('Input datatype: ', input_image.dtype)
             output = model(input_image)
             print('Model output:', output)
-            return output
+
+            return output.detach().cpu().numpy()
         
     predictCentroidRange = partial(forward_wrapper, model=model, processingMode=ProcessingMode.MULTI_TENSOR)
 
@@ -110,10 +121,10 @@ def test_TorchWrapperComm():
 
     # Create a DataProcessor instance
     processor_multitensor = DataProcessor(
-        predictCentroidRange, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MULTI_TENSOR)
+        predictCentroidRange, inputTargetType=np.float32, BufferSizeInBytes=1024, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MULTI_TENSOR)
 
     processor_msgpack = DataProcessor(
-        predictCentroidRange_msgpack, inputTargetType=np.float32, BufferSizeInBytes=-1, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MSG_PACK)
+        predictCentroidRange_msgpack, inputTargetType=np.float32, BufferSizeInBytes=1024, ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, PRE_PROCESSING_MODE=ProcessingMode.MSG_PACK)
 
     # Create and start the server in a separate thread
     server = pytcp_server(
