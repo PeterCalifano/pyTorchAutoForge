@@ -56,7 +56,7 @@ elseif ui8TestID == 1
     % Define image array to send over TCP
     strDataPath = fullfile("/home/peterc/devDir/ML-repos/pyTorchAutoForge/tests/data/test_images", "Bennu");
     ui8Frame_1 = imread(fullfile(strDataPath, "000001.png"));
-    ui8Frame_2 = imread(fullfile(strDataPath, "000001.png"));
+    ui8Frame_2 = imread(fullfile(strDataPath, "000002.png"));
 
         
     % Test send to server of array (auto-wrapping)
