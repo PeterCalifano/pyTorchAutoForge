@@ -61,17 +61,17 @@ pip install . --require-virtualenv # Install the package
 
 if [ "$jetson_target" = true ]; then
     # Remove torch and torchvision
-    pip uninstall -y torch torchvision
+    pip uninstall -y torch torchvision torchaudio
 
     # Install torch for Jetson
-    pip install torch https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
+    pip install torch https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl --require-virtualenv
 
     # Build and install torchvision from source
     # From guide: https://github.com/azimjaan21/jetpack-6.1-pytorch-torchvision-/blob/main/README.md
     git clone https://github.com/pytorch/vision.git
     cd vision
     git checkout tags/v0.20.0
-    python3 setup.py install --require-virtualenv
+    python3 setup.py install 
 
     # Clean up
     cd ..
@@ -79,8 +79,35 @@ if [ "$jetson_target" = true ]; then
 
     # Test installation using script
     python -c "import torch; import torchvision; print('Torch Version:', torch.__version__); print('TorchVision Version:', torchvision.__version__); print('CUDA Available:', torch.cuda.is_available()); if torch.cuda.is_available(): print('CUDA Device:', torch.cuda.get_device_name(0))"
+    
+    # Try to build torch-tensorrt
+    mkdir lib
+    cd lib
 
-    python3 -m pip install tensorrt tensorrt-lean tensorrt-dispatch
+    # Check if submodule exists 
+    if [ -d "TensorRT" ]; then
+        echo "TensorRT submodule exists"
+    else
+        git submodule add --branch release/2.6 https://github.com/pytorch/TensorRT.git # Try to use release/2.6 (latest)
+    fi
+    
+    pip install --upgrade setuptools # Ensure setuptools is up to date
+
+    cd TensorRT
+    git checkout release/2.6
+    git pull
+
+    cuda_version=$(nvcc --version | grep Cuda | grep release | cut -d ',' -f 2 | sed -e 's/ release //g')
+    export TORCH_INSTALL_PATH=$(python -c "import torch, os; print(os.path.dirname(torch.__file__))")
+    export SITE_PACKAGE_PATH=${TORCH_INSTALL_PATH::-6}
+    export CUDA_HOME=/usr/local/cuda-${cuda_version}/
+
+    # Replace the MODULE.bazel with the jetpack one
+    cat toolchains/jp_workspaces/MODULE.bazel.tmpl | envsubst > MODULE.bazel
+
+    # build and install torch_tensorrt wheel file
+    python setup.py --use-cxx11-abi install --user
+    cd ..
 
 fi
 
