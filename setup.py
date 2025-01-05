@@ -19,10 +19,10 @@ setup(
     version='0.3.0',
     packages=find_packages(),
     install_requires=[
-        "torch<=2.2.1",
+        "torch<=2.6.1",
         "torch-tb-profiler<=0.4.3",
         "torchaudio<=2.2.1",
-        "torchvision<=0.17.1",
+        "torchvision<=0.25.1",
         "scikit-learn<=1.4.1.post1",
         "scipy<=1.12.0",
         "numpy<=1.26.4",
