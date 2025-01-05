@@ -92,6 +92,9 @@ if [ "$jetson_target" = true ]; then
     fi
     
     pip install --upgrade setuptools # Ensure setuptools is up to date
+    pip install nvidia-pyindex
+    pip install pycuda # Install pycuda
+
 
     cd TensorRT
     git checkout release/2.6
@@ -106,8 +109,8 @@ if [ "$jetson_target" = true ]; then
     cat toolchains/jp_workspaces/MODULE.bazel.tmpl | envsubst > MODULE.bazel
 
     # build and install torch_tensorrt wheel file
-    python setup.py --use-cxx11-abi install --user
-    cd ..
+    python setup.py install --use-cxx11-abi
+    cd ../..
 
 fi
 
