@@ -1,5 +1,5 @@
 '''Module setup file created by PeterC - 06/30/2024.
-Major update for release version: 09/17/2024 (v0.1)'''
+Major update for release version: 09/17/2024 (v0.3)'''
 from setuptools import setup, find_packages
 
 import getpass
@@ -9,11 +9,10 @@ import sys
 username = getpass.getuser()
 
 # Check if the username contains "ele" or "pilo"
-if "ele" in username or "pilo" in username:
+if "ele" in username.lower() or "pilo" in username.lower():
     sys.stderr.write(
         "Error: not allowed to install this library.\n")
     sys.exit(1)
-
 
 setup(
     name='pyTorchAutoForge',
