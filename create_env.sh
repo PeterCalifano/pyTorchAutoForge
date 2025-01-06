@@ -80,17 +80,16 @@ if [ "$jetson_target" = true ]; then
     # Try to build torch-tensorrt
     source .venvTorch/bin/activate # Activate virtual environment
 
-    pip install norse --ignore-requires-python --require-virtualenv && pip install tonic expelliarmus --require-virtualenv
-    pip install setuptools --require-virtualenv # Ensure setuptools is up to date
+    pip install norse==1.0.0 --ignore-requires-python --require-virtualenv && pip install tonic expelliarmus --require-virtualenv 
+    #pip install aestream --ignore-requires-python --require-virtualenv # FIXME: build fails due to "CUDA20" entry
+    pip install --upgrade setuptools --require-virtualenv # Ensure setuptools is up to date
     pip install nvidia-pyindex --require-virtualenv
     pip install pycuda --require-virtualenv # Install pycuda
-
-
 
     # ACHTUNG: this must run correctly before torch_tensorrt
     pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
 
-    #  Install torch-tensorrt from source
+    #  Install torch-tensorrt from source (requires new version of setuptools)
     mkdir lib
     cd lib
 
@@ -116,16 +115,6 @@ if [ "$jetson_target" = true ]; then
     # build and install torch_tensorrt wheel file
     python setup.py install --use-cxx11-abi
     cd ../..
-
-    # Test installation by printing version in python
-    python -c "import torch; import torchvision; print('Torch Version:', torch.__version__); print('TorchVision Version:', torchvision.__version__); print('CUDA Available:', torch.cuda.is_available());"
-    python -c "import tensorrt; print('TensorRT Version:', tensorrt.__version__)"
-    python -c "import torch_tensorrt; print('Torch-TensorRT Version:', torch_tensorrt.__version__)"
-    
-    python -c "import norse; print('Norse Version:', norse.__version__)"
-    python -c "import tonic; print('Tonic Version:', tonic.__version__)"
-    
-    python -c "import modelopt.torch.quantization.extensions as ext; ext.precompile()" # Attempt to load modelopt and compile extensions
     
 else
 
@@ -135,7 +124,7 @@ else
     pip install -r requirements.txt --require-virtualenv # Install dependencies that do not cause issues...
 
     # Here just try to use pip
-    pip install norse --ignore-requires-python && pip install tonic expelliarmus
+    pip install norse==1.0.0 --ignore-requires-python --require-virtualenv && pip install tonic aestream expelliarmus --require-virtualenv --ignore-requires-python 
     pip install setuptools # Ensure setuptools is up to date
     pip install nvidia-pyindex
     pip install pycuda # Install pycuda
@@ -146,12 +135,25 @@ else
     pip install nvidia-tensorrt
     pip install nvidia-modelopt[all] # Install modelopt
     pip install torch-tensorrt # Install torch-tensorrt
-
-
-
-
-
 fi
+
+
+  # Test installation by printing version in python
+  echo -e "\e[32m-------------------------------------------------- Testing installations --------------------------------------------------\n\e[0m"
+  echo -e "\n \e[32m \tTesting torch, torchvision, tensorrt, torch-tensorrt...\n"
+  python -c "import torch; import torchvision; print('Torch Version:', torch.__version__); print('TorchVision Version:', torchvision.__version__); print('CUDA Available:', torch.cuda.is_available());"
+  python -c "import tensorrt; print('TensorRT Version:', tensorrt.__version__)"
+  python -c "import torch_tensorrt; print('Torch-TensorRT Version:', torch_tensorrt.__version__)"
+  
+  echo -e "\n \e[32m \tTesting spiking_networks modules...\n"
+  python -c "import norse; print('Norse Version:', norse.__version__)"
+  python -c "import tonic; print('Tonic Version:', tonic.__version__)"
+
+  echo -e "\n \e[32m \tTesting pyTorchAutoForge...\n"
+  python -c "import pyTorchAutoForge; print('pyTorchAutoForge Version:', pyTorchAutoForge.__version__)"
+
+  echo -e "\n \e[32m \tTesting nvidia-modelopt...\n"
+  python -c "import modelopt.torch.quantization.extensions as ext; ext.precompile()" # Attempt to load modelopt and compile extensions
 
 
 
