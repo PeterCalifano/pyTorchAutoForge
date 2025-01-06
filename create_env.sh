@@ -78,6 +78,19 @@ if [ "$jetson_target" = true ]; then
     sudo rm -r vision
     
     # Try to build torch-tensorrt
+    source .venvTorch/bin/activate # Activate virtual environment
+
+    pip install norse --ignore-requires-python --require-virtualenv && pip install tonic expelliarmus --require-virtualenv
+    pip install setuptools --require-virtualenv # Ensure setuptools is up to date
+    pip install nvidia-pyindex --require-virtualenv
+    pip install pycuda --require-virtualenv # Install pycuda
+
+
+
+    # ACHTUNG: this must run correctly before torch_tensorrt
+    pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+
+    #  Install torch-tensorrt from source
     mkdir lib
     cd lib
 
@@ -87,13 +100,6 @@ if [ "$jetson_target" = true ]; then
     else
         git submodule add --branch release/2.5 https://github.com/pytorch/TensorRT.git # Try to use release/2.6 (latest)
     fi
-    
-    pip install --upgrade setuptools # Ensure setuptools is up to date
-    pip install nvidia-pyindex
-    pip install pycuda # Install pycuda
-
-    # ACHTUNG: this must run correctly before torch_tensorrt
-    pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
     
     cd TensorRT
     git checkout release/2.5
@@ -115,24 +121,34 @@ if [ "$jetson_target" = true ]; then
     python -c "import torch; import torchvision; print('Torch Version:', torch.__version__); print('TorchVision Version:', torchvision.__version__); print('CUDA Available:', torch.cuda.is_available());"
     python -c "import tensorrt; print('TensorRT Version:', tensorrt.__version__)"
     python -c "import torch_tensorrt; print('Torch-TensorRT Version:', torch_tensorrt.__version__)"
+    
+    python -c "import norse; print('Norse Version:', norse.__version__)"
+    python -c "import tonic; print('Tonic Version:', tonic.__version__)"
+    
     python -c "import modelopt.torch.quantization.extensions as ext; ext.precompile()" # Attempt to load modelopt and compile extensions
-
+    
 else
 
     # Create virtualenv for other targets
     python3 -m venv .venvTorch # Create virtual environment
     source .venvTorch/bin/activate # Activate virtual environment
-    pip install -r requirements.txt --require-virtualenv # Install dependencies
-    pip install -e . --require-virtualenv # Install the package
+    pip install -r requirements.txt --require-virtualenv # Install dependencies that do not cause issues...
 
     # Here just try to use pip
-    pip install --upgrade setuptools # Ensure setuptools is up to date
+    pip install norse --ignore-requires-python && pip install tonic expelliarmus
+    pip install setuptools # Ensure setuptools is up to date
     pip install nvidia-pyindex
     pip install pycuda # Install pycuda
     pip install torch torchvision torchaudio # Install torch and torchvision
+    
+    pip install -e . --require-virtualenv # Install pyTorchAutoForge
+
     pip install nvidia-tensorrt
     pip install nvidia-modelopt[all] # Install modelopt
     pip install torch-tensorrt # Install torch-tensorrt
+
+
+
 
 
 fi
