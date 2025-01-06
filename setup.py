@@ -24,15 +24,13 @@ if "ele" in username.lower() or "pilo" in username.lower():
 
 install_requires = [
     "torch-tb-profiler<=0.4.3",
-    "scikit-learn<=1.4.1.post1",
-    "scipy<=1.12.0",
-    "numpy<=1.26.4",
+    "scikit-learn<=1.6.1",
+    "scipy<=1.16.1",
+    "numpy<=2.2.1",
     "onnx<=1.15.1",
     "onnxscript<=0.1.0.dev20240609",
-    "tensorboard<=2.16.2",
-    "tensorboard-data-server<=0.7.2",
-    "optuna<=3.6.1",
-    "mlflow<=2.14.1",
+    "optuna<=4.1.1",
+    "mlflow<=2.19.1",
 ]
 
 def is_jetson():
