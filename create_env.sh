@@ -52,14 +52,14 @@ if [ $jetson_target ] & [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
     rm -r libcusparse_lt-linux-sbsa-0.5.2.1-archive
 fi
 
-# Create virtualenv for Jetson
-python3 -m venv .venvTorch # Create virtual environment
-source .venvTorch/bin/activate # Activate virtual environment
-# For other targets
-pip install -r requirements.txt --require-virtualenv # Install dependencies
-pip install . --require-virtualenv # Install the package
-
 if [ "$jetson_target" = true ]; then
+
+    # Create virtualenv for Jetson
+    python3 -m venv .venvTorch --system-site-packages # Create virtual environment
+    source .venvTorch/bin/activate # Activate virtual environment
+    pip install -r requirements.txt --require-virtualenv # Install dependencies
+    pip install -e . --require-virtualenv # Install the package in editable mode
+
     # Remove torch and torchvision
     pip uninstall -y torch torchvision torchaudio
 
@@ -88,16 +88,15 @@ if [ "$jetson_target" = true ]; then
     if [ -d "TensorRT" ]; then
         echo "TensorRT submodule exists"
     else
-        git submodule add --branch release/2.6 https://github.com/pytorch/TensorRT.git # Try to use release/2.6 (latest)
+        git submodule add --branch release/2.5 https://github.com/pytorch/TensorRT.git # Try to use release/2.6 (latest)
     fi
     
     pip install --upgrade setuptools # Ensure setuptools is up to date
     pip install nvidia-pyindex
     pip install pycuda # Install pycuda
 
-
     cd TensorRT
-    git checkout release/2.6
+    git checkout release/2.5
     git pull
 
     cuda_version=$(nvcc --version | grep Cuda | grep release | cut -d ',' -f 2 | sed -e 's/ release //g')
@@ -111,6 +110,13 @@ if [ "$jetson_target" = true ]; then
     # build and install torch_tensorrt wheel file
     python setup.py install --use-cxx11-abi
     cd ../..
+else
+
+    # Create virtualenv for other targets
+    python3 -m venv .venvTorch # Create virtual environment
+    source .venvTorch/bin/activate # Activate virtual environment
+    pip install -r requirements.txt --require-virtualenv # Install dependencies
+    pip install -e . --require-virtualenv # Install the package
 
 fi
 
