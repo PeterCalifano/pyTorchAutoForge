@@ -76,9 +76,6 @@ if [ "$jetson_target" = true ]; then
     # Clean up
     cd ..
     sudo rm -r vision
-
-    # Test installation using script
-    python -c "import torch; import torchvision; print('Torch Version:', torch.__version__); print('TorchVision Version:', torchvision.__version__); print('CUDA Available:', torch.cuda.is_available()); if torch.cuda.is_available(): print('CUDA Device:', torch.cuda.get_device_name(0))"
     
     # Try to build torch-tensorrt
     mkdir lib
@@ -95,6 +92,9 @@ if [ "$jetson_target" = true ]; then
     pip install nvidia-pyindex
     pip install pycuda # Install pycuda
 
+    # ACHTUNG: this must run correctly before torch_tensorrt
+    pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+    
     cd TensorRT
     git checkout release/2.5
     git pull
@@ -110,6 +110,13 @@ if [ "$jetson_target" = true ]; then
     # build and install torch_tensorrt wheel file
     python setup.py install --use-cxx11-abi
     cd ../..
+
+    # Test installation by printing version in python
+    python -c "import torch; import torchvision; print('Torch Version:', torch.__version__); print('TorchVision Version:', torchvision.__version__); print('CUDA Available:', torch.cuda.is_available());"
+    python -c "import tensorrt; print('TensorRT Version:', tensorrt.__version__)"
+    python -c "import torch_tensorrt; print('Torch-TensorRT Version:', torch_tensorrt.__version__)"
+    python -c "import modelopt.torch.quantization.extensions as ext; ext.precompile()" # Attempt to load modelopt and compile extensions
+
 else
 
     # Create virtualenv for other targets
@@ -117,6 +124,16 @@ else
     source .venvTorch/bin/activate # Activate virtual environment
     pip install -r requirements.txt --require-virtualenv # Install dependencies
     pip install -e . --require-virtualenv # Install the package
+
+    # Here just try to use pip
+    pip install --upgrade setuptools # Ensure setuptools is up to date
+    pip install nvidia-pyindex
+    pip install pycuda # Install pycuda
+    pip install torch torchvision torchaudio # Install torch and torchvision
+    pip install nvidia-tensorrt
+    pip install nvidia-modelopt[all] # Install modelopt
+    pip install torch-tensorrt # Install torch-tensorrt
+
 
 fi
 
