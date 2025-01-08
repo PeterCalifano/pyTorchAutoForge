@@ -26,19 +26,23 @@ if __name__ == "__main__":
 
     print("-------------------------------------------------- Testing installation of venvTorch for Jetson--------------------------------------------------\n")
 
-    print("\tTesting torch, torchvision, tensorrt, torch-tensorrt...\n")
-    print('Torch Version:', torch.__version__)
-    print('TorchVision Version:', torchvision.__version__)
-    print('CUDA Available:', torch.cuda.is_available())
-    print('TensorRT Version:', tensorrt.__version__)
-    print('Torch-TensorRT Version:', torch_tensorrt.__version__)
+    print("Testing torch, torchvision, tensorrt...\n")
+    print('\tTorch Version:', torch.__version__)
+    print('\tTorchVision Version:', torchvision.__version__)
+    print('\tCUDA Available:', torch.cuda.is_available())
+    print('\tTensorRT Version:', tensorrt.__version__)
 
-    print("\n\tTesting spiking_networks modules...\n")
-    print('Norse Version:', norse.__version__)
-    print('Tonic Version:', tonic.__version__)
+    print("\nTesting pyTorchAutoForge...\n")
+    print('\tpyTorchAutoForge Version:', pyTorchAutoForge.__version__)
 
-    print("\n\tTesting pyTorchAutoForge...\n")
-    print('pyTorchAutoForge Version:', pyTorchAutoForge.__version__)
+    print("\nTesting torch-tensorrt...\n")
+    print('\tTorch-TensorRT Version:', torch_tensorrt.__version__)
+
+    print("\nTesting spiking_networks modules...\n")
+    print('\tNorse Version:', norse.__version__)
+    print('\tTonic Version:', tonic.__version__)
+
+
 
     #import modelopt.torch.quantization.extensions as ext
     #print("\n\tTesting nvidia-modelopt...\n")
