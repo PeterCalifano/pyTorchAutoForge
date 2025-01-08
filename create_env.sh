@@ -82,7 +82,6 @@ if [ "$jetson_target" = true ]; then
 
     pip install norse==1.0.0 --ignore-requires-python --require-virtualenv && pip install tonic expelliarmus --require-virtualenv 
     #pip install aestream --ignore-requires-python --require-virtualenv # FIXME: build fails due to "CUDA20" entry
-    #pip install --upgrade setuptools --require-virtualenv # Ensure setuptools is up to date
     pip install nvidia-pyindex --require-virtualenv
     pip install pycuda --require-virtualenv # Install pycuda
 
@@ -91,9 +90,12 @@ if [ "$jetson_target" = true ]; then
 
     source .venvTorch/bin/activate # Activate virtual environment
 
-    #  Install torch-tensorrt from source (requires new version of setuptools)
+    #  Install torch-tensorrt from source 
     mkdir lib
     cd lib
+
+    # Install required python packages of torch-tensorrt
+    python -m pip install -r TensorRT/toolchains/jp_workspaces/requirements.txt # NOTE: Installs correct version of setuptools. Do not touch it.
 
     # Check if submodule exists 
     if [ -d "TensorRT" ]; then
@@ -103,7 +105,7 @@ if [ "$jetson_target" = true ]; then
     fi
     
     cd TensorRT
-    git checkout release/2.5
+    git checkout release/2.6
     git pull
 
     cuda_version=$(nvcc --version | grep Cuda | grep release | cut -d ',' -f 2 | sed -e 's/ release //g')
