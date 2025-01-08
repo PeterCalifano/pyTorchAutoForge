@@ -16,7 +16,8 @@ import socket
 import time
 import threading
 import sys
-import msgpack, msgpack_numpy
+import msgpack
+#import msgpack_numpy
 
 # TODO by gdd:
 # Modify handling --> Specialize each handle instead of passing the function to process.
