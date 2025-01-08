@@ -4,7 +4,7 @@ import mlflow
 import os
 import sys
 import traceback
-from torch import nn
+from torch import NoneType, nn
 import numpy as np
 from dataclasses import dataclass, asdict, fields, Field, MISSING
 
@@ -14,7 +14,7 @@ from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding, GetSamplesF
 from pyTorchAutoForge.api.torch import SaveTorchModel
 from pyTorchAutoForge.optimization import CustomLossFcn
 
-from typing import Callable, Optional
+from collections.abc import Callable
 import torch.optim as optim
 from pyTorchAutoForge.evaluation import ResultsPlotter
 
@@ -27,9 +27,9 @@ class ModelEvaluatorConfig():
 class ModelEvaluator():
     """_summary_
     """
-    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn],
-                 dataLoader: DataLoader, device: str = 'cpu', evalFunction: Callable = None, 
-                 plotter: Optional[ResultsPlotter] = None) -> None:
+    def __init__(self, model: nn.Module, lossFcn: nn.Module | CustomLossFcn,
+                 dataLoader: DataLoader, device: str = 'cpu', evalFunction: Callable | None = None, 
+                 plotter: ResultsPlotter = None) -> None:
         """_summary_
 
         Args:
