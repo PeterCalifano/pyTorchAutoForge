@@ -31,6 +31,10 @@ install_requires = [
     "onnxscript<=0.1.0.dev20240609",
     "optuna<=4.1.1",
     "mlflow<=2.19.1",
+    "kornia<=0.7.4",
+    "albumentations<=1.4.25",
+    "pytest<=8.3.5",
+    "seaborn<=0.13.3"
 ]
 
 def is_jetson():
