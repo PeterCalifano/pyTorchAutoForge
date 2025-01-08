@@ -24,7 +24,7 @@ if __name__ == "__main__":
     #import torch_tensorrt
     import pyTorchAutoForge
 
-    print("-------------------------------------------------- Testing installation of venvTorch for Jetson--------------------------------------------------\n")
+    print("-------------------------------------------------- Testing installation of venvTorch for Jetson --------------------------------------------------\n")
 
     print("Testing torch, torchvision, tensorrt...\n")
     print('\tTorch Version:', torch.__version__)

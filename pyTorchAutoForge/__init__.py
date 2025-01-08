@@ -15,6 +15,13 @@ import importlib
 excluded_modules = ['tests', 'tensorboard']
 print('Initializing with all sub-packages and modules except:', excluded_modules)
 
+# Define __version__ dynamically
+try:
+    from pkg_resources import get_distribution, DistributionNotFound
+    __version__ = get_distribution("pyTorchAutoForge").version
+except DistributionNotFound:
+    __version__ = "unknown"
+
 
 def lazy_import(subpackage_name):
     module = None
