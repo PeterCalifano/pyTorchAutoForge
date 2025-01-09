@@ -2,11 +2,12 @@ sudo apt install python3.11 python3.11-venv # Install python3-venv
 
 # Default values
 jetson_target=false
+venv_name=".venvTorch"
 
 # Parse options using getopt
 # NOTE: no ":" after option means no argument, ":" means required argument, "::" means optional argument
-OPTIONS=j
-LONGOPTIONS=jetson_target
+OPTIONS=j,v:
+LONGOPTIONS=jetson_target,venv_name:
 
 # Parsed arguments list with getopt
 PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" -- "$@") 
@@ -28,6 +29,10 @@ while true; do
     -j|--jetson_target)
       jetson_target=true
       shift
+      ;;
+    -v|--venv_name)
+      venv_name=$2
+      shift 2
       ;;
     --)
       shift
@@ -55,8 +60,8 @@ fi
 if [ "$jetson_target" = true ]; then
 
     # Create virtualenv for Jetson
-    python3 -m venv .venvTorch --system-site-packages # Create virtual environment
-    source .venvTorch/bin/activate # Activate virtual environment
+    python3 -m venv $venv_name --system-site-packages # Create virtual environment
+    source $venv_name/bin/activate # Activate virtual environment
     pip install -r requirements.txt --require-virtualenv # Install dependencies
     pip install -e . --require-virtualenv # Install the package in editable mode
 
@@ -78,7 +83,7 @@ if [ "$jetson_target" = true ]; then
     sudo rm -r vision
     
     # Try to build torch-tensorrt
-    source .venvTorch/bin/activate # Activate virtual environment
+    source $venv_name/bin/activate # Activate virtual environment
 
     pip install norse==1.0.0 --ignore-requires-python --require-virtualenv && pip install tonic expelliarmus --require-virtualenv 
     #pip install aestream --ignore-requires-python --require-virtualenv # FIXME: build fails due to "CUDA20" entry
@@ -88,7 +93,7 @@ if [ "$jetson_target" = true ]; then
     # ACHTUNG: this must run correctly before torch_tensorrt
     pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
 
-    source .venvTorch/bin/activate # Activate virtual environment
+    source $venv_name/bin/activate # Activate virtual environment
 
     #  Install torch-tensorrt from source 
     mkdir lib
@@ -124,9 +129,11 @@ else
 
     # TODO (PC): Requires testing
     # Create virtualenv for other targets
-    python3 -m venv .venvTorch # Create virtual environment
-    source .venvTorch/bin/activate # Activate virtual environment
-    pip install -r requirements.txt --require-virtualenv # Install dependencies that do not cause issues...
+    python3 -m venv $venv_name # Create virtual environment
+    source $venv_name/bin/activate # Activate virtual environment
+    
+    #pip install -r requirements.txt --require-virtualenv # Install dependencies that do not cause issues...
+    #python -m pip install -r toolchains/jp_workspaces/test_requirements.txt # Required for test cases
 
     # Here just try to use pip
     pip install norse==1.0.0 --ignore-requires-python --require-virtualenv && pip install tonic aestream expelliarmus --require-virtualenv --ignore-requires-python 
@@ -143,9 +150,9 @@ else
 fi
 
   deactivate # Deactivate virtual environment if any
-  source .venvTorch/bin/activate # Activate virtual environment
+  source $venv_name/bin/activate # Activate virtual environment
   # Check installation by printing versions in python
-  python -m test_env.py
+  python -m test_env
 
 
 
