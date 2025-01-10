@@ -21,7 +21,7 @@ if __name__ == "__main__":
     import torch
     import torchvision
     import tensorrt
-    #import torch_tensorrt
+    import torch_tensorrt
     import pyTorchAutoForge
 
     print("-------------------------------------------------- Testing installation of venvTorch for Jetson --------------------------------------------------\n")
@@ -36,14 +36,15 @@ if __name__ == "__main__":
     print('\tpyTorchAutoForge Version:', pyTorchAutoForge.__version__)
 
     print("\nTesting torch-tensorrt...\n")
+
     print('\tTorch-TensorRT Version:', torch_tensorrt.__version__)
 
     print("\nTesting spiking_networks modules...\n")
-    print('\tNorse Version:', norse.__version__)
-    print('\tTonic Version:', tonic.__version__)
+    #print('\tNorse Version:', norse.__version__)
+    #print('\tTonic Version:', tonic.__version__)
 
-
-
-    #import modelopt.torch.quantization.extensions as ext
-    #print("\n\tTesting nvidia-modelopt...\n")
+    print("\nTesting nvidia-modelopt...\n")
+    import modelopt
+    import modelopt.torch.quantization.extensions as ext
+    print('\tModelOpt Version:', modelopt.__version__)
     #ext.precompile()

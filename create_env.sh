@@ -15,8 +15,7 @@ PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" --
 
 # Check validity of input arguments 
 if [[ $? -ne 0 ]]; then
-  # e.g. $? == 1
-  #  then getopt has complained about wrong arguments to stdout
+
   exit 2
 fi
 
@@ -98,10 +97,7 @@ if [ "$jetson_target" = true ]; then
     #  Install torch-tensorrt from source 
     mkdir lib
     cd lib
-
-    # Install required python packages of torch-tensorrt
-    python -m pip install -r TensorRT/toolchains/jp_workspaces/requirements.txt # NOTE: Installs correct version of setuptools. Do not touch it.
-
+    
     # Check if submodule exists 
     if [ -d "TensorRT" ]; then
         echo "TensorRT submodule exists"
@@ -110,8 +106,11 @@ if [ "$jetson_target" = true ]; then
     fi
     
     cd TensorRT
-    git checkout release/2.6
+    git checkout release/2.5
     git pull
+
+    # Install required python packages of torch-tensorrt
+    python -m pip install -r toolchains/jp_workspaces/requirements.txt # NOTE: Installs correct version of setuptools. Do not touch it.
 
     cuda_version=$(nvcc --version | grep Cuda | grep release | cut -d ',' -f 2 | sed -e 's/ release //g')
     export TORCH_INSTALL_PATH=$(python -c "import torch, os; print(os.path.dirname(torch.__file__))")
