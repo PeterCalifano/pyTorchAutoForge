@@ -2,6 +2,7 @@ sudo apt install python3.11 python3.11-venv # Install python3-venv
 
 # Default values
 jetson_target=false
+editable_mode=true
 venv_name=".venvTorch"
 
 # Parse options using getopt
@@ -57,6 +58,9 @@ if [ $jetson_target ] & [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
 fi
 
 if [ "$jetson_target" = true ]; then
+
+    echo "TODO Update script for Jetson target"
+    exit 0 # FIXME: Jetson target NOT updated
 
     # Create virtualenv for Jetson
     python3 -m venv $venv_name --system-site-packages # Create virtual environment
@@ -126,7 +130,6 @@ if [ "$jetson_target" = true ]; then
     
 else
 
-    # TODO (PC): Requires testing
     # Create virtualenv for other targets
     python3 -m venv $venv_name # Create virtual environment
     source $venv_name/bin/activate # Activate virtual environment
@@ -134,19 +137,32 @@ else
     #pip install -r requirements.txt --require-virtualenv # Install dependencies that do not cause issues...
     #python -m pip install -r toolchains/jp_workspaces/test_requirements.txt # Required for test cases
 
-    # Here just try to use pip
-    pip install norse==1.0.0 --ignore-requires-python --require-virtualenv && pip install tonic aestream expelliarmus --require-virtualenv --ignore-requires-python 
-    pip install setuptools # Ensure setuptools is up to date
-    pip install nvidia-pyindex
-    pip install pycuda # Install pycuda
-    pip install torch torchvision torchaudio # Install torch and torchvision
-    
-    pip install -e . --require-virtualenv # Install pyTorchAutoForge
+    # Tools for building and installing wheels
+    echo "Installing setuptools, twine, and build..."
+    pip install setuptools twine build --require-virtualenv
+    python -m ensurepip --upgrade --require-virtualenv
+    python -m pip install --upgrade pip --require-virtualenv
 
-    pip install nvidia-tensorrt
-    pip install nvidia-modelopt[all] # Install modelopt
-    pip install torch-tensorrt # Install torch-tensorrt
-fi
+    # Install key modules not managed by dependencies installation for versioning reasons
+    echo "Installing additional key modules..."
+    pip install norse tonic aestream expelliarmus --require-virtualenv
+     
+    pip install pynvml --require-virtualenv # Install pynvml for GPU monitoring
+
+    # Build pyTorchAutoForge wheel
+    if [ "$editable_mode" = true ]; then
+        echo "Building and installing pyTorchAutoForge in editable mode..."
+        pip install -e . --require-virtualenv # Install the package in editable mode
+    else
+      echo "Building and installing pyTorchAutoForge wheel..."
+      python -m build 
+      pip install -e dist/*.whl --require-virtualenv # Install pyTorchAutoForge wheel
+    fi
+
+    # Install tools for model optimization and deployment
+    echo "Installing tools for model optimization and deployment by Nvidia..."
+    python -m pip install pycuda torch torchvision torch-tensorrt tensorrt "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+  fi
 
   deactivate # Deactivate virtual environment if any
   source $venv_name/bin/activate # Activate virtual environment

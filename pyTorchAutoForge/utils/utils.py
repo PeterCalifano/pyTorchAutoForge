@@ -1,8 +1,13 @@
+
 import torch 
 import numpy as np
 import random
 from torch.utils.data import DataLoader
 
+import time
+from functools import wraps
+from typing import Any 
+from collections.abc import Callable
 
 # GetDevice:
 def GetDevice():
@@ -33,14 +38,13 @@ def GetSamplesFromDataset(dataloader: DataLoader, numOfSamples: int = 10):
 
 
 # %% Other auxiliary functions - 09-06-2024
-def AddZerosPadding(intNum: int, stringLength: str = 4):
+def AddZerosPadding(intNum: int, stringLength: str = '4'):
     '''Function to add zeros padding to an integer number'''
     return f"{intNum:0{stringLength}d}"  # Return strings like 00010
 
 def getNumOfTrainParams(model):
     '''Function to get the total number of trainable parameters in a model'''
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 
 def SplitIdsArray_RandPerm(array_of_ids, training_perc, validation_perc, rng_seed=0, *args):
     """
@@ -110,9 +114,53 @@ def SplitIdsArray_RandPerm(array_of_ids, training_perc, validation_perc, rng_see
 
     return training_set_ids, validation_set_ids, testing_set_ids, varargout
 
+def timeit_averaged(num_trials: int = 10) -> Callable:
+    def timeit_averaged_(fcn_to_time: Callable) -> Callable:
+        """
+        Function decorator to perform averaged timing of a Callable object.
+        This decorator measures the execution time of the decorated function over a number of trials
+        and prints the average execution time.
+        :param fcn_to_time: The function to be timed.
+        :param num_trials: The number of trials to average the timing over. (defualt=10)
+        :return: The wrapped function with timing functionality.
+        """
+        @wraps(fcn_to_time)
+        def wrapper(*args, **kwargs):
 
+            # Perform timing of the function using best counter available in time module
+            total_elapsed_time = 0.0
 
-if __name__ == '__main__':
+            print(f'Timing function "{fcn_to_time.__name__}" averaging {num_trials} trials...')
+
+            for idT in range(num_trials):
+                start_time = time.perf_counter()
+                result = fcn_to_time(*args, **kwargs) # Returns Any
+                end_time = time.perf_counter()
+                elapsed_time = end_time - start_time
+                print(f"\rFunction call {idT} took {elapsed_time:.6f} seconds")
+
+                # Calculate the elapsed time
+                total_elapsed_time += elapsed_time
+            
+            # Calculate the average elapsed time
+            average_elapsed_time = total_elapsed_time / num_trials
+            print(f"\nAverage time over {num_trials} trials: {average_elapsed_time:.6f} seconds")
+
+            return result
+        return wrapper
+    return timeit_averaged_
+    
+@timeit_averaged(2)
+def dummy_function(): 
+    print("Dummy function called")
+    time.sleep(1)
+
+def test_timeit_averaged():
+    print("Testing timeit_averaged wrapper...")
+    # Example usage
+    dummy_function()
+
+def test_SplitIdsArray_RandPerm():
     # Example usage
     N = 100
     array_of_ids = torch.arange(0, N + 1, dtype=torch.int32)
@@ -132,3 +180,8 @@ if __name__ == '__main__':
     print('Validation Set IDs:', validation_set_ids)
     print('Testing Set IDs:', testing_set_ids)
     print('Varargout:', varargout)
+
+if __name__ == '__main__':
+    test_SplitIdsArray_RandPerm()
+    test_timeit_averaged()
+
