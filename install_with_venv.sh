@@ -140,6 +140,9 @@ else
     # Tools for building and installing wheels
     echo "Installing setuptools, twine, and build..."
     pip install setuptools twine build --require-virtualenv
+    python -m ensurepip --upgrade --require-virtualenv
+    python -m pip install --upgrade pip --require-virtualenv
+
 
     # Install key modules not managed by dependencies installation for versioning reasons
     echo "Installing additional key modules..."
@@ -162,7 +165,7 @@ else
     echo "Installing tools for model optimization and deployment by Nvidia..."
     pip install nvidia-tensorrt
     pip install nvidia-modelopt[all] # Install modelopt
-    pip install torch-tensorrt # Install torch-tensorrt
+    pip install torch-tensorrt==2.5.0 # Install torch-tensorrt
 fi
 
   deactivate # Deactivate virtual environment if any
