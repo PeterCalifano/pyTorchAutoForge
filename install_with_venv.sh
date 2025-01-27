@@ -145,8 +145,10 @@ else
 
     # Install key modules not managed by dependencies installation for versioning reasons
     echo "Installing additional key modules..."
-    pip install norse tonic aestream expelliarmus --require-virtualenv 
-    
+    pip install norse tonic aestream expelliarmus --require-virtualenv
+     
+    pip install pynvml --require-virtualenv # Install pynvml for GPU monitoring
+
     # Build pyTorchAutoForge wheel
     if [ "$editable_mode" = true ]; then
         echo "Building and installing pyTorchAutoForge in editable mode..."

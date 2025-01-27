@@ -1,7 +1,5 @@
 # Import scripts of the library at initialization
-import os
-import importlib
-import importlib, os
+import os, importlib
 
 # Removed modules
 excluded_modules = ['tests', 'tensorboard']
