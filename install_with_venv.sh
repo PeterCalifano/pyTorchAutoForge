@@ -143,13 +143,9 @@ else
     python -m ensurepip --upgrade --require-virtualenv
     python -m pip install --upgrade pip --require-virtualenv
 
-
     # Install key modules not managed by dependencies installation for versioning reasons
     echo "Installing additional key modules..."
     pip install norse tonic aestream expelliarmus --require-virtualenv 
-    pip install nvidia-pyindex
-    pip install pycuda # Install pycuda
-    pip install torch torchvision torchaudio 
     
     # Build pyTorchAutoForge wheel
     if [ "$editable_mode" = true ]; then
@@ -163,10 +159,8 @@ else
 
     # Install tools for model optimization and deployment
     echo "Installing tools for model optimization and deployment by Nvidia..."
-    pip install nvidia-tensorrt
-    pip install nvidia-modelopt[all] # Install modelopt
-    pip install torch-tensorrt==2.5.0 # Install torch-tensorrt
-fi
+    pip install pycuda torch torchvision tensorrt torch-tensorrt "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+  fi
 
   deactivate # Deactivate virtual environment if any
   source $venv_name/bin/activate # Activate virtual environment
