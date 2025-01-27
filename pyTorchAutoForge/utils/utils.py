@@ -114,15 +114,15 @@ def SplitIdsArray_RandPerm(array_of_ids, training_perc, validation_perc, rng_see
 
     return training_set_ids, validation_set_ids, testing_set_ids, varargout
 
-def timeit_averaged(num_trials: int = 100) -> Callable:
+def timeit_averaged(num_trials: int = 10) -> Callable:
     def timeit_averaged_(fcn_to_time: Callable) -> Callable:
         """
-        timeit_averaged Function decorator to performing averaged timing of a Callable object
-
-        :param fcn_to_time: _description_
-        :type fcn_to_time: Callable
-        :return: _description_
-        :rtype: Callable
+        Function decorator to perform averaged timing of a Callable object.
+        This decorator measures the execution time of the decorated function over a number of trials
+        and prints the average execution time.
+        :param fcn_to_time: The function to be timed.
+        :param num_trials: The number of trials to average the timing over. (defualt=10)
+        :return: The wrapped function with timing functionality.
         """
         @wraps(fcn_to_time)
         def wrapper(*args, **kwargs):
