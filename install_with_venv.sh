@@ -159,7 +159,7 @@ else
 
     # Install tools for model optimization and deployment
     echo "Installing tools for model optimization and deployment by Nvidia..."
-    pip install pycuda torch torchvision tensorrt torch-tensorrt "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+    python -m pip install pycuda torch torchvision torch-tensorrt tensorrt "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
   fi
 
   deactivate # Deactivate virtual environment if any
