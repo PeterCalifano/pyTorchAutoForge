@@ -1,3 +1,4 @@
+from textwrap import wrap
 import torch 
 import numpy as np
 import random
@@ -40,7 +41,6 @@ def AddZerosPadding(intNum: int, stringLength: str = 4):
 def getNumOfTrainParams(model):
     '''Function to get the total number of trainable parameters in a model'''
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
 
 def SplitIdsArray_RandPerm(array_of_ids, training_perc, validation_perc, rng_seed=0, *args):
     """
@@ -109,6 +109,11 @@ def SplitIdsArray_RandPerm(array_of_ids, training_perc, validation_perc, rng_see
             varargout.append(tmp_dict)
 
     return training_set_ids, validation_set_ids, testing_set_ids, varargout
+
+# TODO implement wrap decorator function to perform averaged timing of any callable
+@wrap
+def time_it():
+    pass
 
 
 
