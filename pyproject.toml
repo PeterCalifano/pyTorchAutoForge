@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pyTorchAutoForge"
 version = "0.1.0a0"
-description='PyTorchAutoForge library is based on raw PyTorch and designed automate DNN development, model tracking and deployment, tightly integrated with MLflow and Optuna. It supports Spiking networks libraries (WIP). Deployment can be performed using ONNx, pyTorch facilities or TensorRT (WIP). The library is designed to be compatible with Jetson Orin Nano Jetpack rev6.1.'
+description='PyTorchAutoForge library is based on raw PyTorch and designed to automate DNN development, model tracking and deployment, tightly integrated with MLflow and Optuna. It also supports spiking networks libraries (WIP). Model optimization and deployment can be performed using ONNx, pyTorch facilities or TensorRT (WIP). The library also aims to be compatible with Jetson Orin Nano Jetpack rev6.1.'
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -31,7 +31,7 @@ classifiers=[
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.10',
     'License :: OSI Approved :: MIT License',
-    'Operating System :: OS Independent',
+    'Operating System :: POSIX :: Linux',
 ]
 [tool.setuptools.packages.find]
 where = ["pyTorchAutoForge"]
