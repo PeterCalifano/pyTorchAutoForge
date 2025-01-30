@@ -24,7 +24,8 @@ dependencies = [
     "pytest<=8.3.5",
     "seaborn<=0.13.3",
     "matplotlib<=3.10.0",
-    "colorama<=0.4.6"
+    "colorama<=0.4.6",
+    "msgpack<=1.1.0"
 ]
 classifiers=[
     'Programming Language :: Python :: 3.12',
