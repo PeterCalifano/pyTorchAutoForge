@@ -59,16 +59,23 @@ fi
 
 if [ "$jetson_target" = true ]; then
 
-    echo "TODO Update script for Jetson target"
-    exit 0 # FIXME: Jetson target NOT updated
-
     # Create virtualenv for Jetson
     python3 -m venv $venv_name --system-site-packages # Create virtual environment
     source $venv_name/bin/activate # Activate virtual environment
-    pip install -r requirements.txt --require-virtualenv # Install dependencies
-    pip install -e . --require-virtualenv # Install the package in editable mode
+    
+    #pip install -r requirements.txt --require-virtualenv # Install dependencies
+    #pip install -e . --require-virtualenv # Install the package in editable mode
 
-    # Remove torch and torchvision
+    # Tools for building and installing wheels
+    echo "Installing setuptools, twine, and build..."
+    pip install setuptools twine build --require-virtualenv
+    python -m ensurepip --upgrade --require-virtualenv
+    python -m pip install --upgrade pip --require-virtualenv
+
+    # Install key modules not managed by dependencies installation for versioning reasons
+    echo "Installing additional key modules..."
+    
+    # Remove torch and torchvision 
     pip uninstall -y torch torchvision torchaudio
 
     # Install torch for Jetson
@@ -88,15 +95,12 @@ if [ "$jetson_target" = true ]; then
     # Try to build torch-tensorrt
     source $venv_name/bin/activate # Activate virtual environment
 
-    pip install norse==1.0.0 --ignore-requires-python --require-virtualenv && pip install tonic expelliarmus --require-virtualenv 
-    #pip install aestream --ignore-requires-python --require-virtualenv # FIXME: build fails due to "CUDA20" entry
-    pip install nvidia-pyindex --require-virtualenv
-    pip install pycuda --require-virtualenv # Install pycuda
+    #pip install norse==1.0.0 aestream tonic expelliarmus --ignore-requires-python --require-virtualenv  # FIXME: build fails due to "CUDA20" entry
+
+    pip install nvidia-pyindex pycuda --require-virtualenv
 
     # ACHTUNG: this must run correctly before torch_tensorrt
     pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
-
-    source $venv_name/bin/activate # Activate virtual environment
 
     #  Install torch-tensorrt from source 
     mkdir lib
@@ -114,19 +118,29 @@ if [ "$jetson_target" = true ]; then
     git pull
 
     # Install required python packages of torch-tensorrt
-    python -m pip install -r toolchains/jp_workspaces/requirements.txt # NOTE: Installs correct version of setuptools. Do not touch it.
+    python -m pip install -r toolchains/jp_workspaces/requirements.txt # NOTE: Installs the correct version of setuptools. Do not touch it.
 
     cuda_version=$(nvcc --version | grep Cuda | grep release | cut -d ',' -f 2 | sed -e 's/ release //g')
     export TORCH_INSTALL_PATH=$(python -c "import torch, os; print(os.path.dirname(torch.__file__))")
     export SITE_PACKAGE_PATH=${TORCH_INSTALL_PATH::-6}
     export CUDA_HOME=/usr/local/cuda-${cuda_version}/
 
-    # Replace the MODULE.bazel with the jetpack one
+    # Replace the MODULE.bazel with the jetpack one # DOUBT: why needed?
     cat toolchains/jp_workspaces/MODULE.bazel.tmpl | envsubst > MODULE.bazel
 
-    # build and install torch_tensorrt wheel file
+    # Build and install torch_tensorrt wheel file with CXX11 ABI
     python setup.py install --use-cxx11-abi
     cd ../..
+
+    # Finally, build pyTorchAutoForge wheel
+    if [ "$editable_mode" = true ]; then
+        echo "Building and installing pyTorchAutoForge in editable mode..."
+        pip install -e . --require-virtualenv # Install the package in editable mode
+    else
+      echo "Building and installing pyTorchAutoForge wheel..."
+      python -m build 
+      pip install -e dist/*.whl --require-virtualenv # Install pyTorchAutoForge wheel
+    fi
     
 else
 
