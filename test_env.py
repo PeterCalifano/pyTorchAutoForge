@@ -45,6 +45,6 @@ if __name__ == "__main__":
 
     print("\nTesting nvidia-modelopt...\n")
     import modelopt
-    import modelopt.torch.quantization.extensions as ext
+    #import modelopt.torch.quantization.extensions as ext
     print('\tModelOpt Version:', modelopt.__version__)
     #ext.precompile()
