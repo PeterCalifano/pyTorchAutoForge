@@ -1,12 +1,13 @@
 # Default values
-jetson_target=false
-editable_mode=true
+jetson_target=0
+editable_mode=1
+sudo_mode=0
 venv_name=".venvTorch"
 
 # Parse options using getopt
 # NOTE: no ":" after option means no argument, ":" means required argument, "::" means optional argument
 OPTIONS=j,v:,s
-LONGOPTIONS=jetson_target,venv_name:
+LONGOPTIONS=jetson_target,venv_name:,sudo_mode
 
 # Parsed arguments list with getopt
 PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" -- "$@") 
@@ -14,7 +15,6 @@ PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" --
 
 # Check validity of input arguments 
 if [[ $? -ne 0 ]]; then
-
   exit 2
 fi
 
@@ -25,15 +25,18 @@ eval set -- "$PARSED"
 while true; do
   case "$1" in
     -j|--jetson_target)
-      jetson_target=true
+      jetson_target=1
+      echo "Jetson target selected..."
       shift
       ;;
     -v|--venv_name)
       venv_name=$2
+      echo "Virtual environment name: $venv_name"
       shift 2
       ;;
     -s|--sudo_mode)
-      sudo_mode=false
+      sudo_mode=1
+      echo "Sudo mode requested..."
       shift
       ;;
     --)
@@ -47,21 +50,18 @@ while true; do
   esac
 done
 
-if [ $jetson_target ] & [ !$sudo_mode ]
-then
+if [ $jetson_target -eq 1 ] && [ ! $sudo_mode -eq 1 ]; then
   echo "Jetson target requires sudo mode. Please use -s option."
   exit 1
 fi
 
-if [ $sudo_mode]; then
+if [ $sudo_mode -eq 1 ]; then
   echo "Running in sudo mode..."
   sudo apt install python3.11 python3.11-venv # Install python3-venv
 fi
 
 
-
-
-if [ $jetson_target ] & [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
+if [ $jetson_target -eq 1 ] && [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
     echo "libcusparseLt.so not found. Downloading and installing..."
     # if not exist, download and copy to the directory
     wget https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/linux-sbsa/libcusparse_lt-linux-sbsa-0.5.2.1-archive.tar.xz
@@ -72,7 +72,7 @@ if [ $jetson_target ] & [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
     rm -r libcusparse_lt-linux-sbsa-0.5.2.1-archive
 fi
 
-if [ "$jetson_target" = true ]; then
+if [ $jetson_target -eq 1 ]; then
 
     # Create virtualenv for Jetson
     python3 -m venv $venv_name --system-site-packages # Create virtual environment
