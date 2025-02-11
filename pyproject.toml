@@ -25,7 +25,9 @@ dependencies = [
     "seaborn<=0.13.3",
     "matplotlib<=3.10.0",
     "colorama<=0.4.6",
-    "msgpack<=1.1.0"
+    "msgpack<=1.1.0",
+    "pynvml; platform_machine == 'x86_64'", # Should only install for x86_64 devices
+    "torchvision; platform_machine == 'x86_64'" 
 ]
 classifiers=[
     'Programming Language :: Python :: 3.12',
