@@ -18,33 +18,61 @@
 
 if __name__ == "__main__":
 
-    import torch
-    import torchvision
-    import tensorrt
-    import torch_tensorrt
-    import pyTorchAutoForge
-
     print("-------------------------------------------------- Testing installation of venvTorch for Jetson --------------------------------------------------\n")
 
     print("Testing torch, torchvision, tensorrt...\n")
-    print('\tTorch Version:', torch.__version__)
-    print('\tTorchVision Version:', torchvision.__version__)
-    print('\tCUDA Available:', torch.cuda.is_available())
-    print('\tTensorRT Version:', tensorrt.__version__)
+    
+    try:
+        import torch
+        import torchvision
+        print('\tTorch Version:', torch.__version__)
+        print('\tTorchVision Version:', torchvision.__version__)
+        print('\tCUDA Available:', torch.cuda.is_available())
+    except ImportError as err:
+        # Print error message to indicate what has gone wrong
+        print(err)
 
-    print("\nTesting pyTorchAutoForge...\n")
-    print('\tpyTorchAutoForge Version:', pyTorchAutoForge.__version__)
+    try:
+        import tensorrt
+        print('\tTensorRT Version:', tensorrt.__version__)
 
-    print("\nTesting torch-tensorrt...\n")
+    except ImportError as err:
+        # Print error message to indicate what has gone wrong
+        print(err)
+    
+    try:
+        print("\nTesting torch-tensorrt...\n")
+        import torch_tensorrt
+        print('\tTorch-TensorRT Version:', torch_tensorrt.__version__)
+    except ImportError as err:
+        print(err)
+        
 
-    print('\tTorch-TensorRT Version:', torch_tensorrt.__version__)
+    try:
+        import pyTorchAutoForge
+        print("\nTesting pyTorchAutoForge...\n")
+        print('\tpyTorchAutoForge Version:', pyTorchAutoForge.__version__)
 
-    print("\nTesting spiking_networks modules...\n")
-    #print('\tNorse Version:', norse.__version__)
-    #print('\tTonic Version:', tonic.__version__)
+    except ImportError as err:
+        print(err)
 
-    print("\nTesting nvidia-modelopt...\n")
-    import modelopt
-    #import modelopt.torch.quantization.extensions as ext
-    print('\tModelOpt Version:', modelopt.__version__)
-    #ext.precompile()
+
+    try: 
+        print("\nTesting nvidia-modelopt...\n")
+        import modelopt
+        #import modelopt.torch.quantization.extensions as ext
+        print('\tModelOpt Version:', modelopt.__version__)
+        #ext.precompile()
+    except ImportError as err:
+        print(err)
+
+    try:
+        print("\nTesting spiking_networks modules...\n")
+        import norse
+        import tonic
+        print('\tNorse Version:', norse.__version__)
+        print('\tTonic Version:', tonic.__version__)
+    except ImportError as err:
+        print(err)
+
+
