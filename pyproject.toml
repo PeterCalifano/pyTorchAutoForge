@@ -29,7 +29,9 @@ dependencies = [
     "pynvml; platform_machine == 'x86_64'", # Should only install for x86_64 devices
     "torchvision; platform_machine == 'x86_64'" ,
     "norse; platform_machine == 'x86_64'",
-    "tonic; platform_machine == 'x86_64'"
+    "tonic; platform_machine == 'x86_64'",
+    "aestream; platform_machine == 'x86_64'",
+    "expelliarmus; platform_machine == 'x86_64'"
 ]
 classifiers=[
     'Programming Language :: Python :: 3.12',

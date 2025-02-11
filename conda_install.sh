@@ -160,10 +160,7 @@ else
     python3 -m pip install --upgrade pip 
 
     # Install key modules not managed by dependencies installation for versioning reasons
-    echo "Installing additional key modules.1.."
-    pip install norse tonic aestream expelliarmus 
-     
-    pip install pynvml  # Install pynvml for GPU monitoring
+    echo "Installing additional key modules..."
 
     # Build pyTorchAutoForge wheel
     if [ "$editable_mode" = true ]; then
