@@ -11,6 +11,9 @@
 		},
 		{
 			"path": "../../event-based-repos/v2e_PeterCdev"
+		},
+		{
+			"path": "../SuperGluePretrainedNetwork_PeterCdev"
 		}
 	],
 	"settings": {}

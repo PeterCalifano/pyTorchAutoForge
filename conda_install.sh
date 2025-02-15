@@ -1,14 +1,14 @@
 # Default values
 jetson_target=0
-editable_mode=1
+editable_mode=0
 sudo_mode=0
 venv_name="autoforge"
 create_conda_env=0
 
 # Parse options using getopt
 # NOTE: no ":" after option means no argument, ":" means required argument, "::" means optional argument
-OPTIONS=j,v:,s,c
-LONGOPTIONS=jetson_target,venv_name:,sudo_mode,create_conda_env
+OPTIONS=j,v:,s,c,e
+LONGOPTIONS=jetson_target,venv_name:,sudo_mode,create_conda_env,editable_mode
 
 # Parsed arguments list with getopt
 PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" -- "$@") 
@@ -40,9 +40,15 @@ while true; do
       echo "Sudo mode requested..."
       shift
       ;;
+    
     -c|--create_conda_env)
       create_conda_env=1
       echo "Creating and initializing conda environment..."
+      shift
+      ;;
+    -e|--editable_mode)
+      editable_mode=1
+      echo "Editable mode selected..."
       shift
       ;;
     --)
@@ -185,7 +191,7 @@ else
   echo "Installing additional key modules..."
 
   # Build pyTorchAutoForge wheel
-  if [ "$editable_mode" = true ]; then
+  if [ $editable_mode -eq 1 ]; then
       echo "Building and installing pyTorchAutoForge in editable mode..."
       pip install -e .  # Install the package in editable mode
   else
