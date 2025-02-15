@@ -5,6 +5,12 @@
 		},
 		{
 			"path": "../../operative/operative-develop"
+		},
+		{
+			"path": "../../event-based-repos/deep_ev_tracker_PeterCdev"
+		},
+		{
+			"path": "../../event-based-repos/v2e_PeterCdev"
 		}
 	],
 	"settings": {}
