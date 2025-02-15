@@ -70,6 +70,7 @@ fi
 if [ $create_conda_env -eq 1 ]; then
   # Create and activate conda environment
   conda create -n $venv_name python=3.11
+  conda init bash
   conda activate $venv_name
 else
   echo "Attempt to activate existing conda environment..."
