@@ -54,10 +54,13 @@ if ui8TestID == 0
 elseif ui8TestID == 1
 
     % Define image array to send over TCP
-    strDataPath = fullfile("/home/peterc/devDir/ML-repos/pyTorchAutoForge/tests/data/test_images", "Bennu");
-    ui8Frame_1 = imread(fullfile(strDataPath, "000001.png"));
-    ui8Frame_2 = imread(fullfile(strDataPath, "000002.png"));
+    % strDataPath = fullfile("/home/peterc/devDir/ML-repos/pyTorchAutoForge/tests/data/test_images", "Bennu");
+    % ui8Frame_1 = imread(fullfile(strDataPath, "000001.png"));
+    % ui8Frame_2 = imread(fullfile(strDataPath, "000002.png"));
 
+    strDataPath = fullfile("/home/peterc/devDir/nav-backend/simulationCodes/data/datasets/TestCase_ItokawaRCS1_RTO_3t1_J11p0_45dt/");
+    ui8Frame_1 = rgb2gray(imread(fullfile(strDataPath, "000001.png"), 'png'));
+    ui8Frame_2 = rgb2gray(imread(fullfile(strDataPath, "000050.png")));
         
     % Test send to server of array (auto-wrapping)
     ui8TensorShapedFrame_1 = zeros(1,1,size(ui8Frame_1, 1), size(ui8Frame_1, 2), 'uint8');
@@ -67,16 +70,29 @@ elseif ui8TestID == 1
     ui8TensorShapedFrame_2(1,1,:,:) = ui8Frame_2;
 
     cellTensorImages = {ui8TensorShapedFrame_1, ui8TensorShapedFrame_2};
-
     writtenBytes = tensorCommManager_multi.WriteBuffer(cellTensorImages);
+
+    % Return output dictionary ['keypoints0', 'scores0', 'descriptors0', 'keypoints1', 'scores1',
+    % 'descriptors1', 'matches0', 'matches1', 'matching_scores0', 'matching_scores1']
 
     % Get data back from server
     [cellTensorArray, tensorCommManager_multi] = tensorCommManager_multi.ReadBuffer();
 
-    disp(cellTensorArray);
-    ShowFeatureMatchingsPredictions(ui8Frame_1, ui8Frame_2, ...
-        cellTensorArray{1}, cellTensorArray{4});
+    dKeypoints0     = cellTensorArray{1};
+    ui32Matches0    = cellTensorArray{7};
+    dMatchingScore0 = cellTensorArray{9};
 
+    dKeypoints1     = cellTensorArray{4};
+    ui32Matches1    = cellTensorArray{8};
+
+    % Get matched keypoints
+    bValidMatch = ui32Matches0 > -1 & dMatchingScore0 > 0.95;
+    dMatchedKps0 = dKeypoints0(bValidMatch, :);
+    dMatchedKps1 = dKeypoints1(ui32Matches0(bValidMatch), :);
+
+    % Show matchings
+    ShowFeatureMatchingsPredictions(ui8Frame_1, ui8Frame_2, ...
+        dMatchedKps0, dMatchedKps1);
 end
 return
 
