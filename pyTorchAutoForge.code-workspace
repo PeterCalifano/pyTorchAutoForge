@@ -14,6 +14,12 @@
 		},
 		{
 			"path": "../SuperGluePretrainedNetwork_PeterCdev"
+		},
+		{
+			"path": "../LightGlue_PeterCdev"
+		},
+		{
+			"path": "../accelerated_features_PeterCdev"
 		}
 	],
 	"settings": {}
