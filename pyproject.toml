@@ -40,6 +40,7 @@ classifiers=[
     'License :: OSI Approved :: MIT License',
     'Operating System :: POSIX :: Linux',
 ]
+
 [tool.setuptools.packages.find]
-where = ["pyTorchAutoForge"]
+include = ["pyTorchAutoForge", "pyTorchAutoForge.*"]
 

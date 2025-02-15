@@ -18,7 +18,7 @@
 
 if __name__ == "__main__":
 
-    print("-------------------------------------------------- Testing installation of venvTorch for Jetson --------------------------------------------------\n")
+    print("-------------------------------------------------- Testing installation of library components --------------------------------------------------\n")
 
     print("Testing torch, torchvision, tensorrt...\n")
     
