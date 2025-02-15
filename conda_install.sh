@@ -3,11 +3,12 @@ jetson_target=0
 editable_mode=1
 sudo_mode=0
 venv_name="autoforge"
+create_conda_env=0
 
 # Parse options using getopt
 # NOTE: no ":" after option means no argument, ":" means required argument, "::" means optional argument
-OPTIONS=j,v:,s
-LONGOPTIONS=jetson_target,venv_name:,sudo_mode
+OPTIONS=j,v:,s,c
+LONGOPTIONS=jetson_target,venv_name:,sudo_mode,create_conda_env
 
 # Parsed arguments list with getopt
 PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" -- "$@") 
@@ -39,6 +40,11 @@ while true; do
       echo "Sudo mode requested..."
       shift
       ;;
+    -c|--create_conda_env)
+      create_conda_env=1
+      echo "Creating and initializing conda environment..."
+      shift
+      ;;
     --)
       shift
       break
@@ -55,9 +61,26 @@ if [ $jetson_target -eq 1 ] && [ ! $sudo_mode -eq 1 ]; then
   exit 1
 fi
 
-# Create and activate conda environment
-conda create -n $venv_name python=3.11
-conda activate $venv_name
+if [ $create_conda_env -eq 1 ]; then
+  # Create and activate conda environment
+  conda create -n $venv_name python=3.11
+  conda activate $venv_name
+else
+  echo "Attempt to activate existing conda environment..."
+  
+  # Check if conda environment exists else stop
+  if conda info --envs | grep -q "$venv_name"; then
+    echo "Conda environment $venv_name found. Activating it..."
+    conda init bash
+    # Activate conda environment
+    conda activate $venv_name
+  else
+    echo "Conda environment $venv_name does not exist. Please create it first or run this script with -c flag."
+    exit 1
+  fi
+fi
+
+sleep 1
 
 if [ $jetson_target -eq 1 ] && [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
     echo "libcusparseLt.so not found. Downloading and installing..."
