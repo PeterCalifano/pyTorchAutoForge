@@ -49,8 +49,8 @@ if __name__ == "__main__":
         
 
     try:
-        import pyTorchAutoForge
         print("\nTesting pyTorchAutoForge...\n")
+        import pyTorchAutoForge
         print('\tpyTorchAutoForge Version:', pyTorchAutoForge.__version__)
 
     except ImportError as err:

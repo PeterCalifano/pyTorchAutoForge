@@ -2,6 +2,21 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../../event-based-repos/deep_ev_tracker_PeterCdev"
+		},
+		{
+			"path": "../../event-based-repos/v2e_PeterCdev"
+		},
+		{
+			"path": "../SuperGluePretrainedNetwork_PeterCdev"
+		},
+		{
+			"path": "../LightGlue_PeterCdev"
+		},
+		{
+			"path": "../accelerated_features_PeterCdev"
 		}
 	],
 	"settings": {}
