@@ -51,7 +51,7 @@ include = ["pyTorchAutoForge", "pyTorchAutoForge.*"]
 testpaths = ["tests"]
 python_files = ["test*.py"]
 python_functions = ["test*", "*test"]
-addopts = "--ignore=lib/ --maxfail=4 -rf --disable-warnings"
+addopts = "--ignore=lib/ --maxfail=10 -rf --disable-warnings"
 console_output_style = "count"
 
 # Specify folders to ignore
