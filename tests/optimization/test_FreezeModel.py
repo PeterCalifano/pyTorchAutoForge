@@ -15,7 +15,7 @@ def test_FreezeModel():
     feature_extractor = FreezeModel(feature_extractor)
 
     # Print model summary
-    torchsummary.summary(feature_extractor, (3, 224, 224))
+    #torchsummary.summary(feature_extractor, (3, 224, 224))
 
     # Check if model parameters are frozen
     for param in feature_extractor.parameters():

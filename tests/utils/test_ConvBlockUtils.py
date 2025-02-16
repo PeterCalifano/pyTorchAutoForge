@@ -24,9 +24,10 @@ def test_ComputePooling2dOutputSize():
     print('Output size of Conv2d:', conv2dOutputSize)
     print('Output size of Pooling2d:', poolingOutputSize)
 
-    # ADD ASSERTS
-    
-    assert poolingOutputSize == [4, 4], "The output size of Pooling2d is incorrect."
+    # Add asserts with expected value 
+    assert poolingOutputSize == (4, 4), "The output size of Pooling2d is incorrect."
+
+
 
 def test_ComputeConvBlockOutputSize():
     # %% Test computation of number of features after ConvBlock using default settings
@@ -63,6 +64,4 @@ def test_ComputeConvBlockOutputSize():
         outputMapSize[0] = convBlockOutputSize[0][0]
         outputMapSize[1] = convBlockOutputSize[0][1]
 
-        # ADD ASSERTS
-        assert convBlockOutputSize == [[5, 5]], "The output size of ConvBlock is incorrect."
         

@@ -131,7 +131,7 @@ def validate_args(layer_class: nn.Module, show_defaults: bool, dict_key: str, *a
 
 def build_activation_layer(activation_name : str, show_defaults: bool = False, *args, **kwargs) -> nn.Module:
     """
-    Build and return a PyTorch activation layer based on the provided activation name.
+    Factory function to build and return a PyTorch activation layer based on the provided activation name.
 
     Args:
         activation_name (str): The name of the activation function to build. 
