@@ -29,6 +29,7 @@ dependencies = [
     "msgpack<=1.1.0",
     "torchsummary<=1.5.1",
     "pynvml; platform_machine == 'x86_64'", # Should only install for x86_64 devices
+    "pycuda; platform_machine == 'x86_64'", 
     "torchvision; platform_machine == 'x86_64'" ,
     "norse; platform_machine == 'x86_64'",
     "tonic; platform_machine == 'x86_64'",
