@@ -196,7 +196,7 @@ else
   deactivate # Deactivate virtual environment if any
   source $venv_name/bin/activate # Activate virtual environment
   # Check installation by printing versions in python3
-  python3 -m test_env
+  python3 -m tests/.configuration/test_env
 
 
 
