@@ -1,0 +1,17 @@
+# List of TODOs
+
+- [x] Install TensorRT
+
+- [ ] Complete tutorial 1: <https://developer.nvidia.com/blog/speed-up-inference-tensorrt/> with ResNet
+
+- [ ] Complete followup tutorial 2: <https://developer.nvidia.com/blog/speeding-up-deep-learning-inference-using-tensorrt/> with Segmentation model
+
+- [ ] Complete study of quick start: <https://docs.nvidia.com/deeplearning/tensorrt/latest/getting-started/quick-start-guide.html>
+
+- [ ] Study and test torch.compile in pytorch
+
+- [ ] Study and understand the different pytorch frameworks for model compilation (e.g. torch-dynamo, AOTInductor)
+
+- [ ] Test tensorrt inference engine in python on jetson-orin nano
+
+- [ ] Implement C++ class template to wrap inference engines and use them easily in C++ code
