@@ -4,7 +4,8 @@ from enum import Enum
 import numpy as np
 from dataclasses import dataclass, field 
 import os
-from typing import Union
+
+# TODO (PC, important!) review tests and compare with those in tests/. Move or delete these here!
 
 class backend_module(Enum):
     MATPLOTLIB = "Use matplotlib for plotting",
@@ -54,7 +55,7 @@ class ResultsPlotter():
             setattr(self, key, value)
     
     def histPredictionErrors(self, stats: dict = None, entriesNames: list = None, units: list = None,
-                             unit_scalings: Union[dict, list, np.ndarray, float, int] = None, colours: list = None, num_of_bins: int = 100) -> int:
+                             unit_scalings: dict | list | np.ndarray | float | int = None, colours: list = None, num_of_bins: int = 100) -> int:
         """
         Method to plot histogram of prediction errors per component without absolute value. EvaluateRegressor() must be called first.
         Requires matplotlib to work in Interactive Mode.

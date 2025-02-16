@@ -1,20 +1,20 @@
-from pyTorchAutoForge import utils
-from pyTorchAutoForge import api
-from pyTorchAutoForge import optimization
+import pkgutil
+import importlib
+import pyTorchAutoForge
 
-from pyTorchAutoForge.optimization import ModelTrainingManager
-from torch.utils import data
+def test_import_pytorch_autoforge_modules():
+    package_name = "pyTorchAutoForge"
+    errors = []
 
-from pyTorchAutoForge.api.onnx import onnx_converters
-from pyTorchAutoForge.pyTorchAutoForge import TrainAndValidateModel 
+    # Iterate through all submodules in pyTorchAutoForge
+    for _, mod_name, _ in pkgutil.walk_packages(pyTorchAutoForge.__path__, package_name + "."):
+        try:
+            importlib.import_module(mod_name)
+        except ImportError as e:
+            errors.append(f"Failed to import {mod_name}: {e}")
 
-if __name__ == '__main__':
-    print("Imported modules successfully.")
-    print(f"utils: {utils}")
-    print(f"api: {api}")
-    print(f"optimization: {optimization}")
-
-    print(f"data from pytorch: {data}")
+    # If there are any errors, pytest will fail the test
+    assert not errors, f"Some modules failed to import:\n" + "\n".join(errors)
 
 
     

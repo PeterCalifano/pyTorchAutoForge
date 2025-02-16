@@ -60,11 +60,15 @@ def test_histPredictionErrors_with_invalid_stats(setup_plotter):
     with pytest.raises(TypeError):
         plotter.histPredictionErrors(stats="invalid_stats")
 
+
+# FIXME test failing, check class method implementation.
+# The assertion below fails because the stats attribute is not None!
+
 def test_histPredictionErrors_with_missing_prediction_err(setup_plotter):
     plotter, _, _ = setup_plotter
     incomplete_stats = {'mean_prediction_err': np.random.randn(3)}
     plotter.histPredictionErrors(stats=incomplete_stats)
-    assert plotter.stats is None
+    assert plotter.stats is None  
 
 def test_histPredictionErrors_with_missing_mean_prediction_err(setup_plotter):
     plotter, _, _ = setup_plotter
