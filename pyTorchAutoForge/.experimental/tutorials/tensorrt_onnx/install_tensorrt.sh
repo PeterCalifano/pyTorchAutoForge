@@ -41,6 +41,8 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/tensorrt10.7-cuda12.6/lib
 
 # Add export to bashrc
 echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/tensorrt10.7-cuda12.6/lib" >> ~/.bashrc
+echo "export PATH=/usr/local/tensorrt10.7-cuda12.6/${PATH:+:${PATH}}" >> ~/.bashrc
+echo "export TENSORRT_HOME=/usr/local/tensorrt10.7-cuda12.6" >> ~/.bashrc
 #echo "export LD_LIBRARY_PATH=/usr/local/tensorrt10.8-cuda12.8/lib:$LD_LIBRARY_PATH" >> ~/.bashrc
 
 # Install the python wheels for python 3.11
