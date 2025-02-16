@@ -29,11 +29,11 @@ tar -xzvf TensorR*
 #rm -r TensorRT-10.8.0.43
 
 # tensorrt10.7 for cuda 12.6
+sudo mv TensorRT-10.7.0.23 /usr/local/
 cd /usr/local/
-sudo mv TensorRT-10.7.0.23.Linux.x86_64-gnu.cuda-12.6/ tensorrt10.7-cuda12.6/
+sudo mv TensorRT-10.7.0.23 tensorrt10.7-cuda12.6/
 cd tensorrt10.7-cuda12.6/
-mv TensorRT-10.7.0.23/* .
-rm -r TensorRT-10.7.0.23
+
 
 # Add to environment variables
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/tensorrt10.8-cuda12.8/lib
