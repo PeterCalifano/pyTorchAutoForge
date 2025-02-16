@@ -225,7 +225,7 @@ def test_TorchWrapperComm_FeatureMatching():
     HOST, PORT = "localhost", 50003
 
     # Hardcoded for quick-n-dirty use
-    model = defineModelEval_FeatureMatching()
+    model = defineModelEval_FeatureMatching( EnumFeatureMatchingType.XFEAT_LIGHTGLUE )
 
     def forward_wrapper_FeatureMatching(inputData, model, processingMode: ProcessingMode):
         if processingMode == ProcessingMode.MULTI_TENSOR:
