@@ -34,7 +34,6 @@ cd /usr/local/
 sudo mv TensorRT-10.7.0.23 tensorrt10.7-cuda12.6/
 cd tensorrt10.7-cuda12.6/
 
-
 # Add to environment variables
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/tensorrt10.8-cuda12.8/lib
 
@@ -52,3 +51,7 @@ python3 -m pip install tensorrt_dispatch-*-cp311-none-linux_x86_64.whl
 
 # Run ldconfig
 sudo ldconfig
+
+# Clean up folder
+cd $workdir
+rm -xzvf TensorR*
