@@ -84,7 +84,7 @@ class EnumFeatureMatchingType(Enum):
     XFEAT_LIGHTGLUE = 'XFeat_LightGlue'
 
 
-def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatchingType = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE):
+def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatchingType = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE, device: 'str' = GetDevice()):
 
     torch.set_grad_enabled(mode=False)
 
@@ -97,14 +97,15 @@ def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatching
         from match_pairs_custom import DefineSuperPointSuperGlueModel
 
         # Define SuperPoint + SuperGlue model
-        model = DefineSuperPointSuperGlueModel()
+        model = DefineSuperPointSuperGlueModel(device)
 
     elif enumFeatureMatchingType == EnumFeatureMatchingType.XFEAT_LIGHTGLUE:
         REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_feature_PeterCdev'
         sys.path.append(REPO_XFEAT_PATH)
-
+ 
+        # FIXME this import is not working!
         from modules.xfeat import XFeatLightGlueWrapper
-        model = XFeatLightGlueWrapper()
+        model = XFeatLightGlueWrapper(device)
 
 
     else:
@@ -224,8 +225,11 @@ def test_TorchWrapperComm_OPNAVlimbBased():
 def test_TorchWrapperComm_FeatureMatching():
     HOST, PORT = "localhost", 50003
 
+
+    device = GetDevice()
+
     # Hardcoded for quick-n-dirty use
-    model = defineModelEval_FeatureMatching( EnumFeatureMatchingType.XFEAT_LIGHTGLUE )
+    model = defineModelEval_FeatureMatching(enumFeatureMatchingType=EnumFeatureMatchingType.XFEAT_LIGHTGLUE, device=device)
 
     def forward_wrapper_FeatureMatching(inputData, model, processingMode: ProcessingMode):
         if processingMode == ProcessingMode.MULTI_TENSOR:
@@ -248,10 +252,20 @@ def test_TorchWrapperComm_FeatureMatching():
 
         with torch.no_grad():   
             print('Evaluating model on images of shapes:', input_image1.shape, input_image2.shape)
+
+            # Move data to same device as model 
+            input_image1 = input_image1.to(device)
+            input_image2 = input_image2.to(device)
+
             # Evaluate model on input data and convert to ndarrays
             predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2})
-            predictedMatchesDict = {k: v[0].detach().cpu().numpy()
+
+            # DEVNOTE temporary casting to float32 to ensure TensorCommManager casts ok
+            predictedMatchesDict = {k: v[0].detach().cpu().float().numpy()
                                     for k, v in predictedMatchesDict.items()}
+            ###### DEBUGGING ######
+            #predictedMatchesDict = {k: v[0].detach().cpu().numpy()
+            #                        for k, v in predictedMatchesDict.items()}
 
 
             do_ransac_essential = False
@@ -261,7 +275,7 @@ def test_TorchWrapperComm_FeatureMatching():
             print('Returning dictinary with keys:', predictedMatchesDict.keys())
             print('Shapes of values:', [v.shape for v in predictedMatchesDict.values()])
 
-            # Return output dictionary (keypoints0, keypoints1, matches0, matching_scores0)
+            # Return output dictionary ['keypoints0', 'scores0', 'descriptors0', 'keypoints1', 'scores1', 'descriptors1', 'matches0', 'matches1', 'matching_scores0', 'matching_scores1']
             return predictedMatchesDict
         
     # Define function for data processor
@@ -288,6 +302,8 @@ def test_TorchWrapperComm_FeatureMatching():
         print('Servers are shutting down...')
         server.shutdown()
         server.server_close()
+        server_thread.join()
+
 
 # MAIN SCRIPT (TODO: need to be adapted)
 def main():

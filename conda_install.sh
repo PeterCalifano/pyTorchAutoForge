@@ -1,13 +1,14 @@
 # Default values
 jetson_target=0
-editable_mode=1
+editable_mode=0
 sudo_mode=0
 venv_name="autoforge"
+create_conda_env=0
 
 # Parse options using getopt
 # NOTE: no ":" after option means no argument, ":" means required argument, "::" means optional argument
-OPTIONS=j,v:,s
-LONGOPTIONS=jetson_target,venv_name:,sudo_mode
+OPTIONS=j,v:,s,c,e
+LONGOPTIONS=jetson_target,venv_name:,sudo_mode,create_conda_env,editable_mode
 
 # Parsed arguments list with getopt
 PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" -- "$@") 
@@ -39,6 +40,17 @@ while true; do
       echo "Sudo mode requested..."
       shift
       ;;
+    
+    -c|--create_conda_env)
+      create_conda_env=1
+      echo "Creating and initializing conda environment..."
+      shift
+      ;;
+    -e|--editable_mode)
+      editable_mode=1
+      echo "Editable mode selected..."
+      shift
+      ;;
     --)
       shift
       break
@@ -55,9 +67,27 @@ if [ $jetson_target -eq 1 ] && [ ! $sudo_mode -eq 1 ]; then
   exit 1
 fi
 
-# Create and activate conda environment
-conda create -n $venv_name python=3.11
-conda activate $venv_name
+if [ $create_conda_env -eq 1 ]; then
+  # Create and activate conda environment
+  conda create -n $venv_name python=3.11
+  conda init bash
+  conda activate $venv_name
+else
+  echo "Attempt to activate existing conda environment..."
+  
+  # Check if conda environment exists else stop
+  if conda info --envs | grep -q "$venv_name"; then
+    echo "Conda environment $venv_name found. Activating it..."
+    conda init bash
+    # Activate conda environment
+    conda activate $venv_name
+  else
+    echo "Conda environment $venv_name does not exist. Please create it first or run this script with -c flag."
+    exit 1
+  fi
+fi
+
+sleep 1
 
 if [ $jetson_target -eq 1 ] && [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
     echo "libcusparseLt.so not found. Downloading and installing..."
@@ -72,113 +102,112 @@ fi
 
 if [ $jetson_target -eq 1 ]; then
     
-    #pip install -r requirements.txt  # Install dependencies
-    #pip install -e .  # Install the package in editable mode
+  #pip install -r requirements.txt  # Install dependencies
+  #pip install -e .  # Install the package in editable mode
 
-    # Tools for building and installing wheels
-    echo "Installing setuptools, twine, and build..."
-    pip install setuptools twine build 
-    python3 -m ensurepip --upgrade 
-    python3 -m pip install --upgrade pip 
+  # Tools for building and installing wheels
+  echo "Installing setuptools, twine, and build..."
+  pip install setuptools twine build 
+  python3 -m ensurepip --upgrade 
+  python3 -m pip install --upgrade pip 
 
-    # Install key modules not managed by dependencies installation for versioning reasons
-    echo "Installing additional key modules..."
-    
-    # Remove torch and torchvision 
-    pip uninstall -y torch torchvision torchaudio
+  # Install key modules not managed by dependencies installation for versioning reasons
+  echo "Installing additional key modules..."
+  
+  # Remove torch and torchvision 
+  pip uninstall -y torch torchvision torchaudio
 
-    # Install torch for Jetson
-    pip install torch https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl 
+  # Install torch for Jetson
+  pip install torch https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl 
 
-    # Build and install torchvision from source
-    # From guide: https://github.com/azimjaan21/jetpack-6.1-pytorch-torchvision-/blob/main/README.md
-    git clone https://github.com/pytorch/vision.git
-    cd vision
-    git checkout tags/v0.20.0
-    python3 setup.py install 
+  # Build and install torchvision from source
+  # From guide: https://github.com/azimjaan21/jetpack-6.1-pytorch-torchvision-/blob/main/README.md
+  git clone https://github.com/pytorch/vision.git
+  cd vision
+  git checkout tags/v0.20.0
+  python3 setup.py install 
 
-    # Clean up
-    cd ..
-    sudo rm -r vision
+  # Clean up
+  cd ..
+  sudo rm -r vision
 
-    #pip install norse==1.0.0 aestream tonic expelliarmus --ignore-requires-python3   # FIXME: build fails due to "CUDA20" entry
+  #pip install norse==1.0.0 aestream tonic expelliarmus --ignore-requires-python3   # FIXME: build fails due to "CUDA20" entry
 
-    pip install nvidia-pyindex pycuda 
+  pip install nvidia-pyindex pycuda 
 
-    # ACHTUNG: this must run correctly before torch_tensorrt
-    pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+  # ACHTUNG: this must run correctly before torch_tensorrt
+  pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
 
-    #  Install torch-tensorrt from source 
-    mkdir lib
-    cd lib
-    
-    # Check if submodule exists 
-    if [ -d "TensorRT" ]; then
-        echo "TensorRT submodule exists"
-    else
-        git submodule add --branch release/2.5 https://github.com/pytorch/TensorRT.git # Try to use release/2.6 (latest)
-    fi
-    
-    cd TensorRT
-    git checkout release/2.5
-    git pull
+  #  Install torch-tensorrt from source 
+  mkdir lib
+  cd lib
+  
+  # Check if submodule exists 
+  if [ -d "TensorRT" ]; then
+      echo "TensorRT submodule exists"
+  else
+      git submodule add --branch release/2.5 https://github.com/pytorch/TensorRT.git # Try to use release/2.6 (latest)
+  fi
+  
+  cd TensorRT
+  git checkout release/2.5
+  git pull
 
-    # Install required python3 packages of torch-tensorrt
-    python3 -m pip install -r toolchains/jp_workspaces/requirements.txt # NOTE: Installs the correct version of setuptools. Do not touch it.
+  # Install required python3 packages of torch-tensorrt
+  python3 -m pip install -r toolchains/jp_workspaces/requirements.txt # NOTE: Installs the correct version of setuptools. Do not touch it.
 
-    cuda_version=$(nvcc --version | grep Cuda | grep release | cut -d ',' -f 2 | sed -e 's/ release //g')
-    export TORCH_INSTALL_PATH=$(python3 -c "import torch, os; print(os.path.dirname(torch.__file__))")
-    export SITE_PACKAGE_PATH=${TORCH_INSTALL_PATH::-6}
-    export CUDA_HOME=/usr/local/cuda-${cuda_version}/
+  cuda_version=$(nvcc --version | grep Cuda | grep release | cut -d ',' -f 2 | sed -e 's/ release //g')
+  export TORCH_INSTALL_PATH=$(python3 -c "import torch, os; print(os.path.dirname(torch.__file__))")
+  export SITE_PACKAGE_PATH=${TORCH_INSTALL_PATH::-6}
+  export CUDA_HOME=/usr/local/cuda-${cuda_version}/
 
-    # Replace the MODULE.bazel with the jetpack one # DOUBT: why needed?
-    cat toolchains/jp_workspaces/MODULE.bazel.tmpl | envsubst > MODULE.bazel
+  # Replace the MODULE.bazel with the jetpack one # DOUBT: why needed?
+  cat toolchains/jp_workspaces/MODULE.bazel.tmpl | envsubst > MODULE.bazel
 
-    # Build and install torch_tensorrt wheel file with CXX11 ABI
-    python3 setup.py install --use-cxx11-abi
-    cd ../..
+  # Build and install torch_tensorrt wheel file with CXX11 ABI
+  python3 setup.py install --use-cxx11-abi
+  cd ../..
 
-    # Finally, build pyTorchAutoForge wheel
-    if [ "$editable_mode" = true ]; then
-        echo "Building and installing pyTorchAutoForge in editable mode..."
-        pip install -e .  # Install the package in editable mode
-    else
-      echo "Building and installing pyTorchAutoForge wheel..."
-      python3 -m build 
-      pip install -e dist/*.whl  # Install pyTorchAutoForge wheel
-    fi
+  # Finally, build pyTorchAutoForge wheel
+  if [ $editable_mode -eq 1 ]; then
+      echo "Building and installing pyTorchAutoForge in editable mode..."
+      pip install -e .  # Install the package in editable mode
+  else
+    echo "Building and installing pyTorchAutoForge wheel..."
+    python3 -m build 
+    pip install dist/*.whl  # Install pyTorchAutoForge wheel # FIXME editable mode does not work for this
+  fi
     
 else
+  #pip install -r requirements.txt  # Install dependencies that do not cause issues...
+  #python3 -m pip install -r toolchains/jp_workspaces/test_requirements.txt # Required for test cases
 
-    #pip install -r requirements.txt  # Install dependencies that do not cause issues...
-    #python3 -m pip install -r toolchains/jp_workspaces/test_requirements.txt # Required for test cases
+  # Tools for building and installing wheels
+  echo "Installing setuptools, twine, and build..."
+  pip install setuptools twine build 
+  python3 -m ensurepip --upgrade 
+  python3 -m pip install --upgrade pip 
 
-    # Tools for building and installing wheels
-    echo "Installing setuptools, twine, and build..."
-    pip install setuptools twine build 
-    python3 -m ensurepip --upgrade 
-    python3 -m pip install --upgrade pip 
+  # Install key modules not managed by dependencies installation for versioning reasons
+  echo "Installing additional key modules..."
 
-    # Install key modules not managed by dependencies installation for versioning reasons
-    echo "Installing additional key modules..."
-
-    # Build pyTorchAutoForge wheel
-    if [ "$editable_mode" = true ]; then
-        echo "Building and installing pyTorchAutoForge in editable mode..."
-        pip install -e .  # Install the package in editable mode
-    else
-      echo "Building and installing pyTorchAutoForge wheel..."
-      python3 -m build 
-      pip install -e dist/*.whl  # Install pyTorchAutoForge wheel
-    fi
-
-    # Install tools for model optimization and deployment
-    echo "Installing tools for model optimization and deployment by Nvidia..."
-    python3 -m pip install pycuda torch torchvision torch-tensorrt tensorrt "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+  # Build pyTorchAutoForge wheel
+  if [ $editable_mode -eq 1 ]; then
+      echo "Building and installing pyTorchAutoForge in editable mode..."
+      pip install -e .  # Install the package in editable mode
+  else
+    echo "Building and installing pyTorchAutoForge wheel..."
+    python3 -m build 
+    pip install dist/*.whl  # Install pyTorchAutoForge wheel # FIXME editable mode does not work for this
   fi
 
-  # Check installation by printing versions in python3
-  python3 -m test_env
+  # Install tools for model optimization and deployment
+  echo "Installing tools for model optimization and deployment by Nvidia..."
+  python3 -m pip install pycuda torch torchvision torch-tensorrt tensorrt "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+fi
+
+# Check installation by printing versions in python3
+python3 -m tests/.configuration/test_env
 
 
 

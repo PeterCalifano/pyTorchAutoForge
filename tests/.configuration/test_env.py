@@ -18,7 +18,7 @@
 
 if __name__ == "__main__":
 
-    print("-------------------------------------------------- Testing installation of venvTorch for Jetson --------------------------------------------------\n")
+    print("-------------------------------------------------- Testing installation of library components --------------------------------------------------\n")
 
     print("Testing torch, torchvision, tensorrt...\n")
     
@@ -49,8 +49,8 @@ if __name__ == "__main__":
         
 
     try:
-        import pyTorchAutoForge
         print("\nTesting pyTorchAutoForge...\n")
+        import pyTorchAutoForge
         print('\tpyTorchAutoForge Version:', pyTorchAutoForge.__version__)
 
     except ImportError as err:
