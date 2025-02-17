@@ -2,7 +2,3 @@
 	path = lib/CommManager4MATLAB
 	url = git@github.com:PeterCalifano/CommManager4MATLAB.git
 	branch = dev_main
-[submodule "lib/TensorRT"]
-	path = lib/TensorRT
-	url = https://github.com/pytorch/TensorRT.git
-	branch = release/2.6
