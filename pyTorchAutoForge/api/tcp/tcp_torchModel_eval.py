@@ -24,7 +24,7 @@ from pyTorchAutoForge.utils import GetDevice
 
 # Define processing function for model evaluation (OPNAV limb based)
 
-def defineModelForEval_OPNAVlimbBased():
+def defineModelForEval_OPNAVlimbBased() -> nn.Module:
     # NOTE: before using this function make sure the paths are correct
     hostname = os.uname().nodename
     trial_ID = None
@@ -84,7 +84,7 @@ class EnumFeatureMatchingType(Enum):
     XFEAT_LIGHTGLUE = 'XFeat_LightGlue'
 
 
-def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatchingType = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE, device: 'str' = GetDevice()):
+def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatchingType = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE, device: 'str' = GetDevice()) -> nn.Module:
 
     torch.set_grad_enabled(mode=False)
 
@@ -100,7 +100,7 @@ def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatching
         model = DefineSuperPointSuperGlueModel(device)
 
     elif enumFeatureMatchingType == EnumFeatureMatchingType.XFEAT_LIGHTGLUE:
-        REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_feature_PeterCdev'
+        REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_features_PeterCdev'
         sys.path.append(REPO_XFEAT_PATH)
  
         # FIXME this import is not working!

@@ -1,7 +1,7 @@
 import torch
 import warnings
 import platform
-
+from typing import Literal
 
 # Detect if running on a Jetson device
 if torch.cuda.is_available():
@@ -14,7 +14,7 @@ else:
 
 if is_jetson:
     # GetDevice for Jetson devices
-    def GetDeviceMulti():
+    def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu']:
         if torch.cuda.is_available():
             return "cuda:0"
         return "cpu"
@@ -22,7 +22,7 @@ if is_jetson:
 else:
     # GetDevice for Non-Tegra devices
     import pynvml
-    def GetDeviceMulti():
+    def GetDeviceMulti() -> str:
         '''Function to get device to run models on. Used by most modules of pyTorchAutoForge'''
 
         MIN_FREE_MEM_RATIO = 0.3

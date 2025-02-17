@@ -6,21 +6,19 @@ from torch.utils.data import DataLoader
 
 import time
 from functools import wraps
-from typing import Any 
+from typing import Any, Literal
 from collections.abc import Callable
 
 # GetDevice:
-def GetDevice():
-    '''Function to get working device. Used by most modules of pyTorchAutoForge'''
-    # TODO: improve method by adding selection of GPU for multi-GPU systems
-    device = ("cuda:0"
-              if torch.cuda.is_available()
-              else "mps"
-              if torch.backends.mps.is_available()
-              else "cpu")
-    # print(f"Using {device} device")
-    return device
 
+
+def GetDevice() -> Literal['cuda:0', 'cpu', 'mps']:
+    '''Function to get working device. Once used by most modules of pyTorchAutoForge, now replaced by the more advanced GetDeviceMulti(). Prefer the latter one to this method.'''
+    return ('cuda:0'
+            if torch.cuda.is_available()
+            else 'mps'
+            if torch.backends.mps.is_available()
+            else 'cpu')
 
 # %% Function to extract specified number of samples from dataloader - 06-06-2024
 # ACHTUNG: TO REWORK USING NEXT AND ITER!
