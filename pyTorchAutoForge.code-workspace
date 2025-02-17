@@ -17,6 +17,9 @@
 		},
 		{
 			"path": "../accelerated_features_PeterCdev"
+		},
+		{
+			"path": "../torchAutoForge-deploy"
 		}
 	],
 	"settings": {}
