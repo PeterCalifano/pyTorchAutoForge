@@ -39,14 +39,19 @@ cd tensorrt10.7-cuda12.6/
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/tensorrt10.7-cuda12.6/lib
 
-# Add export to bashrc
+# Add export for LD_LIBRARY_PATH to .bashrc
 echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/tensorrt10.7-cuda12.6/lib" >> ~/.bashrc
+echo "export LD_LIBRARY_PATH=/usr/local/cuda-12.6/lib64:/usr/local/tensorrt10.7-cuda12.6/lib" >> ~/.bashrc
+
+# Add export for PATH to .bashrc
 echo "export PATH=/usr/local/tensorrt10.7-cuda12.6/${PATH:+:${PATH}}" >> ~/.bashrc
+echo "export PATH=/usr/local/tensorrt10.7-cuda12.6/bin/${PATH:+:${PATH}}" >> ~/.bashrc
+
+# Add export of most used environment variables
+echo "export TRT_LIB_DIR=/usr/local/tensorrt10.7-cuda12.6" >> ~/.bashrc
 echo "export TENSORRT_HOME=/usr/local/tensorrt10.7-cuda12.6" >> ~/.bashrc
 echo "export nvinfer_LIB_PATH=/usr/local/tensorrt10.7-cuda12.6/lib" >> ~/.bashrc
-echo "export TRT_LIB_DIR=/usr/local/tensorrt10.7-cuda12.6/lib" >> ~/.bashrc
-
-#echo "export LD_LIBRARY_PATH=/usr/local/tensorrt10.8-cuda12.8/lib:$LD_LIBRARY_PATH" >> ~/.bashrc
+echo "export TRT_LIBPATH=/usr/local/tensorrt10.7-cuda12.6" >> ~/.bashrc
 
 # Install the python wheels for python 3.11
 cd python
