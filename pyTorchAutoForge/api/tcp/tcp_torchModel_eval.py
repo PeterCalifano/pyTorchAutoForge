@@ -20,7 +20,10 @@ from torch import nn
 from pyTorchAutoForge.modelBuilding.modelClasses import ReloadModelFromOptuna
 from functools import partial
 import cv2 as ocv
-from pyTorchAutoForge.utils import GetDevice 
+from pyTorchAutoForge.utils import GetDevice
+from pyTorchAutoForge.utils.DeviceManager import GetDeviceMulti 
+from typing import Any
+
 
 # Define processing function for model evaluation (OPNAV limb based)
 
@@ -222,23 +225,23 @@ def test_TorchWrapperComm_OPNAVlimbBased():
         server_msgpack.shutdown()
         server_msgpack.server_close()
     
-def test_TorchWrapperComm_FeatureMatching():
+def test_TorchWrapperComm_FeatureMatching() -> None:
     HOST, PORT = "localhost", 50003
 
-
-    device = GetDevice()
+    network_name = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE
+    device = GetDeviceMulti()
 
     # Hardcoded for quick-n-dirty use
-    model = defineModelEval_FeatureMatching(enumFeatureMatchingType=EnumFeatureMatchingType.XFEAT_LIGHTGLUE, device=device)
+    model = defineModelEval_FeatureMatching(enumFeatureMatchingType=network_name, device=device)
 
-    def forward_wrapper_FeatureMatching(inputData, model, processingMode: ProcessingMode):
+    def forward_wrapper_FeatureMatching(inputData, model, processingMode: ProcessingMode) -> dict[Any, Any]:
         if processingMode == ProcessingMode.MULTI_TENSOR:
             
             # Get input images pair
             print('Input data type: ', type(inputData))
             assert isinstance(inputData, list)
 
-            if isinstance(inputData, list | tuple):
+            if isinstance(inputData, (list, tuple)):
                 assert len(inputData) == 2
                 # Convert input data to torch tensor and normalize to [0, 1] range
                 input_image1 = torch.tensor(inputData[0], dtype=torch.float32)/255.0
@@ -254,8 +257,8 @@ def test_TorchWrapperComm_FeatureMatching():
             print('Evaluating model on images of shapes:', input_image1.shape, input_image2.shape)
 
             # Move data to same device as model 
-            input_image1 = input_image1.to(device)
-            input_image2 = input_image2.to(device)
+            input_image1 = input_image1.to(device=device)
+            input_image2 = input_image2.to(device=device)
 
             # Evaluate model on input data and convert to ndarrays
             predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2})
@@ -306,7 +309,7 @@ def test_TorchWrapperComm_FeatureMatching():
 
 
 # MAIN SCRIPT (TODO: need to be adapted)
-def main():
+def main() -> None:
     print('\n\n----------------------------------- RUNNING: torchModelOverTCP.py -----------------------------------\n')
     print("MAIN script operations: initialize always-on server --> listen to data from client --> if OK, evaluate model --> if OK, return output to client\n")
     
