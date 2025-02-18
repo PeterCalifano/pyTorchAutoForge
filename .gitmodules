@@ -1,0 +1,4 @@
+[submodule "lib/CommManager4MATLAB"]
+	path = lib/CommManager4MATLAB
+	url = git@github.com:PeterCalifano/CommManager4MATLAB.git
+	branch = dev_main
