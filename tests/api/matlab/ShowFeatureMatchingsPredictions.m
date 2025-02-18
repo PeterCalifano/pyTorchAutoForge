@@ -10,33 +10,34 @@ arguments
     kwargs.objFig                   {mustBeA(kwargs.objFig, ["double", "matlab.ui.Figure"])} = 0;
     kwargs.charFigTitle             string = "Feature Matches";
     kwargs.plotMatchColor           (1,:) char = 'g';
-    kwargs.plotKpsColor1       (1,:) char = 'r';
-    kwargs.plotKpsColor2       (1,:) char = 'b';
+    kwargs.plotKpsColor1            (1,:) char = 'r';
+    kwargs.plotKpsColor2            (1,:) char = 'b';
     kwargs.matchLineWidth           (1,1) double = 1;
     kwargs.markerSize               (1,1) double = 5;
     kwargs.markerLineWidth          (1,1) double = 1.5;
     kwargs.bEnableLegend            (1,1) logical = true;
-    kwargs.legendLocation           (1,:) string = "southoutside";
+    kwargs.legendLocation           (1,:) string = "best";
 end
 
 %% Create or use provided figure and set background/text color
 if kwargs.objFig == 0
-    fig = figure('Renderer', 'painters', 'Position', [100, 100, 1200, 400]);
+    objFig = figure('Renderer', 'painters', 'Position', [100, 100, 1200, 400]);
     if kwargs.bUseBlackBackground
-        set(fig, 'Color', 'k');
+        set(objFig, 'Color', 'k');
         charTextColor = 'w';
     else
         charTextColor = 'k';
     end
 else
-    fig = kwargs.objFig;
-    charTextColor = fig.Color;
+    objFig = kwargs.objFig;
+    charTextColor = objFig.Color;
 end
 
+figure(objFig)
+gold on
 %% Display the combined image (side-by-side)
 combinedImage = [ui8Image1, ui8Image2];
 imshow(combinedImage);
-hold on;
 axis image;  % Maintain aspect ratio
 
 %% Calculate offset for the second image and plot matches

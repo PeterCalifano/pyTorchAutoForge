@@ -261,7 +261,7 @@ def test_TorchWrapperComm_FeatureMatching() -> None:
             input_image2 = input_image2.to(device=device)
 
             # Evaluate model on input data and convert to ndarrays
-            predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2})
+            predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2}) # FIXME Xfeat Light Glue is failing here
 
             # DEVNOTE temporary casting to float32 to ensure TensorCommManager casts ok
             predictedMatchesDict = {k: v[0].detach().cpu().float().numpy()

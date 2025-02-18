@@ -26,7 +26,7 @@ i32PortNumber_multi = 50003; % 50001
 
 %% TEST: evaluating model directly through TensorCommManager
 % Define TensorCommManager instance
-tensorCommManager_multi = TensorCommManager(charAddress, i32PortNumber_multi, 100, "bInitInPlace", true, ...
+objTensorCommManager_multi = TensorCommManager(charAddress, i32PortNumber_multi, 100, "bInitInPlace", true, ...
     "bMULTI_TENSOR", true);
 
 ui8TestID = 1;
@@ -42,10 +42,10 @@ if ui8TestID == 0
     ui8TensorShapedImage = zeros(1,1,size(ui8Image, 1), size(ui8Image, 2), 'uint8');
     ui8TensorShapedImage(1,1,:,:) = ui8Image;
 
-    writtenBytes = tensorCommManager_multi.WriteBuffer(ui8TensorShapedImage);
+    writtenBytes = objTensorCommManager_multi.WriteBuffer(ui8TensorShapedImage);
 
     % Get data back from server
-    [cellTensorArray, tensorCommManager_multi] = tensorCommManager_multi.ReadBuffer();
+    [cellTensorArray, objTensorCommManager_multi] = objTensorCommManager_multi.ReadBuffer();
 
     disp(cellTensorArray);
     strCentroidRangePredictions = cell2struct(cellTensorArray, {'Predictions'});
@@ -70,13 +70,13 @@ elseif ui8TestID == 1
     ui8TensorShapedFrame_2(1,1,:,:) = ui8Frame_2;
 
     cellTensorImages = {ui8TensorShapedFrame_1, ui8TensorShapedFrame_2};
-    writtenBytes = tensorCommManager_multi.WriteBuffer(cellTensorImages);
+    writtenBytes = objTensorCommManager_multi.WriteBuffer(cellTensorImages);
 
     % Return output dictionary ['keypoints0', 'scores0', 'descriptors0', 'keypoints1', 'scores1',
     % 'descriptors1', 'matches0', 'matches1', 'matching_scores0', 'matching_scores1']
 
     % Get data back from server
-    [cellTensorArray, tensorCommManager_multi] = tensorCommManager_multi.ReadBuffer();
+    [cellTensorArray, objTensorCommManager_multi] = objTensorCommManager_multi.ReadBuffer();
 
     dKeypoints0     = cellTensorArray{1};
     ui32Matches0    = cellTensorArray{7};
@@ -90,9 +90,16 @@ elseif ui8TestID == 1
     dMatchedKps0 = dKeypoints0(bValidMatch, :);
     dMatchedKps1 = dKeypoints1(ui32Matches0(bValidMatch), :);
 
+
     % Show matchings
+    if not(exist('objPredictionsFig', 'var'))
+        objPredictionsFig = figure('Renderer', 'painters');
+    end
+
     ShowFeatureMatchingsPredictions(ui8Frame_1, ui8Frame_2, ...
-        dMatchedKps0, dMatchedKps1);
+        dMatchedKps0, dMatchedKps1, ...
+        'objFig', objPredictionsFig, ...
+        'bUseBlackBackground', true);
 end
 return
 
