@@ -39,14 +39,15 @@ def test_conversions_deprectated():
     test_model = SimpleModel()
 
     # Convert to ONNx format and save
-    modelONNx = ExportTorchModelToONNx(
+    modelONNx, pathToModel, convertedModel = ExportTorchModelToONNx(
         test_model, inputDummySample, exportPath, modelName, onnx_version=13)
 
 
+# Main program to run tests manually
 def main():
     test_conversions_deprectated()
 
-    # Remove test artifacts 
+    # Remove test artifacts
     if os.path.isfile(os.path.join(exportPath, modelName + '.onnx')):
         os.remove(os.path.join(exportPath, modelName + '.onnx'))
 

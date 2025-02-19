@@ -2,3 +2,9 @@ data
 tensorboardTest
 testModels/*
 utilities/*
+
+# Custom
+res*
+*.gz
+*.7z
+*.tar
