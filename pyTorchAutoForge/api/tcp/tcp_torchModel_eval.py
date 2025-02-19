@@ -24,6 +24,17 @@ from pyTorchAutoForge.utils import GetDevice
 from pyTorchAutoForge.utils.DeviceManager import GetDeviceMulti 
 from typing import Any
 
+# Import model paths
+REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_features_PeterCdev'
+sys.path.append(REPO_XFEAT_PATH)
+
+from modules.xfeat import XFeatLightGlueWrapper
+
+REPO_SUPERGLUE_PATH = '/home/peterc/devDir/ML-repos/SuperGluePretrainedNetwork_PeterCdev'
+sys.path.append(REPO_SUPERGLUE_PATH)
+
+from match_pairs_custom import DefineSuperPointSuperGlueModel
+
 
 # Define processing function for model evaluation (OPNAV limb based)
 
@@ -92,23 +103,12 @@ def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatching
     torch.set_grad_enabled(mode=False)
 
     if enumFeatureMatchingType == EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE:
-
-        # Define SuperGluePretrainedNetwork path    
-        REPO_SUPERGLUE_PATH = '/home/peterc/devDir/ML-repos/SuperGluePretrainedNetwork_PeterCdev'
-        sys.path.append(REPO_SUPERGLUE_PATH)
-
-        from match_pairs_custom import DefineSuperPointSuperGlueModel
-
         # Define SuperPoint + SuperGlue model
         model = DefineSuperPointSuperGlueModel(device)
 
     elif enumFeatureMatchingType == EnumFeatureMatchingType.XFEAT_LIGHTGLUE:
-        REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_features_PeterCdev'
-        sys.path.append(REPO_XFEAT_PATH)
- 
-        from modules.xfeat import XFeatLightGlueWrapper
+        # Define XFeat + LightGlue model
         model = XFeatLightGlueWrapper(device)
-
 
     else:
         raise ValueError("Feature matching type not valid.")
@@ -227,7 +227,7 @@ def test_TorchWrapperComm_OPNAVlimbBased():
 def test_TorchWrapperComm_FeatureMatching() -> None:
     HOST, PORT = "localhost", 50003
 
-    network_name = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE
+    network_name = EnumFeatureMatchingType.XFEAT_LIGHTGLUE
     device = GetDeviceMulti()
 
     # Hardcoded for quick-n-dirty use
@@ -281,12 +281,40 @@ def test_TorchWrapperComm_FeatureMatching() -> None:
             #input_image2 = input_image2 / 255.0
             ###########################################################################
 
+            if isinstance(model, XFeatLightGlueWrapper):
+                # Renormalize images to [0, 255] range
+                input_image1 = input_image1 * 255.0
+                input_image2 = input_image2 * 255.0
+    
+                # Permute tp (H, W, C) format
+                input_image1 = input_image1.permute(0, 2, 3, 1)
+                input_image2 = input_image2.permute(0, 2, 3, 1)
+                
+                # Convert to ndarrays
+                input_image1 = input_image1[0].detach().cpu().numpy()
+                input_image2 = input_image2[0].detach().cpu().numpy()
+                
+                # DEVNOTE
+
+
             # Evaluate model on input data and convert to ndarrays
             predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2}) # FIXME Xfeat Light Glue is failing here
 
             # DEVNOTE temporary casting to float32 to ensure TensorCommManager casts ok
-            predictedMatchesDict = {k: v[0].detach().cpu().float().numpy()
-                                    for k, v in predictedMatchesDict.items()}
+
+            if isinstance(model, XFeatLightGlueWrapper):
+                # Define output dictionary
+                for k, v in predictedMatchesDict.items():
+                    if isinstance(v, np.ndarray):
+                        predictedMatchesDict[k] = v.astype(np.float32)
+                    elif isinstance(v, torch.Tensor):
+                        predictedMatchesDict[k] = v.detach().cpu().numpy().astype(np.float32)
+                    else:
+                        raise ValueError("Output type is invalid.")
+            else:
+                # Output is tensor
+                predictedMatchesDict = {k: v[0].detach().cpu().float().numpy()
+                                        for k, v in predictedMatchesDict.items()}
             ###### DEBUGGING ######
             #predictedMatchesDict = {k: v[0].detach().cpu().numpy()
             #                        for k, v in predictedMatchesDict.items()}

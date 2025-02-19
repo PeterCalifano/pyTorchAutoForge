@@ -254,7 +254,7 @@ def ExportTorchModelToONNx(model: torch.nn.Module, dummyInputSample: torch.tenso
     # modelONNx = torch.onnx.export(model, dummyInputSample) # NOTE: ONNx model is stored as a binary protobuf file!
 
     # Save ONNx model
-    pathToModel = modelSaveName+'.onnx'
+    pathToModel = modelSaveName + '.onnx'
     modelONNx.save(destination=pathToModel)  # NOTE: this is a torch utility, not onnx!
 
     # Try to convert model to required version
@@ -281,7 +281,7 @@ def ExportTorchModelToONNx(model: torch.nn.Module, dummyInputSample: torch.tenso
     else:
         convertedModel = None
 
-    return modelONNx, convertedModel
+    return modelONNx, pathToModel, convertedModel
 
 def LoadTorchModelFromONNx(dummyInputSample: torch.tensor, onnxExportPath: str = '.', onnxSaveName: str = 'trainedModelONNx', modelID: int = 0):
     
