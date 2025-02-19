@@ -15,7 +15,7 @@ class ModelHandlerONNx:
     """
     # CONSTRUCTOR
 
-    def __init__(self, model: torch.nn.Module | torchModel | onnx.ModelProto, dummy_input_sample: torch.Tensor | numpy.ndarray, onnx_export_path: str = '.', opset_version: int = 11, run_export_validation: bool = True, generate_report: bool = False) -> None:
+    def __init__(self, model: torch.nn.Module | torchModel | onnx.ModelProto, dummy_input_sample: torch.Tensor | numpy.ndarray, onnx_export_path: str = '.', opset_version: int = 13, run_export_validation: bool = True, generate_report: bool = False) -> None:
         
         # Store shallow copy of model
         if isinstance(model, torch.nn.Module):
