@@ -106,7 +106,6 @@ def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatching
         REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_features_PeterCdev'
         sys.path.append(REPO_XFEAT_PATH)
  
-        # FIXME this import is not working!
         from modules.xfeat import XFeatLightGlueWrapper
         model = XFeatLightGlueWrapper(device)
 
@@ -244,9 +243,13 @@ def test_TorchWrapperComm_FeatureMatching() -> None:
             if isinstance(inputData, (list, tuple)):
                 assert len(inputData) == 2
                 # Convert input data to torch tensor and normalize to [0, 1] range
-                input_image1 = torch.tensor(inputData[0], dtype=torch.float32)/255.0
+                
+                input_image1 = torch.tensor(inputData[0], dtype=torch.float32) / 255.0
+                input_image2 = torch.tensor(inputData[1], dtype=torch.float32) / 255.0
 
-                input_image2 = torch.tensor(inputData[1], dtype=torch.float32)/255.0
+                #input_image1 = torch.tensor(inputData[0], dtype=torch.float32)
+                #input_image2 = torch.tensor(inputData[1], dtype=torch.float32)
+                
             else:
                 raise ValueError("Input data type not valid. Must be a list or a tuple.")
             
@@ -259,6 +262,24 @@ def test_TorchWrapperComm_FeatureMatching() -> None:
             # Move data to same device as model 
             input_image1 = input_image1.to(device=device)
             input_image2 = input_image2.to(device=device)
+
+            # DEBUG: show images
+            #input_image1_ = input_image1[0,:,:,:].clone().detach().cpu()
+            #input_image2_ = input_image2[0,:,:,:].clone().detach().cpu()
+            #input_image1_toshow = np.array(input_image1_.permute(1, 2, 0).numpy().astype('uint8'))
+            #input_image2_toshow = np.array(input_image2_.permute(1, 2, 0).numpy().astype('uint8'))
+
+            # Show received image
+            #ocv.imshow('Input image 1', input_image1_toshow)
+            #ocv.imshow('Input image 2', input_image2_toshow)
+            #ocv.waitKey()
+            #ocv.destroyAllWindows()
+            
+            ############################## DEBUG ATTEMPT ##############################
+            # Normalize images to [0, 1] range
+            #input_image1 = input_image1 / 255.0
+            #input_image2 = input_image2 / 255.0
+            ###########################################################################
 
             # Evaluate model on input data and convert to ndarrays
             predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2}) # FIXME Xfeat Light Glue is failing here
