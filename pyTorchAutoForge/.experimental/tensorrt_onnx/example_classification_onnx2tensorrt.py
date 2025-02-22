@@ -112,3 +112,4 @@ print('Output predictions:', output)
 # Get argmax of the output
 output_predictions = output.argmax()
 print('Argmax of output:', output_predictions)
+print('Example completed.')

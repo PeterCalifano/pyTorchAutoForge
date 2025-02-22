@@ -11,8 +11,7 @@ PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" --
 # TODO check if this is where I need to modify something to allow things like -B build, instead of -Bbuild
 
 # Check validity of input arguments 
-if [[ $? -ne 0 ]]; then
-  echo "Error: Failed to parse options." >&2
+if [[ $? -ne 1 ]]; then
   echo "Usage: $0 -p <path_to_onnx_model> -o <output_file>" >&2
   exit 2
 fi
