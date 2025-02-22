@@ -43,8 +43,22 @@ class ModelHandlerONNx:
 
     # METHODS
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def torch_export(self, input_tensor: torch.Tensor, onnx_model_name: str = 'onnx_export', dynamic_axes: dict = None, IO_names: dict = None, verbose: bool = True) -> None:
+    def torch_export(self, input_tensor: torch.Tensor | None = None, onnx_model_name: str | None = None, dynamic_axes: dict = None, IO_names: dict = None, verbose: bool = True) -> None:
         """Export the model to ONNx format using TorchScript backend."""
+
+        # TODO (PC) move all this preliminary code to a dedicated method
+        if onnx_model_name is None and self.onnx_export_path is not None:
+            onnx_model_name = os.path.basename(self.onnx_export_path)
+
+            if onnx_model_name == "":
+                onnx_model_name = 'onnx_export'
+
+        elif onnx_model_name is None and self.onnx_export_path is None:
+            print('No name provided for the ONNx model. Assign default value.')
+            onnx_model_name = 'onnx_export'
+        
+        if not os.path.exists(self.onnx_export_path):
+            os.makedirs(self.onnx_export_path)
 
         # Check if any model is already exported in the export path and append ID to the filename if any
         nameID = 0
@@ -53,6 +67,12 @@ class ModelHandlerONNx:
             onnx_model_name_tmp = onnx_model_name + str(nameID)
             nameID += 1
         onnx_model_name = onnx_model_name_tmp
+
+        # Assign input tensor from init if not provided
+        if input_tensor is None and self.dummy_input_sample is not None:
+            input_tensor = self.dummy_input_sample
+        else:
+            raise ValueError("Input tensor must be provided or dummy input sample must be provided when constructing this class.")
 
         if dynamic_axes is None:
             # Assume first dimension (batch size) is dynamic
@@ -94,7 +114,7 @@ class ModelHandlerONNx:
             self.onnx_validate(self.onnx_model)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def torch_dynamo_export(self, input_tensor: torch.Tensor, onnx_model_name: str = 'onnx_dynamo_export', dynamic_axes: dict = None, IO_names: dict = None, verbose: bool = True) -> None:
+    def torch_dynamo_export(self, input_tensor: torch.Tensor | None = None, onnx_model_name: str = 'onnx_dynamo_export', dynamic_axes: dict = None, IO_names: dict = None, verbose: bool = True) -> None:
         """Export the model to ONNx format using TorchDynamo."""
 
         # Check if any model is already exported in the export path and append ID to the filename if any
@@ -104,6 +124,12 @@ class ModelHandlerONNx:
             onnx_model_name_tmp = onnx_model_name + str(nameID)
             nameID += 1
         onnx_model_name = onnx_model_name_tmp
+
+        # Assign input tensor from init if not provided
+        if input_tensor is None and self.dummy_input_sample is not None:
+            input_tensor = self.dummy_input_sample
+        else:
+            raise ValueError("Input tensor must be provided or dummy input sample must be provided when constructing this class.")
 
         if dynamic_axes is None:
             # Assume first dimension (batch size) is dynamic
