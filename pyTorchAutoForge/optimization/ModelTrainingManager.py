@@ -746,6 +746,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             print('Training and validation cycle completed.')
             if self.mlflow_logging:
                 mlflow.end_run(status='FINISHED')
+            
+            return self.bestModel if self.keep_best else self.model
 
         except KeyboardInterrupt:
             print('\nModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
@@ -775,6 +777,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 f"\nError during training and validation cycle: {str(e)[:max_chars]}...")
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
+
 
     def evalExample(self, num_samples: int = 128) -> Union[torch.Tensor, None]:
         # TODO Extend method distinguishing between regression and classification tasks
