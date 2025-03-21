@@ -244,7 +244,7 @@ def test_TorchWrapperComm_FeatureMatching() -> None:
                 assert len(inputData) == 2
                 # Convert input data to torch tensor and normalize to [0, 1] range
                 
-                input_image1 = torch.tensor(inputData[0], dtype=torch.float32) / 255.0
+                input_image1 = torch.tensor(data=inputData[0], dtype=torch.float32) / 255.0
                 input_image2 = torch.tensor(inputData[1], dtype=torch.float32) / 255.0
 
                 #input_image1 = torch.tensor(inputData[0], dtype=torch.float32)

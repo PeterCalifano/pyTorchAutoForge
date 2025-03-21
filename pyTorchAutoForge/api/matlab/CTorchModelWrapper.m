@@ -23,6 +23,7 @@ classdef CTorchModelWrapper < handle
         charDevice = 'cpu';
         objTensorCommHandler
         charPTAF_HOME = '/home/peterc/devDir/pyTorchAutoForge'
+        bMultiTensorMode = true
     end
 
     methods (Access = public)
@@ -38,12 +39,14 @@ classdef CTorchModelWrapper < handle
                 kwargs.charServerAddress     (1,1) string = '127.0.0.1' % Assumes localhost server
                 kwargs.i32PortNumber         (1,1) int32 = 50005       % Assumes free port number
                 kwargs.charInterfaceFcnsPath (1,1) string = '/home/peterc/devDir/MachineLearning_PeterCdev/matlab/LimbBasedNavigationAtMoon'
+                kwargs.bMultiTensorMode (1,1) logical {islogical, isscalar} = true
             end
             
             % Assign properties
             self.charDevice = charDevice;
             self.enumTorchWrapperMode = kwargs.enumTorchWrapperMode;
             self.charModelPath = charModelPath;
+            self.bMultiTensorMode = kwargs.bMultiTensorMode;
 
             if self.enumTorchWrapperMode == EnumTorchWrapperMode.PYENV
 
@@ -73,11 +76,21 @@ classdef CTorchModelWrapper < handle
             switch self.enumTorchWrapperMode
                 case EnumTorchWrapperMode.TCP
                     
+                    if isfloat(X)
+                        X = single(X);
+                    elseif iscell(X)
+                        for idC = 1:length(X)
+                            if isfloat(X{idC})
+                                X{idC} = single(X{idC});
+                            end
+                        end
+                    end
+
                     % Call TensorCommManager to forward data
-                    self.objTensorCommHandler.WriteBuffer(X);
+                    dWrittenBytes = self.objTensorCommHandler.WriteBuffer(X);
 
                     % Read buffer from server with output
-                    [Y, self.objTensorCommHandler] = self.objTensorCommHandler.ReadBuffer(X);
+                    [Y, self.objTensorCommHandler] = self.objTensorCommHandler.ReadBuffer();
 
 
                 case EnumTorchWrapperMode.PYENV
@@ -149,7 +162,11 @@ classdef CTorchModelWrapper < handle
             assert(bIsModuleAvailable, 'ERROR: CommManager not found. Have you initialized the submodules?')
 
             % Create communication handler and initialize directly
-            self.objTensorCommHandler = TensorCommManager(charServerAddress, i32PortNumber, dCommTimeout, "bInitInPlace", true);
+            self.objTensorCommHandler = TensorCommManager(charServerAddress, ...
+                                                        i32PortNumber, ...
+                                                        dCommTimeout, ...
+                                                        "bInitInPlace", true, ...
+                                                        "bMULTI_TENSOR", self.bMultiTensorMode);
 
         end
     end
