@@ -1,4 +1,3 @@
-import torch, torchsummary
 from torch import nn
 import torchvision.models as models
 from pyTorchAutoForge.optimization import FreezeModel
