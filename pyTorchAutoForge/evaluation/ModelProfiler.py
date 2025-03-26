@@ -4,9 +4,34 @@ from torch.profiler import profile, record_function, ProfilerActivity
 
 class ModelProfiler():
     """
-    ModelProfiler _summary_
+    A class to profile PyTorch models.
 
-    _extended_summary_
+    Attributes:
+    -----------
+    model : torch.nn.Module
+        The PyTorch model to be profiled.
+    device : str
+        The device to run the model on ('cpu' or 'cuda').
+    last_prof : torch.profiler.profile
+        The last profiling result.
+    output_prof_filename : str or None
+        The filename to save the profiling result.
+    with_stack : bool
+        Whether to record stack information.
+    input_sample : torch.Tensor or None
+        The input sample for the model.
+    activities : list
+        The activities to profile (default is [ProfilerActivity.CPU]).
+    record_shapes : bool
+        Whether to record tensor shapes.
+
+    Methods:
+    --------
+    __init__(model, input_shape_or_sample, device='cpu', activities=None, record_shapes=False, output_prof_filename=None, with_stack=False):
+        Initializes the ModelProfiler with the given model and input sample or shape.
+
+    run_prof(activities=None, record_shapes=False, input_sample=None):
+        Runs the profiler on the model with the given input sample.
     """
     def __init__(self, model, input_shape_or_sample : list | tuple | ndarray | torch.Tensor, device : str = 'cpu', activities : list | None = None, record_shapes : bool = False, output_prof_filename : str | None = None, with_stack : bool = False):
         # Store data
