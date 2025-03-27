@@ -1,6 +1,7 @@
 from numpy import ndarray
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
+import torchinfo
 
 class ModelProfiler():
     """
@@ -101,7 +102,17 @@ class ModelProfiler():
 
         return prof
         
+    def make_summary(self):
+    # TODO extend method, this is only the first basic version  
+        if self.input_sample is not None:
+            input_size = self.input_sample.shape
+            input_type = self.input_sample.dtype
+        else:
+            raise ValueError("Input sample is None. Cannot generate summary.")
 
+        model_summary = torchinfo.summary(model=self.model, input_size=input_size, device=self.device, col_names=("input_size", "output_size", "num_params", "mult_adds"))
+
+        return model_summary
 
 if __name__ == "__main__":
     pass
