@@ -1,7 +1,9 @@
+import threading
+from click import pause
 from numpy import ndarray
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
-import torchinfo
+import os
 
 class ModelProfiler():
     """
@@ -104,6 +106,7 @@ class ModelProfiler():
         
     def make_summary(self):
     # TODO extend method, this is only the first basic version  
+        import torchinfo # Conditional import
         if self.input_sample is not None:
             input_size = self.input_sample.shape
             input_type = self.input_sample.dtype
@@ -113,6 +116,41 @@ class ModelProfiler():
         model_summary = torchinfo.summary(model=self.model, input_size=input_size, device=self.device, col_names=("input_size", "output_size", "num_params", "mult_adds"))
 
         return model_summary
+    
+    @staticmethod
+    def make_netron_diagram(model_path : str) -> None:
+        import netron # Conditional import
+        # Check extension of model path
+        (model_path_root, model_ext) = os.path.splitext(model_path)
 
+        if model_ext == '.pth':
+            raise ValueError("PyTorch model dict cannot be used with Netron. Please generate a .onnx model or a traced/scripted PyTorch model (.pt).")
+
+        if model_ext not in ['.onnx', '.pt']:
+            raise ValueError("Model path must have extension '.onnx' or '.pt'.")
+
+        # Start netron server on a new thread in deamon mode (kill when main thread exits)
+        sys_thread = threading.Thread(
+            target=netron.start, 
+            args=(model_path, ('localhost', 65511), True),
+            daemon=True 
+        )
+
+        try:
+            sys_thread.start()
+            # Print info to open netron server 
+            print(f"Netron server started on localhost:65511. Open in browser: http://localhost:65511")
+        except Exception as e:
+            print(f"An error occurred while starting the Netron local server: {e}")
+
+
+        input_value = ""
+        while input_value.lower() not in ['y', 'yes']:
+            input_value = input("Script execution paused as Netron server is opened on a thread in daemon mode. Thread will terminate at script termination. \nInput Y to continue script execution... \n\n")
+
+            if input_value not in ['y', 'yes']:
+                print("Invalid input. Please enter 'Y' or 'yes'.")
+
+        
 if __name__ == "__main__":
     pass
