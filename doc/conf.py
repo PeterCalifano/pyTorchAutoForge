@@ -39,9 +39,6 @@ if on_rtd:
         'seaborn',  # Added for statistical data visualization
         'h5py',  # Added for HDF5 file handling
         'yaml',  # Added for YAML file parsing
-        'json',  # Added for JSON file handling
-        'requests',  # Added for HTTP requests
-        'flask',  # Added for web framework
     ]
     for mod_name in MOCK_MODULES:
         sys.modules[mod_name] = MagicMock()
