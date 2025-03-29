@@ -1,5 +1,7 @@
 # List of TODOs
 
+## Library management and config
+
 - [x] Review linters/code formatting tools and configure them properly to comply with standards
 
 - [ ] Add type annotations for mypy (currently disable no-untyped-defs due to too many errors)
@@ -7,3 +9,23 @@
 - [ ] Automate documentation building process
 
 - [ ] Implement CI/CD to run tests
+
+## Modules development
+
+### Evaluation
+
+- [ ] Improve ModelProfiler to provide more functionalities from torch_profiler
+
+- [ ]
+
+### Optimization
+
+- [ ] 
+
+### API module
+
+- [ ] Add prototype implementation of mlflow api: MlflowHandler to replace manually written code in optimization module
+
+- [ ] Add prototype implementation of telegram bot api for training push notifications
+
+- [ ] Improve torch saving api
