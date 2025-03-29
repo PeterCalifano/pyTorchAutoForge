@@ -26,7 +26,7 @@ i32PortNumber_multi = 50003; % 50001
 
 %% TEST: evaluating model directly through TensorCommManager
 % Define TensorCommManager instance
-tensorCommManager_multi = TensorCommManager(charAddress, i32PortNumber_multi, 100, "bInitInPlace", true, ...
+objTensorCommManager_multi = TensorCommManager(charAddress, i32PortNumber_multi, 100, "bInitInPlace", true, ...
     "bMULTI_TENSOR", true);
 
 ui8TestID = 1;
@@ -42,10 +42,10 @@ if ui8TestID == 0
     ui8TensorShapedImage = zeros(1,1,size(ui8Image, 1), size(ui8Image, 2), 'uint8');
     ui8TensorShapedImage(1,1,:,:) = ui8Image;
 
-    writtenBytes = tensorCommManager_multi.WriteBuffer(ui8TensorShapedImage);
+    writtenBytes = objTensorCommManager_multi.WriteBuffer(ui8TensorShapedImage);
 
     % Get data back from server
-    [cellTensorArray, tensorCommManager_multi] = tensorCommManager_multi.ReadBuffer();
+    [cellTensorArray, objTensorCommManager_multi] = objTensorCommManager_multi.ReadBuffer();
 
     disp(cellTensorArray);
     strCentroidRangePredictions = cell2struct(cellTensorArray, {'Predictions'});
@@ -70,13 +70,13 @@ elseif ui8TestID == 1
     ui8TensorShapedFrame_2(1,1,:,:) = ui8Frame_2;
 
     cellTensorImages = {ui8TensorShapedFrame_1, ui8TensorShapedFrame_2};
-    writtenBytes = tensorCommManager_multi.WriteBuffer(cellTensorImages);
+    writtenBytes = objTensorCommManager_multi.WriteBuffer(cellTensorImages);
 
     % Return output dictionary ['keypoints0', 'scores0', 'descriptors0', 'keypoints1', 'scores1',
     % 'descriptors1', 'matches0', 'matches1', 'matching_scores0', 'matching_scores1']
 
     % Get data back from server
-    [cellTensorArray, tensorCommManager_multi] = tensorCommManager_multi.ReadBuffer();
+    [cellTensorArray, objTensorCommManager_multi] = objTensorCommManager_multi.ReadBuffer();
 
     dKeypoints0     = cellTensorArray{1};
     ui32Matches0    = cellTensorArray{7};
@@ -90,9 +90,16 @@ elseif ui8TestID == 1
     dMatchedKps0 = dKeypoints0(bValidMatch, :);
     dMatchedKps1 = dKeypoints1(ui32Matches0(bValidMatch), :);
 
+
     % Show matchings
+    if not(exist('objPredictionsFig', 'var'))
+        objPredictionsFig = figure('Renderer', 'painters');
+    end
+
     ShowFeatureMatchingsPredictions(ui8Frame_1, ui8Frame_2, ...
-        dMatchedKps0, dMatchedKps1);
+        dMatchedKps0, dMatchedKps1, ...
+        'objFig', objPredictionsFig, ...
+        'bUseBlackBackground', true);
 end
 return
 
@@ -115,59 +122,6 @@ objModel = CTorchModelWrapper(charModelPath, charDevice, "charServerAddress", ch
     'i32PortNumber', i32PortNumber, 'enumTorchWrapperMode', 'TCP'); %#ok<*NASGU>
 
 clear objModel
-
-%% LOCAL FUNCTION
-function ShowCentroidRangePredictions(ui8Image, strCentroidRangePredictions, strImageLabels)
-
-dCentroidPrediction         = double(strCentroidRangePredictions.Predictions(1:2));
-dRangePrediction            = double(strCentroidRangePredictions.Predictions(3));
-dApparentRadiusPrediction   = double(strCentroidRangePredictions.Predictions(4));
-
-% Show output
-figure();
-imshow(ui8Image);
-hold on;
-plot(dCentroidPrediction(2), dCentroidPrediction(1), 'rx', 'DisplayName', 'Centre of figure Prediction')
-
-% Draw circle with apparent radius (gently offered by GPT4.0)
-dTheta = linspace(0, 2*pi, 100); % Angles for the circle
-dxCircle = dApparentRadiusPrediction * cos(dTheta) + dCentroidPrediction(2);
-dyCircle = dApparentRadiusPrediction * sin(dTheta) + dCentroidPrediction(1);
-plot(dxCircle, dyCircle, 'g-', 'DisplayName', 'Predicted conic');
-
-dxCircle_GT = strImageLabels.dRadiusInPix * cos(dTheta) + strImageLabels.dCentroid(2);
-dyCircle_GT = strImageLabels.dRadiusInPix * sin(dTheta) + strImageLabels.dCentroid(1);
-plot(strImageLabels.dCentroid(2), strImageLabels.dCentroid(1), 'bo', 'DisplayName', 'Centre of figure GroundTruth')
-plot(dxCircle_GT, dyCircle_GT, 'b-', 'DisplayName', 'GroundTruth conic');
-
-% Add text to display range prediction
-textPosition1 = [10, 10]; % Position for text on the image
-textString1 = sprintf(['Predictions:\n' ...
-    '  Centroid: [%.2f, %.2f]\n' ...
-    '  Apparent Radius: %.2f\n' ...
-    '  Range: %.2f'], ...
-    dCentroidPrediction(1), dCentroidPrediction(2), ...
-    dApparentRadiusPrediction, dRangePrediction);
-text(textPosition1(1), textPosition1(2), textString1, 'Color', 'yellow', 'FontSize', 10, 'FontWeight', 'bold', 'VerticalAlignment', 'top');
-
-% Add text to display labels from strImageLabels
-textPosition2 = [10, 95]; % Position for the labels text below the range prediction
-textString2 = sprintf(['Labels:\n' ...
-    '  Centroid: [%.2f, %.2f]\n' ...
-    '  Radius in Pixels: %.2f\n' ...
-    '  Range in Radii: %.2f\n' ...
-    '  Reference Radius: %.2f'], ...
-    strImageLabels.dCentroid(1), strImageLabels.dCentroid(2), ...
-    strImageLabels.dRadiusInPix, strImageLabels.dRangeInRadii, ...
-    strImageLabels.dRefRadius);
-text(textPosition2(1), textPosition2(2), textString2, 'Color', 'cyan', 'FontSize', 10, 'FontWeight', 'bold', 'VerticalAlignment', 'top');
-
-
-legend('show'); % Show legend
-hold off;
-
-end
-
 
 
 

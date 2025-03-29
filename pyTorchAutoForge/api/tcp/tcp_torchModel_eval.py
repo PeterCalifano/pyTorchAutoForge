@@ -20,11 +20,25 @@ from torch import nn
 from pyTorchAutoForge.modelBuilding.modelClasses import ReloadModelFromOptuna
 from functools import partial
 import cv2 as ocv
-from pyTorchAutoForge.utils import GetDevice 
+from pyTorchAutoForge.utils import GetDevice
+from pyTorchAutoForge.utils.DeviceManager import GetDeviceMulti 
+from typing import Any
+
+# Import model paths
+REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_features_PeterCdev'
+sys.path.append(REPO_XFEAT_PATH)
+
+from modules.xfeat import XFeatLightGlueWrapper
+
+REPO_SUPERGLUE_PATH = '/home/peterc/devDir/ML-repos/SuperGluePretrainedNetwork_PeterCdev'
+sys.path.append(REPO_SUPERGLUE_PATH)
+
+from match_pairs_custom import DefineSuperPointSuperGlueModel
+
 
 # Define processing function for model evaluation (OPNAV limb based)
 
-def defineModelForEval_OPNAVlimbBased():
+def defineModelForEval_OPNAVlimbBased() -> nn.Module:
     # NOTE: before using this function make sure the paths are correct
     hostname = os.uname().nodename
     trial_ID = None
@@ -84,29 +98,17 @@ class EnumFeatureMatchingType(Enum):
     XFEAT_LIGHTGLUE = 'XFeat_LightGlue'
 
 
-def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatchingType = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE, device: 'str' = GetDevice()):
+def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatchingType = EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE, device: 'str' = GetDevice()) -> nn.Module:
 
     torch.set_grad_enabled(mode=False)
 
     if enumFeatureMatchingType == EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE:
-
-        # Define SuperGluePretrainedNetwork path    
-        REPO_SUPERGLUE_PATH = '/home/peterc/devDir/ML-repos/SuperGluePretrainedNetwork_PeterCdev'
-        sys.path.append(REPO_SUPERGLUE_PATH)
-
-        from match_pairs_custom import DefineSuperPointSuperGlueModel
-
         # Define SuperPoint + SuperGlue model
         model = DefineSuperPointSuperGlueModel(device)
 
     elif enumFeatureMatchingType == EnumFeatureMatchingType.XFEAT_LIGHTGLUE:
-        REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_feature_PeterCdev'
-        sys.path.append(REPO_XFEAT_PATH)
- 
-        # FIXME this import is not working!
-        from modules.xfeat import XFeatLightGlueWrapper
+        # Define XFeat + LightGlue model
         model = XFeatLightGlueWrapper(device)
-
 
     else:
         raise ValueError("Feature matching type not valid.")
@@ -222,28 +224,32 @@ def test_TorchWrapperComm_OPNAVlimbBased():
         server_msgpack.shutdown()
         server_msgpack.server_close()
     
-def test_TorchWrapperComm_FeatureMatching():
+def test_TorchWrapperComm_FeatureMatching() -> None:
     HOST, PORT = "localhost", 50003
 
-
-    device = GetDevice()
+    network_name = EnumFeatureMatchingType.XFEAT_LIGHTGLUE
+    device = GetDeviceMulti()
 
     # Hardcoded for quick-n-dirty use
-    model = defineModelEval_FeatureMatching(enumFeatureMatchingType=EnumFeatureMatchingType.XFEAT_LIGHTGLUE, device=device)
+    model = defineModelEval_FeatureMatching(enumFeatureMatchingType=network_name, device=device)
 
-    def forward_wrapper_FeatureMatching(inputData, model, processingMode: ProcessingMode):
+    def forward_wrapper_FeatureMatching(inputData, model, processingMode: ProcessingMode) -> dict[Any, Any]:
         if processingMode == ProcessingMode.MULTI_TENSOR:
             
             # Get input images pair
             print('Input data type: ', type(inputData))
             assert isinstance(inputData, list)
 
-            if isinstance(inputData, list | tuple):
+            if isinstance(inputData, (list, tuple)):
                 assert len(inputData) == 2
                 # Convert input data to torch tensor and normalize to [0, 1] range
-                input_image1 = torch.tensor(inputData[0], dtype=torch.float32)/255.0
+                
+                input_image1 = torch.tensor(data=inputData[0], dtype=torch.float32) / 255.0
+                input_image2 = torch.tensor(inputData[1], dtype=torch.float32) / 255.0
 
-                input_image2 = torch.tensor(inputData[1], dtype=torch.float32)/255.0
+                #input_image1 = torch.tensor(inputData[0], dtype=torch.float32)
+                #input_image2 = torch.tensor(inputData[1], dtype=torch.float32)
+                
             else:
                 raise ValueError("Input data type not valid. Must be a list or a tuple.")
             
@@ -254,15 +260,61 @@ def test_TorchWrapperComm_FeatureMatching():
             print('Evaluating model on images of shapes:', input_image1.shape, input_image2.shape)
 
             # Move data to same device as model 
-            input_image1 = input_image1.to(device)
-            input_image2 = input_image2.to(device)
+            input_image1 = input_image1.to(device=device)
+            input_image2 = input_image2.to(device=device)
+
+            # DEBUG: show images
+            #input_image1_ = input_image1[0,:,:,:].clone().detach().cpu()
+            #input_image2_ = input_image2[0,:,:,:].clone().detach().cpu()
+            #input_image1_toshow = np.array(input_image1_.permute(1, 2, 0).numpy().astype('uint8'))
+            #input_image2_toshow = np.array(input_image2_.permute(1, 2, 0).numpy().astype('uint8'))
+
+            # Show received image
+            #ocv.imshow('Input image 1', input_image1_toshow)
+            #ocv.imshow('Input image 2', input_image2_toshow)
+            #ocv.waitKey()
+            #ocv.destroyAllWindows()
+            
+            ############################## DEBUG ATTEMPT ##############################
+            # Normalize images to [0, 1] range
+            #input_image1 = input_image1 / 255.0
+            #input_image2 = input_image2 / 255.0
+            ###########################################################################
+
+            if isinstance(model, XFeatLightGlueWrapper):
+                # Renormalize images to [0, 255] range
+                input_image1 = input_image1 * 255.0
+                input_image2 = input_image2 * 255.0
+    
+                # Permute tp (H, W, C) format
+                input_image1 = input_image1.permute(0, 2, 3, 1)
+                input_image2 = input_image2.permute(0, 2, 3, 1)
+                
+                # Convert to ndarrays
+                input_image1 = input_image1[0].detach().cpu().numpy()
+                input_image2 = input_image2[0].detach().cpu().numpy()
+                
+                # DEVNOTE
+
 
             # Evaluate model on input data and convert to ndarrays
-            predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2})
+            predictedMatchesDict = model({'image0': input_image1, 'image1': input_image2}) # FIXME Xfeat Light Glue is failing here
 
             # DEVNOTE temporary casting to float32 to ensure TensorCommManager casts ok
-            predictedMatchesDict = {k: v[0].detach().cpu().float().numpy()
-                                    for k, v in predictedMatchesDict.items()}
+
+            if isinstance(model, XFeatLightGlueWrapper):
+                # Define output dictionary
+                for k, v in predictedMatchesDict.items():
+                    if isinstance(v, np.ndarray):
+                        predictedMatchesDict[k] = v.astype(np.float32)
+                    elif isinstance(v, torch.Tensor):
+                        predictedMatchesDict[k] = v.detach().cpu().numpy().astype(np.float32)
+                    else:
+                        raise ValueError("Output type is invalid.")
+            else:
+                # Output is tensor
+                predictedMatchesDict = {k: v[0].detach().cpu().float().numpy()
+                                        for k, v in predictedMatchesDict.items()}
             ###### DEBUGGING ######
             #predictedMatchesDict = {k: v[0].detach().cpu().numpy()
             #                        for k, v in predictedMatchesDict.items()}
@@ -306,7 +358,7 @@ def test_TorchWrapperComm_FeatureMatching():
 
 
 # MAIN SCRIPT (TODO: need to be adapted)
-def main():
+def main() -> None:
     print('\n\n----------------------------------- RUNNING: torchModelOverTCP.py -----------------------------------\n')
     print("MAIN script operations: initialize always-on server --> listen to data from client --> if OK, evaluate model --> if OK, return output to client\n")
     

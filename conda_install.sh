@@ -207,7 +207,8 @@ else
 fi
 
 # Check installation by printing versions in python3
-python3 -m tests/.configuration/test_env
-
+cd ./tests/.configuration/
+python3 -m test_env
+cd ../..
 
 

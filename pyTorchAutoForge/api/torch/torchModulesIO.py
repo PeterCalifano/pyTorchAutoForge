@@ -20,6 +20,10 @@ def SaveTorchModel(model: torch.nn.Module, modelpath: str = "./trainedModel", sa
     targetDeviceName = targetDevice
     targetDeviceName = targetDeviceName.replace(':', '')
 
+    # Check if device is in model name and remove it
+    if ("_" + targetDeviceName) in modelpath:
+        modelpath = modelpath.replace("_" + targetDeviceName, '')
+
     if modelpath == 'trainedModel':
         if not (os.path.isdir('./savedModels')):
             os.mkdir('savedModels')

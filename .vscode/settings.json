@@ -1,6 +1,6 @@
 {
     "python.terminal.executeInFileDir": true,
-    "python.analysis.typeCheckingMode": "off",
+    "python.analysis.typeCheckingMode": "basic",
     "python.terminal.activateEnvironment": false,
     "python.analysis.autoSearchPaths": true
 }

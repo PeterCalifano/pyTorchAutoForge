@@ -52,8 +52,6 @@ def build_engine_from_onnx(onnx_path, engine_path, precision="fp32"):
     return engine
 
 # Set the RT Engine for Inference
-
-
 class TensorRTInference:
     def __init__(self, engine_path):
         # Load TRT engine

@@ -356,7 +356,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.trainingDataloader is None:
             raise ValueError('No training dataloader provided.')
 
-        # Set model instance in training mode (mainly for dropout and batch normalization layers)
         # Set model instance in training mode ("informing" backend that the training is going to start)
         self.model.train()
 
@@ -612,7 +611,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         print(f'\n\n{colorama.Style.BRIGHT}{colorama.Fore.BLUE}-------------------------- Training and validation session start --------------------------\n')
         self.printSessionInfo()
 
+
         modelSaveName = None
+        noNewBestCounter = 0
 
         try:
             if self.OPTUNA_MODE:
@@ -746,6 +747,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             print('Training and validation cycle completed.')
             if self.mlflow_logging:
                 mlflow.end_run(status='FINISHED')
+            
+            return self.bestModel if self.keep_best else self.model
 
         except KeyboardInterrupt:
             print('\nModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
@@ -776,7 +779,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
 
-    def evalExample(self, num_samples: int = 128) -> Union[torch.Tensor, None]:
+
+    def evalExample(self, num_samples: int = 128) -> None:
         # TODO Extend method distinguishing between regression and classification tasks
         self.model.eval()
         if self.eval_example:
@@ -850,12 +854,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if self.tasktype == TaskType.REGRESSION:
 
                     # Compute average prediction over all samples
-                    average_prediction_err = torch.mean(
-                        torch.abs(prediction_errors), dim=0)
+                    average_prediction_err = torch.mean(torch.abs(prediction_errors), dim=0)
                     average_loss /= num_of_batches
 
-                    worst_prediction_err, _ = torch.max(
-                        torch.abs(prediction_errors), dim=0)
+                    # Get worst prediction error over all samples
+                    worst_prediction_err, _ = torch.max(torch.abs(prediction_errors), dim=0)
+
+                    # Get median prediction error over all samples
+                    median_prediction_err, _ = torch.median(torch.abs(prediction_errors), dim=0)
 
                     # TODO (TBC): log example in mlflow?
                     # if self.mlflow_logging:
@@ -864,6 +870,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     print(f"\tAverage prediction errors with {samples_counter} samples: \n",
                           "\t\t", average_prediction_err, "\n\tCorresponding average loss: ", average_loss)
                     print(f"\n\n\tWorst prediction errors per component: \n\t\t", worst_prediction_err)
+                    print(f"\n\tMedian prediction errors per component: \n\t\t", median_prediction_err)
 
                 elif self.tasktype == TaskType.CLASSIFICATION:
 

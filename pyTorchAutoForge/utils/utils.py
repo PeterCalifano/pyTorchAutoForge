@@ -6,21 +6,42 @@ from torch.utils.data import DataLoader
 
 import time
 from functools import wraps
-from typing import Any 
+from typing import Any, Literal
 from collections.abc import Callable
 
-# GetDevice:
-def GetDevice():
-    '''Function to get working device. Used by most modules of pyTorchAutoForge'''
-    # TODO: improve method by adding selection of GPU for multi-GPU systems
-    device = ("cuda:0"
-              if torch.cuda.is_available()
-              else "mps"
-              if torch.backends.mps.is_available()
-              else "cpu")
-    # print(f"Using {device} device")
-    return device
+# Interfaces between numpy and torch tensors
+def torch_to_numpy(tensor: torch.Tensor | np.ndarray) -> np.ndarray:
 
+    if isinstance(tensor, torch.Tensor):
+        # Convert to torch tensor to numpy array
+        return tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
+    
+    elif isinstance(tensor, np.ndarray):
+        # Return the array itself
+        return tensor
+    else:
+        raise ValueError("Input must be a torch.Tensor or np.ndarray")
+
+def numpy_to_torch(array: torch.Tensor | np.ndarray) -> torch.Tensor:
+
+    if isinstance(array, np.ndarray):
+        # Convert numpy array to torch tensor
+        return torch.from_numpy(array)
+
+    elif isinstance(array, torch.Tensor):
+        # Return the tensor itself
+        return array
+    else :
+        raise ValueError("Input must be a torch.Tensor or np.ndarray")
+
+# GetDevice:
+def GetDevice() -> Literal['cuda:0', 'cpu', 'mps']:
+    '''Function to get working device. Once used by most modules of pyTorchAutoForge, now replaced by the more advanced GetDeviceMulti(). Prefer the latter one to this method.'''
+    return ('cuda:0'
+            if torch.cuda.is_available()
+            else 'mps'
+            if torch.backends.mps.is_available()
+            else 'cpu')
 
 # %% Function to extract specified number of samples from dataloader - 06-06-2024
 # ACHTUNG: TO REWORK USING NEXT AND ITER!
@@ -149,7 +170,23 @@ def timeit_averaged(num_trials: int = 10) -> Callable:
             return result
         return wrapper
     return timeit_averaged_
-    
+
+def timeit_averaged_(fcn_to_time: Callable, num_trials: int = 10, *args, **kwargs) -> float:
+    # Perform timing of the function using best counter available in time module
+    total_elapsed_time = 0.0
+
+    for idT in range(num_trials):
+
+        start_time = time.perf_counter()
+        out = fcn_to_time(*args, **kwargs)  # Returns Any
+        end_time = time.perf_counter()
+
+        total_elapsed_time += end_time - start_time
+
+    # Calculate the average elapsed time
+    average_elapsed_time = total_elapsed_time / num_trials    
+    return average_elapsed_time
+
 @timeit_averaged(2)
 def dummy_function(): 
     print("Dummy function called")
