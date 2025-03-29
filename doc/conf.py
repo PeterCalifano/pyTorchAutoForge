@@ -20,18 +20,12 @@ if on_rtd:
     from unittest.mock import MagicMock
 
     MOCK_MODULES = [
-        'torch',
-        'torch.utils',
-        'torch.utils.data',
-        'torch.nn',
-        'torch.nn.functional',
         'torchvision',
         'pycuda',  # if needed
         'pycuda.driver',
         'pycuda.autoinit',
         'numpy',
         'scipy',
-        'matplotlib',
         'pandas',  # Added for data manipulation
         'sklearn',  # Added for machine learning utilities
         'tensorflow',  # Added for alternative ML framework
