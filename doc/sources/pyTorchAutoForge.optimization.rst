@@ -1,4 +1,4 @@
-﻿pyTorchAutoForge.optimization
+pyTorchAutoForge.optimization
 =============================
 
 .. automodule:: pyTorchAutoForge.optimization

@@ -1,4 +1,4 @@
-﻿pyTorchAutoForge.setup
+pyTorchAutoForge.setup
 ======================
 
 .. automodule:: pyTorchAutoForge.setup

@@ -1,4 +1,4 @@
-﻿pyTorchAutoForge.datasets
+pyTorchAutoForge.datasets
 =========================
 
 .. automodule:: pyTorchAutoForge.datasets

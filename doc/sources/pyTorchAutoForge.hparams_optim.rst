@@ -1,4 +1,4 @@
-﻿pyTorchAutoForge.hparams\_optim
+pyTorchAutoForge.hparams\_optim
 ===============================
 
 .. automodule:: pyTorchAutoForge.hparams_optim

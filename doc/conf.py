@@ -23,6 +23,11 @@ if on_rtd:
         'pycuda',  # if needed
         'pycuda.driver',
         'pycuda.autoinit',
+        'pynvml',
+        'pynvml.nvmlInit',
+        'pynvml.nvmlDeviceGetHandleByIndex',
+        'pynvml.nvmlDeviceGetMemoryInfo',
+        'pynvml.nvmlShutdown',
         'yaml',  # Added for YAML file parsing
     ]
     for mod_name in MOCK_MODULES:

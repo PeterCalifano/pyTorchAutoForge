@@ -15,7 +15,8 @@ Welcome to pyTorchAutoForge's documentation!
 .. autosummary::
    :toctree: sources/
    :recursive:
-   
+
+   pyTorchAutoForge
    pyTorchAutoForge.datasets
    pyTorchAutoForge.evaluation
    pyTorchAutoForge.hparams_optim

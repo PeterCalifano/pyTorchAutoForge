@@ -1,4 +1,4 @@
-﻿pyTorchAutoForge.evaluation
+pyTorchAutoForge.evaluation
 ===========================
 
 .. automodule:: pyTorchAutoForge.evaluation

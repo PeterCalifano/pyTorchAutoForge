@@ -1,4 +1,4 @@
-﻿pyTorchAutoForge.utils
+pyTorchAutoForge.utils
 ======================
 
 .. automodule:: pyTorchAutoForge.utils
