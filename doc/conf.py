@@ -6,13 +6,16 @@
 import os, sys
 sys.path.insert(0, os.path.abspath('../pyTorchAutoForge/')) # Add project root to path
 
+from importlib.metadata import version as get_version
+release: str = get_version("pyTorchAutoForge")
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'pyTorchAutoForge'
-copyright = '2024, Pietro Califano'
+copyright = '2025, Pietro Califano'
 author = 'Pietro Califano'
-release = '0.1'
+version: str = ".".join(release.split('.')[:3])  # Major.Minor.Patch
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
