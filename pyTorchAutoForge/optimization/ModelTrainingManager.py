@@ -43,8 +43,8 @@ class TaskType(Enum):
 # 3) Main training logbook to store all data to be used for model selection and hyperparameter tuning, this should be "per project"
 # 4) Training mode: k-fold cross validation leveraging scikit-learn
 
-@dataclass(frozen=False)
-class ModelTrainingManagerConfig():
+@dataclass()
+class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass 
     '''Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.'''
 
     # REQUIRED fields

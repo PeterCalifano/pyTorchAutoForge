@@ -31,7 +31,7 @@ def numpy_to_torch(array: torch.Tensor | np.ndarray) -> torch.Tensor:
     elif isinstance(array, torch.Tensor):
         # Return the tensor itself
         return array
-    else :
+    else:
         raise ValueError("Input must be a torch.Tensor or np.ndarray")
 
 # GetDevice:
