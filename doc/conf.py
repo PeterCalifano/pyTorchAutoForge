@@ -3,11 +3,14 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-import os, sys
+import os, sys, runpy
 sys.path.insert(0, os.path.abspath('../pyTorchAutoForge/')) # Add project root to path
 
-from importlib.metadata import version as get_version
-release: str = get_version("pyTorchAutoForge")
+# Determine the path to the _version.py file
+version_file_path = os.path.join(os.path.dirname(__file__), '..', '_version.py')
+
+# Execute the _version.py file and retrieve the __version__ variable
+version_info = runpy.run_path(version_file_path)
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -16,7 +19,7 @@ project = 'pyTorchAutoForge'
 copyright = '2025, Pietro Califano'
 author = 'Pietro Califano'
 email = 'petercalifano.gs@gmail.com'
-version: str = ".".join(release.split('.')[:3])  # Major.Minor.Patch
+version: str = version_info['__version__']  # Major.Minor.Patch
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
