@@ -3,7 +3,7 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-import os, sys, runpy
+import os, sys, runpy, mock
 sys.path.insert(0, os.path.abspath('../pyTorchAutoForge/')) # Add project root to path
 
 # Determine the path to the _version.py file
@@ -11,6 +11,14 @@ version_file_path = os.path.join(os.path.dirname(__file__), '..', '_version.py')
 
 # Execute the _version.py file and retrieve the __version__ variable
 version_info = runpy.run_path(version_file_path)
+
+# Only mock when on RTD
+on_rtd = os.environ.get('READTHEDOCS') == 'True'
+
+if on_rtd:
+    # Mock imports
+    MOCK_MODULES = ['numpy', 'scipy', 'matplotlib', 'matplotlib.pyplot', 'scipy.interpolate', 'pyducda', 'torch']
+    sys.modules.update((mod_name, mock.Mock()) for mod_name in MOCK_MODULES)
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
