@@ -1,29 +1,14 @@
-pyTorchAutoForge.optimization package
-=====================================
-
-Submodules
-----------
-
-pyTorchAutoForge.optimization.ModelTrainingManager module
----------------------------------------------------------
-
-.. automodule:: pyTorchAutoForge.optimization.ModelTrainingManager
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-pyTorchAutoForge.optimization.lossFunctionsClasses module
----------------------------------------------------------
-
-.. automodule:: pyTorchAutoForge.optimization.lossFunctionsClasses
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
+﻿pyTorchAutoForge.optimization
+=============================
 
 .. automodule:: pyTorchAutoForge.optimization
-   :members:
-   :undoc-members:
-   :show-inheritance:
+
+   
+.. rubric:: Modules
+
+.. autosummary::
+   :toctree:
+   :recursive:
+
+   ModelTrainingManager
+   lossFunctionsClasses

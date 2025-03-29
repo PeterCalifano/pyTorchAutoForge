@@ -12,12 +12,18 @@ Welcome to pyTorchAutoForge's documentation!
 
 .. Add sources.
 
-   :glob:
-   sources/*.rst
-   sources/*/*.rst
-   sources/*/*/*.rst
-   sources/*/*/*/*.rst
+.. autosummary::
+   :toctree: sources/
+   :recursive:
    
+   pyTorchAutoForge.datasets
+   pyTorchAutoForge.evaluation
+   pyTorchAutoForge.hparams_optim
+   pyTorchAutoForge.optimization
+   pyTorchAutoForge.setup 
+   pyTorchAutoForge.utils
+.. pyTorchAutoForge.api
+
 Indices and tables
 ==================
 * :ref:`genindex`
