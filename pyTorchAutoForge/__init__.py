@@ -12,6 +12,9 @@ from .setup import *
 import os
 import importlib
 
+# Define global variable
+on_rtd = os.environ.get("READTHEDOCS") == "True"
+
 # Removed modules
 excluded_modules = ['tests', 'tensorboard']
 #print('Initializing with all sub-packages and modules except:', excluded_modules)

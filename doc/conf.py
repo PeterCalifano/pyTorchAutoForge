@@ -3,7 +3,7 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-import os, sys, runpy, mock
+import os, sys, runpy
 sys.path.insert(0, os.path.abspath('../pyTorchAutoForge/')) # Add project root to path
 
 # Determine the path to the _version.py file
