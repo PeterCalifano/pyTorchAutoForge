@@ -20,7 +20,7 @@ import os
 import matplotlib.pyplot as plt
 import torch, os
 import pyTorchAutoForge
-from pyTorchAutoForge.modelBuilding.ModelAutoBuilder import AutoComputeConvBlocksOutput
+from pyTorchAutoForge.model_building.ModelAutoBuilder import AutoComputeConvBlocksOutput
 
 from torch import nn
 from math import sqrt

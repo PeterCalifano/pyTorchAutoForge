@@ -1,5 +1,5 @@
 from pyTorchAutoForge.utils.utils import GetDevice
-from pyTorchAutoForge.modelBuilding.modelClasses import torchModel
+from pyTorchAutoForge.model_building.modelClasses import torchModel
 from pyTorchAutoForge.api.torch import LoadTorchModel
 import numpy as np
 import torch, os

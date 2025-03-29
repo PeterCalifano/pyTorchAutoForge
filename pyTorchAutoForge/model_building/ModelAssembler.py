@@ -20,7 +20,7 @@ print(model_assembly)
 exit(0)
 """
 from pyTorchAutoForge.utils import GetDevice 
-from pyTorchAutoForge.modelBuilding import torchModel
+from pyTorchAutoForge.model_building import torchModel
 from typing import Union
 from torch import nn
 
