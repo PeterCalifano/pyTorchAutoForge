@@ -2,6 +2,9 @@ import torch
 import warnings
 import platform
 from typing import Literal
+import os 
+
+on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 # Detect if running on a Jetson device
 if torch.cuda.is_available():
@@ -11,61 +14,62 @@ if torch.cuda.is_available():
 else:
     is_jetson = "tegra" in platform.uname().machine.lower()  # Tegra-based ARM devices
 
+if not on_rtd:
+    if is_jetson:
+        # GetDevice for Jetson devices
+        def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+            if torch.cuda.is_available():
+                return "cuda:0"
+            return "cpu"
 
-if is_jetson:
-    # GetDevice for Jetson devices
-    def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
-        if torch.cuda.is_available():
-            return "cuda:0"
-        return "cpu"
+    else:
+        # GetDevice for Non-Tegra devices
+        import pynvml
+        def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+            '''Function to get device to run models on. Used by most modules of pyTorchAutoForge'''
 
-else:
-    # GetDevice for Non-Tegra devices
-    import pynvml
-    def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
-        '''Function to get device to run models on. Used by most modules of pyTorchAutoForge'''
+            MIN_FREE_MEM_RATIO = 0.3
+            MIN_FREE_MEM_SIZE = 3  # Minimum free memory in GB
 
-        MIN_FREE_MEM_RATIO = 0.3
-        MIN_FREE_MEM_SIZE = 3  # Minimum free memory in GB
+            if torch.cuda.is_available():
+                # Iterate through all available GPUs to check memory availability
+                pynvml.nvmlInit()  # Initialize NVML for accessing GPU memory info.
+                # DEVNOTE: Small overhead at each call using init-shutdown this way. Can be improved by init globally and shutting down at python program exit (atexit callback)
 
-        if torch.cuda.is_available():
-            # Iterate through all available GPUs to check memory availability
-            pynvml.nvmlInit()  # Initialize NVML for accessing GPU memory info.
-            # DEVNOTE: Small overhead at each call using init-shutdown this way. Can be improved by init globally and shutting down at python program exit (atexit callback)
+                max_free_memory = 0
+                selected_gpu = None
 
-            max_free_memory = 0
-            selected_gpu = None
+                for gpu_idx in range(torch.cuda.device_count()):
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_idx)
+                    total_memory = pynvml.nvmlDeviceGetMemoryInfo(
+                        handle).total / (1024 ** 3)     # Memory in GB
+                    free_memory = pynvml.nvmlDeviceGetMemoryInfo(
+                        handle).free / (1024 ** 3)  # Memory in GB
 
-            for gpu_idx in range(torch.cuda.device_count()):
-                handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_idx)
-                total_memory = pynvml.nvmlDeviceGetMemoryInfo(
-                    handle).total / (1024 ** 3)     # Memory in GB
-                free_memory = pynvml.nvmlDeviceGetMemoryInfo(
-                    handle).free / (1024 ** 3)  # Memory in GB
+                    # Ratio of free memory with respect to total memory
+                    free_memory_ratio = free_memory / total_memory
 
-                # Ratio of free memory with respect to total memory
-                free_memory_ratio = free_memory / total_memory
+                    # Select the GPU with most free memory that meets the minimum requirements)
+                    if free_memory_ratio >= MIN_FREE_MEM_RATIO and free_memory > MIN_FREE_MEM_SIZE and free_memory > max_free_memory:
+                        max_free_memory = free_memory
+                        selected_gpu = gpu_idx
 
-                # Select the GPU with most free memory that meets the minimum requirements)
-                if free_memory_ratio >= MIN_FREE_MEM_RATIO and free_memory > MIN_FREE_MEM_SIZE and free_memory > max_free_memory:
-                    max_free_memory = free_memory
-                    selected_gpu = gpu_idx
+                pynvml.nvmlShutdown()  # Shutdown NVML
 
-            pynvml.nvmlShutdown()  # Shutdown NVML
+                if selected_gpu is not None:
+                    return f"cuda:{selected_gpu}"
 
-            if selected_gpu is not None:
-                return f"cuda:{selected_gpu}"
+            # Check for MPS (for Mac with Apple Silicon)
+            if torch.backends.mps.is_available():
+                return "mps"
 
-        # Check for MPS (for Mac with Apple Silicon)
-        if torch.backends.mps.is_available():
-            return "mps"
+            # If no GPU is available, return CPU
+            if torch.cuda.is_available():
+                warnings.warn(
+                    "CUDA is available, but no GPU meets the minimum requirements. Using CPU instead.")
 
-        # If no GPU is available, return CPU
-        if torch.cuda.is_available():
-            warnings.warn(
-                "CUDA is available, but no GPU meets the minimum requirements. Using CPU instead.")
-
-        return "cpu"
+            return "cpu"
+        
 
 # Temporary placeholder class (extension wil be needed for future implementations, e.g. multi GPUs)
 class DeviceManager():
