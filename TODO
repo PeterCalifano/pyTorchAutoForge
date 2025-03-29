@@ -10,6 +10,10 @@
 
 - [ ] Implement CI/CD to run tests
 
+- [ ] Improve docstrings in src code
+
+- [x] Configure project to use hatch build for automatic versioning linked to git tags
+
 ## Modules development
 
 ### Evaluation
