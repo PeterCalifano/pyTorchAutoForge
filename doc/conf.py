@@ -16,9 +16,37 @@ version_info = runpy.run_path(version_file_path)
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 if on_rtd:
-    # Mock imports
-    MOCK_MODULES = ['numpy', 'scipy', 'matplotlib', 'matplotlib.pyplot', 'scipy.interpolate', 'pyducda', 'torch']
-    sys.modules.update((mod_name, mock.Mock()) for mod_name in MOCK_MODULES)
+
+    from unittest.mock import MagicMock
+
+    MOCK_MODULES = [
+        'torch',
+        'torch.utils',
+        'torch.utils.data',
+        'torch.nn',
+        'torch.nn.functional',
+        'torchvision',
+        'pycuda',  # if needed
+        'pycuda.driver',
+        'pycuda.autoinit',
+        'numpy',
+        'scipy',
+        'matplotlib',
+        'pandas',  # Added for data manipulation
+        'sklearn',  # Added for machine learning utilities
+        'tensorflow',  # Added for alternative ML framework
+        'cv2',  # Added for OpenCV
+        'seaborn',  # Added for statistical data visualization
+        'h5py',  # Added for HDF5 file handling
+        'yaml',  # Added for YAML file parsing
+        'json',  # Added for JSON file handling
+        'requests',  # Added for HTTP requests
+        'flask',  # Added for web framework
+    ]
+    for mod_name in MOCK_MODULES:
+        sys.modules[mod_name] = MagicMock()
+    
+    autodoc_mock_imports = MOCK_MODULES
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
