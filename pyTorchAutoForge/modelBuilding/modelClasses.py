@@ -5,7 +5,7 @@ from pyTorchAutoForge.api.torch import *
 from pyTorchAutoForge.modelBuilding.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, enumMultiHeadOutMode, MultiHeadRegressor
 from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel, LoadTorchModel
 from pyTorchAutoForge.modelBuilding.modelBuildingFunctions import build_activation_layer
-from pyTorchAutoForge.modelBuilding.ModelMutatorBNtoGN import ModelMutator
+from pyTorchAutoForge.modelBuilding.ModelMutator import ModelMutator
 import inspect, pytest
 from torch import nn
 from torch.nn import init

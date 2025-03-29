@@ -6,7 +6,7 @@ from pyTorchAutoForge.modelBuilding import TemplateDeepNet
 import matplotlib
 import pytest
 from torch import nn
-from pyTorchAutoForge.modelBuilding.ModelMutatorBNtoGN import ModelMutator, EnumMutations
+from pyTorchAutoForge.modelBuilding.ModelMutator import ModelMutator, EnumMutations
 matplotlib.use('agg')  # or 'Qt5Agg'
 plt.ion()
 

@@ -7,13 +7,14 @@ from .hparamsOptim import *
 from .api import *
 from .evaluation import *
 from .datasets import *
+from .setup import *
 
 import os
 import importlib
 
 # Removed modules
 excluded_modules = ['tests', 'tensorboard']
-print('Initializing with all sub-packages and modules except:', excluded_modules)
+#print('Initializing with all sub-packages and modules except:', excluded_modules)
 
 # Define __version__ dynamically
 try:
