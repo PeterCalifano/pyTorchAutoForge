@@ -20,18 +20,9 @@ if on_rtd:
     from unittest.mock import MagicMock
 
     MOCK_MODULES = [
-        'torchvision',
         'pycuda',  # if needed
         'pycuda.driver',
         'pycuda.autoinit',
-        'numpy',
-        'scipy',
-        'pandas',  # Added for data manipulation
-        'sklearn',  # Added for machine learning utilities
-        'tensorflow',  # Added for alternative ML framework
-        'cv2',  # Added for OpenCV
-        'seaborn',  # Added for statistical data visualization
-        'h5py',  # Added for HDF5 file handling
         'yaml',  # Added for YAML file parsing
     ]
     for mod_name in MOCK_MODULES:
