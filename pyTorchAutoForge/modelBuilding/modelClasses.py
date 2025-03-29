@@ -5,7 +5,7 @@ from pyTorchAutoForge.api.torch import *
 from pyTorchAutoForge.modelBuilding.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, enumMultiHeadOutMode, MultiHeadRegressor
 from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel, LoadTorchModel
 from pyTorchAutoForge.modelBuilding.modelBuildingFunctions import build_activation_layer
-from pyTorchAutoForge.modelBuilding.ModelMutatorBNtoGN import ModelMutatorBNtoGN
+from pyTorchAutoForge.modelBuilding.ModelMutatorBNtoGN import ModelMutator
 import inspect, pytest
 from torch import nn
 from torch.nn import init
@@ -859,8 +859,8 @@ def DefineModel(trial: optuna.trial.Trial | optuna.trial.FrozenTrial, other_para
 
         if 'mutate_to_groupnorm' in trial.params.keys():
             if trial.params['mutate_to_groupnorm'] == 1:
-                feature_extractor = (ModelMutatorBNtoGN(
-                    feature_extractor, 32)).MutateBNtoGN()
+                feature_extractor = (ModelMutator(
+                    feature_extractor, 32)).mutate()
 
         resAdapter = conv2dResolutionAdapter([input_size, input_size], [1, 3])
 
@@ -877,8 +877,8 @@ def DefineModel(trial: optuna.trial.Trial | optuna.trial.FrozenTrial, other_para
 
         if 'mutate_to_groupnorm' in trial.params.keys():
             if trial.params['mutate_to_groupnorm'] == 1:
-                feature_extractor = (ModelMutatorBNtoGN(
-                    feature_extractor, 32)).MutateBNtoGN()
+                feature_extractor = (ModelMutator(
+                    feature_extractor, 32)).mutate()
 
         resAdapter = resizeCopyAdapter(output_size=[input_size, input_size], num_channels=[
                                        1, 3], interp_method='bicubic')  # ACHTUNG: trilinear is for volumetric data
