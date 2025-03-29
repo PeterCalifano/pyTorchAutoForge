@@ -1,4 +1,4 @@
-from pyTorchAutoForge.modelBuilding.modelBuildingFunctions import *
+from pyTorchAutoForge.model_building.modelBuildingFunctions import *
 
 
 # Block builders

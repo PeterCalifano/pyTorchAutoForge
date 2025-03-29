@@ -1,12 +1,12 @@
 import matplotlib.pyplot as plt
 from torch import nn
 import torchvision.models as models
-from pyTorchAutoForge.modelBuilding import TemplateDeepNet
+from pyTorchAutoForge.model_building import TemplateDeepNet
 
 import matplotlib
 import pytest
 from torch import nn
-from pyTorchAutoForge.modelBuilding.ModelMutator import ModelMutator, EnumMutations
+from pyTorchAutoForge.model_building.ModelMutator import ModelMutator, EnumMutations
 matplotlib.use('agg')  # or 'Qt5Agg'
 plt.ion()
 
