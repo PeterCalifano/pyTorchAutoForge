@@ -7,43 +7,17 @@ Welcome to pyTorchAutoForge's documentation!
 ============================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
    :caption: Contents:
 
-.. TODO: Add all modules here explicitly (ask GPT)
+.. Add sources.
 
-.. API modules
-.. automodule:: pyTorchAutoForge.api
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. Datasets module
-.. automodule:: pyTorchAutoForge.datasets
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: pyTorchAutoForge.hparams_optim
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: pyTorchAutoForge.model_building
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: pyTorchAutoForge.optimization
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: pyTorchAutoForge.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
+   :glob:
+   sources/*.rst
+   sources/*/*.rst
+   sources/*/*/*.rst
+   sources/*/*/*/*.rst
+   
 Indices and tables
 ==================
 * :ref:`genindex`

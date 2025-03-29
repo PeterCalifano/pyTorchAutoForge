@@ -15,30 +15,28 @@ try:
         with open('bot_token_private.json') as file:
             data = json.load(file)
             return data['chat_id']
+
+    class AutoForgeAlertSystemBot(Bot):
+
+        def __init__(self, token: str = GetDefaultBotToken(), chat_id: str = GetDefaultChatID()) -> "AutoForgeAlertSystemBot":
+            if token is None:
+                raise ValueError("Token is required to create a bot instance")
+            super().__init__(token=token)
+
+            self.chat_id_ = chat_id # DEVNOTE: not working, but not sure why?
+
+        
+        def sendMessage(self, text_string: str) -> bool:
+            if self.chat_id is None:
+                Warning("Chat ID is not set. No messahge has been sent")
+                return False
+            else:
+                self.send_message(chat_id=self.chat_id, text=text_string)
+                return True
 except:
-    pass
-
-class AutoForgeAlertSystemBot(Bot):
-
-    def __init__(self, token: str = GetDefaultBotToken(), chat_id: str = GetDefaultChatID()) -> "AutoForgeAlertSystemBot":
-        if token is None:
-            raise ValueError("Token is required to create a bot instance")
-        super().__init__(token=token)
-
-        self.chat_id_ = chat_id # DEVNOTE: not working, but not sure why?
-
-    
-    def sendMessage(self, text_string: str) -> bool:
-        if self.chat_id is None:
-            Warning("Chat ID is not set. No messahge has been sent")
-            return False
-        else:
-            self.send_message(chat_id=self.chat_id, text=text_string)
-            return True
-
+    print('Failed to import functions in telegram api module.')
 
 if __name__ == "__main__":
-
     # Replace with your bot's token and chat ID
     with open('bot_token_private.json') as file:
         data = json.load(file)

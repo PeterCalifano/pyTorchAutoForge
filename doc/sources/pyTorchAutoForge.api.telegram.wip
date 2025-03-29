@@ -1,0 +1,21 @@
+pyTorchAutoForge.api.telegram package
+=====================================
+
+Submodules
+----------
+
+pyTorchAutoForge.api.telegram.AutoForge\_AlertSystem\_bot module
+----------------------------------------------------------------
+
+.. automodule:: pyTorchAutoForge.api.telegram.AutoForge_AlertSystem_bot
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: pyTorchAutoForge.api.telegram
+   :members:
+   :undoc-members:
+   :show-inheritance:
