@@ -1,8 +1,7 @@
 import numpy
-from sympy import Q
 import torch, onnx, os
 from pyTorchAutoForge.modelBuilding.modelClasses import torchModel
-from pyTorchAutoForge.utils.utils import AddZerosPadding, torch_to_numpy, timeit_averaged_
+from pyTorchAutoForge.utils import AddZerosPadding, torch_to_numpy, timeit_averaged_
 from onnxruntime import InferenceSession
 from numpy.testing import assert_allclose
 

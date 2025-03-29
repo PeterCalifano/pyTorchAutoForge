@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from dataclasses import dataclass, asdict, fields, Field, MISSING
 
 from pyTorchAutoForge.datasets import DataloaderIndex
-from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
+from pyTorchAutoForge.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
 from pyTorchAutoForge.api.torch import SaveTorchModel, LoadTorchModel
 from pyTorchAutoForge.optimization import CustomLossFcn
 
