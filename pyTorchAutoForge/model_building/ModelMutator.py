@@ -1,3 +1,16 @@
+"""
+    This module provides a ModelMutator class for modifying PyTorch models.
+
+    The ModelMutator class allows for in-place or external mutation of models by replacing
+    specific layers (e.g., BatchNorm2d) with alternative layers (e.g., GroupNorm) based on
+    the specified mutation type.
+
+    :raises ValueError: If no mutation type is provided during mutation.
+    :raises ValueError: If the mutation type is invalid or unsupported.
+    :raises ValueError: If a suitable number of groups for GroupNorm cannot be determined.
+    :return: The mutated PyTorch model.
+    :rtype: nn.Module
+"""
 from torch import nn
 from enum import Enum
 
