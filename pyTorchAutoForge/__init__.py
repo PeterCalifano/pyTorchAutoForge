@@ -2,8 +2,8 @@
 
 from .utils import *
 from .optimization import *
-from .modelBuilding import *
-from .hparamsOptim import *
+from .model_building import *
+from .hparams_optim import *
 from .api import *
 from .evaluation import *
 from .datasets import *
