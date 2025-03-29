@@ -13,12 +13,7 @@ Welcome to pyTorchAutoForge's documentation!
 .. TODO: Add all modules here explicitly (ask GPT)
 
 .. API modules
-.. automodule:: pyTorchAutoForge.api.torch.torchModulesIO
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: pyTorchAutoForge.api.matlab.TorchModelMATLABwrapper
+.. automodule:: pyTorchAutoForge.api
    :members:
    :undoc-members:
    :show-inheritance:
@@ -29,12 +24,12 @@ Welcome to pyTorchAutoForge's documentation!
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: pyTorchAutoForge.hparamsOptim
+.. automodule:: pyTorchAutoForge.hparams_optim
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: pyTorchAutoForge.modelBuilding.ModelAutoBuilder
+.. automodule:: pyTorchAutoForge.model_building
    :members:
    :undoc-members:
    :show-inheritance:

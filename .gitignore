@@ -6,6 +6,7 @@ mlruns/*
 *.asv
 checkpoints/*
 pyTorchAutoForge/.experimental/*
+*autodoc*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
