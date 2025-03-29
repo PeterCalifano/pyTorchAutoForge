@@ -1,19 +1,22 @@
 # Telegram API bot address: https://api.telegram.org/bot7475996719:AAHos6jPYrZWNNrzg7CpGWNSxmF2z7n6_rc/getMe
 # API address for updates: https://api.telegram.org/bot7475996719:AAHos6jPYrZWNNrzg7CpGWNSxmF2z7n6_rc/getUpdates
 # PeterC chat_id: 293510580
-
+from exceptiongroup import catch
 from telegram import Bot
 import json
 
-def GetDefaultBotToken() -> str:
-    with open('bot_token_private.json') as file:
-        data = json.load(file)
-        return data['token']
+try:
+    def GetDefaultBotToken() -> str:
+        with open('bot_token_private.json') as file:
+            data = json.load(file)
+            return data['token']
 
-def GetDefaultChatID() -> str:
-    with open('bot_token_private.json') as file:
-        data = json.load(file)
-        return data['chat_id']
+    def GetDefaultChatID() -> str:
+        with open('bot_token_private.json') as file:
+            data = json.load(file)
+            return data['chat_id']
+except:
+    pass
 
 class AutoForgeAlertSystemBot(Bot):
 
