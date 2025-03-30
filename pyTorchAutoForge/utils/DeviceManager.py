@@ -4,15 +4,18 @@ import platform
 from typing import Literal
 import os 
 
+# Environment variable defined in ReadTheDocs environment
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 # Detect if running on a Jetson device
-if torch.cuda.is_available():
+# TODO (PC) improve this piece of code, it's not expressive enough. is_jetson appears to possibly be true in both if-else branches which is confusing. Also the first GetDeviceMulti() is GetDevice() for a jetson, therefore, re-use that function. Clarify that the if conditional
+if torch.cuda.is_available(): # DEVNOTE posed as if because cuda may not be available
     device_name = torch.cuda.get_device_name(0).lower()
     is_jetson = any(keyword in device_name for keyword in [
                     "xavier", "orin", "jetson"])
 else:
     is_jetson = "tegra" in platform.uname().machine.lower()  # Tegra-based ARM devices
+
 
 if not on_rtd:
     if is_jetson:
@@ -69,7 +72,10 @@ if not on_rtd:
                     "CUDA is available, but no GPU meets the minimum requirements. Using CPU instead.")
 
             return "cpu"
-        
+else:
+    # Define dummy version of GetDeviceMulti for ReadTheDocs
+    def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+        return "cpu"    
 
 # Temporary placeholder class (extension wil be needed for future implementations, e.g. multi GPUs)
 class DeviceManager():
