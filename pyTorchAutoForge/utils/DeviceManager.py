@@ -1,3 +1,38 @@
+"""
+    DeviceManager module for managing and selecting the optimal computation device.
+
+    This module provides functionality to determine the best device for computation
+    based on the system's hardware capabilities and available resources. It includes
+    support for CUDA-enabled GPUs, Jetson devices, Apple Silicon (MPS), and CPU as a fallback.
+
+    Functions:
+        GetDeviceMulti:
+            Determines the optimal device for computation based on available memory
+            and compatibility. It prioritizes GPUs with sufficient free memory and
+            falls back to MPS or CPU if no suitable GPU is available.
+
+    Classes:
+        DeviceManager:
+            A placeholder class for managing devices. Currently, it provides a static
+            method to retrieve the optimal computation device.
+
+    Constants:
+        on_rtd:
+            A boolean indicating whether the code is running in the ReadTheDocs environment.
+        is_jetson:
+            A boolean indicating whether the code is running on a Jetson device.
+
+    Notes:
+        - The GetDeviceMulti function uses NVML to query GPU memory information.
+        - For Jetson devices, the device selection is simplified to either CUDA or CPU.
+        - In the ReadTheDocs environment, a dummy version of GetDeviceMulti is provided
+          that always returns "cpu".
+
+    Todo:
+        - Improve the Jetson device detection logic for better clarity and accuracy.
+        - Optimize NVML initialization and shutdown to reduce overhead.
+        - Extend the DeviceManager class for multi-GPU support and additional features.
+"""
 import torch
 import warnings
 import platform
@@ -29,7 +64,19 @@ if not on_rtd:
         # GetDevice for Non-Tegra devices
         import pynvml
         def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
-            '''Function to get device to run models on. Used by most modules of pyTorchAutoForge'''
+            """
+            GetDeviceMulti Determines the optimal device for computation based on available memory and compatibility.
+
+            The heuristic used for device selection prioritizes GPUs with sufficient free memory, ensuring efficient computation. 
+            It checks all available GPUs and selects the one with the highest free memory that meets the following criteria:
+            - At least 30% of the total memory is free (MIN_FREE_MEM_RATIO).
+            - At least 3 GB of free memory is available (MIN_FREE_MEM_SIZE).
+            If no GPU meets these requirements, it falls back to MPS (for Apple Silicon) or CPU as a last resort.
+
+            Returns:
+                Literal['cuda:0'] | Literal['cpu'] | Literal['mps']: 
+                    The selected device: a CUDA GPU (e.g., 'cuda:0'), MPS (for Apple Silicon), or CPU.
+            """
 
             MIN_FREE_MEM_RATIO = 0.3
             MIN_FREE_MEM_SIZE = 3  # Minimum free memory in GB
