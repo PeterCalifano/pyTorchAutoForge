@@ -13,6 +13,7 @@ authors = [{name = "Pietro Califano (PC)", email = "petercalifano.gs@gmail.com"}
 dependencies = [
     "torch-tb-profiler<=0.4.3",
     "scikit-learn<=1.6.1",
+    "dacite",
     "scipy<=1.16.1",
     "numpy<=2.2.1",
     "onnx<=1.17.0",

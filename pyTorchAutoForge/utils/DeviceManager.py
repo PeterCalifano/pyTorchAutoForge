@@ -134,6 +134,7 @@ class DeviceManager():
         return GetDeviceMulti()
 
 
+# TODO move to tests folder
 def test_GetDevice_():
     # Test the GetDevice function
     assert GetDeviceMulti() == "cuda:0" or GetDeviceMulti(
