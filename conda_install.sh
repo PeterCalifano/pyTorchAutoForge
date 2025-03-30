@@ -174,6 +174,11 @@ if [ $jetson_target -eq 1 ]; then
       pip install -e .  # Install the package in editable mode
   else
     echo "Building and installing pyTorchAutoForge wheel..."
+    # Remove previous build 
+    rm -rf dist
+    rm -rf build
+    rm -rf pyTorchAutoForge.egg-info
+    # Build and install
     python3 -m build 
     pip install dist/*.whl  # Install pyTorchAutoForge wheel # FIXME editable mode does not work for this
   fi
@@ -197,6 +202,11 @@ else
       pip install -e .  # Install the package in editable mode
   else
     echo "Building and installing pyTorchAutoForge wheel..."
+    # Remove previous build 
+    rm -rf dist
+    rm -rf build
+    rm -rf pyTorchAutoForge.egg-info
+    # Build and install
     python3 -m build 
     pip install dist/*.whl  # Install pyTorchAutoForge wheel # FIXME editable mode does not work for this
   fi

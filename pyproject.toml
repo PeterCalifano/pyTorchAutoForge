@@ -35,7 +35,6 @@ dependencies = [
     "lietorch<=0.6.2.post1; platform_machine == 'x86_64'",
     "norse; platform_machine == 'x86_64'",
     "tonic; platform_machine == 'x86_64'",
-    "aestream; platform_machine == 'x86_64'",
     "expelliarmus; platform_machine == 'x86_64'"
 ]
 
