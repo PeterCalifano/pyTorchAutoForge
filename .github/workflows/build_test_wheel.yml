@@ -23,6 +23,12 @@ on:
     - prereleased
     - released
     - unpublished
+  workflow_dispatch:
+    inputs:
+      run-tests:
+        description: "Run tests?"
+        required: false
+        default: "true"
   
 jobs:
   build-package:
@@ -67,4 +73,5 @@ jobs:
         conda install pytest
         conda activate base
         pytest # TODO add specifications of test
+
     
