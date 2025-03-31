@@ -315,7 +315,7 @@ class ReadoutNoiseModel(BaseAddErrorModel):
     """
 
     def __init__(self, inputShape: list,
-                 noiseMean: float | torch.Tensor | tuple, numpy.ndarray = None,
+                 noiseMean: float | torch.Tensor | tuple | numpy.ndarray = None,
                  noiseStd: float | tuple | numpy.ndarray = None) -> None:
 
         super(ReadoutNoiseModel, self).__init__(inputShape)
