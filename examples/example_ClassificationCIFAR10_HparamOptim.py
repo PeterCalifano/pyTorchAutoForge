@@ -2,7 +2,7 @@
 # Reference: https://pytorch.org/vision/0.9/models.html#classification
 
 # Import modules
-import torch
+import torch, os, sys
 from torch import nn
 # Utils for dataset management, storing pairs of (sample, label)
 from torch.utils.data import DataLoader
@@ -16,7 +16,8 @@ from pyTorchAutoForge.datasets import DataloaderIndex
 import torchvision.models as models
 
 from pyTorchAutoForge.utils import GetDevice
-from ClassificationCIFAR10_Example import DefineDataloaders, DefineModel, DefineOptimStrategy
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
+from examples.example_ClassificationCIFAR10 import DefineDataloaders, DefineModel, DefineOptimStrategy
 
 from functools import partial
 
