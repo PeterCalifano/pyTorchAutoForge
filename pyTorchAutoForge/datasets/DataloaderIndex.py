@@ -1,5 +1,6 @@
 from torch.utils.data import DataLoader, random_split
-from typing import Optional
+from math import floor 
+# Removed Optional as it is deprecated in Python 3.10; using "| None" instead
 
 # %%  Data loader indexer class - PeterC - 23-07-2024
 class DataloaderIndex:
@@ -18,33 +19,35 @@ class DataloaderIndex:
         getValidationLoader() -> DataLoader:
             Returns the DataLoader for the validation dataset.
     """
-    def __init__(self, trainLoader:DataLoader, validLoader:Optional[DataLoader] = None, split_ratio:int = 0.8) -> None:
+    def __init__(self, trainLoader : DataLoader, validLoader:DataLoader | None = None, split_ratio : int | float = 0.8) -> None:
         if not(isinstance(trainLoader, DataLoader)):
             raise TypeError('Training dataloader is not of type "DataLoader"!')
 
-        if validLoader is None:
+        if not(isinstance(validLoader, DataLoader)) and validLoader is not None:
+            raise TypeError('Validation dataloader is not of type "DataLoader"!')
+        
+        if validLoader is not None:
+            # Just assign dataloaders
+            self.TrainingDataLoader = trainLoader
+            self.ValidationDataLoader = validLoader
+        else:
             # Perform random splitting of training data to get validation dataset
-            print(f'No validation dataset provided: training dataset automatically split with ratio {split_ratio}')
-            trainingSize = int(split_ratio * len(trainLoader.dataset))
-            validationSize = len(trainLoader.dataset) - trainingSize
+            print(f'\033[93mNo validation dataset provided: training dataset automatically split with ratio {split_ratio}\033[0m')
+
+            training_size = floor(split_ratio * trainLoader.__len__())
+            validation_size = trainLoader.__len__() - training_size
 
             # Split the dataset
-            trainingData, validationData = random_split(trainLoader.dataset, [trainingSize, validationSize])
+            trainingData, validationData = random_split(trainLoader.dataset, [training_size, validation_size])
 
             # Create dataloaders
             self.TrainingDataLoader = DataLoader(trainingData, batch_size=trainLoader.batch_size, shuffle=True, 
                                                  num_workers=trainLoader.num_workers, drop_last=trainLoader.drop_last)
+            
             self.ValidationDataLoader = DataLoader(validationData, batch_size=trainLoader.batch_size, shuffle=True,
                                                    num_workers=trainLoader.num_workers, drop_last=False)
-        else:
 
-            self.TrainingDataLoader = trainLoader
-
-            if not(isinstance(validLoader, DataLoader)):
-                raise TypeError('Validation dataloader is not of type "DataLoader"!')
-            
-            self.ValidationDataLoader = validLoader
-
+    # TODO remove these methods, not necessary in python...
     def getTrainLoader(self) -> DataLoader:
         return self.TrainingDataLoader
     

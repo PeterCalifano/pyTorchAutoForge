@@ -2,18 +2,22 @@
 
 from .utils import *
 from .optimization import *
-from .modelBuilding import *
-from .hparamsOptim import *
+from .model_building import *
+from .hparams_optim import *
 from .api import *
 from .evaluation import *
 from .datasets import *
+from .setup import *
 
 import os
 import importlib
 
+# Define global variable
+on_rtd = os.environ.get("READTHEDOCS") == "True"
+
 # Removed modules
 excluded_modules = ['tests', 'tensorboard']
-print('Initializing with all sub-packages and modules except:', excluded_modules)
+#print('Initializing with all sub-packages and modules except:', excluded_modules)
 
 # Define __version__ dynamically
 try:

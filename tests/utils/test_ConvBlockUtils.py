@@ -1,6 +1,6 @@
 
 # Import modules
-from pyTorchAutoForge.modelBuilding.ModelAutoBuilder import ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize
+from pyTorchAutoForge.model_building.ModelAutoBuilder import ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize
 
 # Test definition of ConvBlock
 outChannelsSizes = [16, 32, 75, 15]

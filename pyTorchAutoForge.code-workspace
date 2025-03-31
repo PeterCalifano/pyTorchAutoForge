@@ -26,6 +26,12 @@
 		},
 		{
 			"path": "../vbn-ai-dart"
+		},
+		{
+			"path": "../spiking-networks/snntorch_PeterCdev"
+		},
+		{
+			"path": "../spiking-networks/norse_PeterCdev"
 		}
 	],
 	"settings": {}

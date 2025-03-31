@@ -1,3 +1,67 @@
+"""
+    ##############################################
+    ModelTrainingManager Model Training and Validation Manager Module
+    ##############################################
+    This module provides a comprehensive framework for managing the training and validation of PyTorch models. 
+    It includes functionality for configuring training parameters, managing datasets, optimizing models, 
+    logging metrics, and handling advanced features like early stopping, learning rate scheduling, 
+    and Optuna-based hyperparameter optimization.
+    Classes:
+        TaskType(Enum): Enum class to define task types for training and validation (e.g., classification, regression, custom).
+        ModelTrainingManagerConfig: Configuration dataclass for the ModelTrainingManager class. Contains all parameters 
+            accepted as configuration for training and validation.
+        enumOptimizerType(Enum): Enum class to define optimizer types (e.g., SGD, Adam, AdamW).
+        ModelTrainingManager: Main class for managing the training and validation of PyTorch models. 
+            Supports advanced features like multi-threading, logging, and Optuna integration.
+    Functions:
+        FreezeModel(model): Freezes the parameters of a PyTorch model to avoid backpropagation.
+        TrainModel(dataloader, model, lossFcn, optimizer, epochID, device, taskType, lr_scheduler, swa_scheduler, swa_model, swa_start_epoch): 
+            Performs one step of training for a model using the specified dataset and loss function.
+        ValidateModel(dataloader, model, lossFcn, device, taskType): Validates a model using the specified dataset and loss function.
+        TrainAndValidateModel(dataloaderIndex, model, lossFcn, optimizer, config): 
+            Legacy function to train and validate a model using specified dataloaders and loss function.
+        EvaluateModel(dataloader, model, lossFcn, device, numOfSamples, inputSample, labelsSample): 
+            Evaluates a model on a random number of samples from the dataset.
+    Usage:
+        This module is designed to be used in machine learning workflows where PyTorch models are trained and validated. 
+        It provides a high-level interface for managing the entire training process, including configuration, 
+        logging, and advanced features like early stopping and Optuna-based hyperparameter tuning.
+    Example:
+        ```python
+        # Define model
+        model = models.resnet18(pretrained=False)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        validation_loader = DataLoader(validation_dataset, batch_size=32, shuffle=False)
+        # Define configuration
+        config = ModelTrainingManagerConfig(
+            tasktype=TaskType.CLASSIFICATION,
+            batch_size=32,
+            num_of_epochs=10,
+            initial_lr=0.001,
+            optimizer=torch.optim.Adam
+        # Initialize training manager
+        trainer = ModelTrainingManager(model=model, lossFcn=torch.nn.CrossEntropyLoss(), config=config)
+        # Set dataloaders
+        trainer.setDataloaders(DataloaderIndex(train_loader, validation_loader))
+        # Train and validate model
+        ```
+        FileNotFoundError: If a specified file is not found.
+        optuna.TrialPruned: If the Optuna trial is pruned due to early stopping or divergence.
+    Dependencies:
+        - PyTorch
+        - Optuna
+        - MLFlow
+        - Kornia
+        - YAML
+        - NumPy
+        - Colorama
+        - Dataclasses
+        - Enum
+        - Torchvision (for testing and examples)
+    Note:
+        This module is a work-in-progress (WIP) and may include experimental features.
+"""
+
 # TODO Add yaml interface for training, compatible with mlflow and optuna
 # The idea is to let the user specify all the parameters in a yaml file, which is then loaded and used
 # to set the configuration class. Default values are specified as the class defaults.
@@ -16,7 +80,7 @@ from torch.utils.data import DataLoader
 from dataclasses import dataclass, asdict, fields, Field, MISSING
 
 from pyTorchAutoForge.datasets import DataloaderIndex
-from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
+from pyTorchAutoForge.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
 from pyTorchAutoForge.api.torch import SaveTorchModel, LoadTorchModel
 from pyTorchAutoForge.optimization import CustomLossFcn
 
@@ -43,8 +107,8 @@ class TaskType(Enum):
 # 3) Main training logbook to store all data to be used for model selection and hyperparameter tuning, this should be "per project"
 # 4) Training mode: k-fold cross validation leveraging scikit-learn
 
-@dataclass(frozen=False)
-class ModelTrainingManagerConfig():
+@dataclass()
+class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass 
     '''Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.'''
 
     # REQUIRED fields
@@ -1643,6 +1707,7 @@ def ModelTrainingManager_test_():
 
     from torchvision import models
     from torchvision import transforms
+    from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConfig, TaskType
     from torchvision import datasets  # Import vision default datasets from torchvision
 
     def DefineModel(trial:optuna.Trial = None):

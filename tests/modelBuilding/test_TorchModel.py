@@ -1,7 +1,7 @@
 import torch 
 from pyTorchAutoForge.utils import GetDevice
 from pyTorchAutoForge.api.torch.torchModulesIO import *
-from pyTorchAutoForge.modelBuilding import torchModel
+from pyTorchAutoForge.model_building import torchModel
 
 
 

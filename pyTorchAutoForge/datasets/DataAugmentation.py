@@ -1,7 +1,6 @@
-# DEVNOTE: TODO understand how to use for labels processing
+# TODO understand how to use for labels processing
 from kornia.augmentation import AugmentationSequential
 import albumentations
-from typing import Union
 import torch
 from kornia import augmentation as kornia_aug
 from torch import nn
@@ -13,9 +12,9 @@ import numpy
 from enum import Enum
 
 
-def build_kornia_augs(sigma_noise: float, sigma_blur: Union[tuple, float] = (0.0001, 1.0),
-                      brightness_factor: Union[tuple, float] = (0.0001, 0.01),
-                      contrast_factor: Union[tuple, float] = (0.0001, 0.01)) -> torch.nn.Sequential:
+def build_kornia_augs(sigma_noise: float, sigma_blur: tuple | float = (0.0001, 1.0),
+                      brightness_factor: tuple | float = (0.0001, 0.01),
+                      contrast_factor: tuple | float = (0.0001, 0.01)) -> torch.nn.Sequential:
 
     # Define kornia augmentation pipeline
 
@@ -50,7 +49,7 @@ def build_kornia_augs(sigma_noise: float, sigma_blur: Union[tuple, float] = (0.0
     return torch.nn.Sequential(random_brightness, random_contrast, gaussian_blur, gaussian_noise)
 
 
-# DEVNOTE: TODO
+# TODO 
 class AugsBaseClass(nn.Module, ABC):
     """Base class for specification of dataset aumentations.
 
@@ -66,7 +65,7 @@ class AugsBaseClass(nn.Module, ABC):
         pass
 
     # PLACEHOLDER method
-    def process_labels(self, labels: Union[torch.Tensor, tuple[torch.Tensor]]) -> Union[torch.Tensor, tuple[torch.Tensor]]:
+    def process_labels(self, labels: torch.Tensor | tuple[torch.Tensor]) -> torch.Tensor | tuple[torch.Tensor]:
         pass
 
 
@@ -177,7 +176,7 @@ class BaseAddErrorModel(BaseErrorModel):
 
 
 # %% Error models classes implementations
-def SamplePoissonRV(rates: Union[torch.Tensor, numpy.ndarray, float], inputShape:list = None,
+def SamplePoissonRV(rates: torch.Tensor | numpy.ndarray, float, inputShape:list = None,
                      enumComputeBackend: EnumComputeBackend = EnumComputeBackend.TORCH):
     
     # DEVNOTE: rates determines shape if inputShape is None        
@@ -316,9 +315,8 @@ class ReadoutNoiseModel(BaseAddErrorModel):
     """
 
     def __init__(self, inputShape: list,
-                 noiseMean: Union[float, torch.Tensor,
-                                  tuple, numpy.ndarray] = None,
-                 noiseStd: Union[float, tuple, numpy.ndarray] = None) -> None:
+                 noiseMean: float | torch.Tensor | tuple | numpy.ndarray = None,
+                 noiseStd: float | tuple | numpy.ndarray = None) -> None:
 
         super(ReadoutNoiseModel, self).__init__(inputShape)
         self.noiseMean = noiseMean
@@ -379,7 +377,7 @@ class CameraDetectorErrorsModel(AugsBaseClass):
 
         # TODO build error models from config, from input dict or list of error models
 
-    def forward(self, imageAsDN: Union[torch.Tensor, numpy.ndarray]) -> Union[torch.Tensor, numpy.ndarray]:
+    def forward(self, imageAsDN: torch.Tensor | numpy.ndarray) -> torch.Tensor | numpy.ndarray:
 
         # Loop through error models
         for errorModel in self.errorModelsList:
@@ -389,11 +387,11 @@ class CameraDetectorErrorsModel(AugsBaseClass):
         return imageAsDN
 
 
-# DEVNOTE TODO
+# TODO ImagesAugsModule
 class ImagesAugsModule(AugsBaseClass):
-    def __init__(self, sigma_noise: float, sigma_blur: Union[tuple, float] = (0.0001, 1.0),
-                 brightness_factor: Union[tuple, float] = (0.0001, 0.01),
-                 contrast_factor: Union[tuple, float] = (0.0001, 0.01), unnormalize_before: bool = False):
+    def __init__(self, sigma_noise: float, sigma_blur: tuple | float = (0.0001, 1.0),
+                 brightness_factor: tuple | float = (0.0001, 0.01),
+                 contrast_factor: tuple | float = (0.0001, 0.01), unnormalize_before: bool = False):
         super(ImagesAugsModule, self).__init__()
 
         # Store augmentations data
@@ -418,9 +416,7 @@ class ImagesAugsModule(AugsBaseClass):
 
         return x
 
-# DEVNOTE: TODO
-
-
+# TODO GeometryAugsModule
 class GeometryAugsModule(AugsBaseClass):
     def __init__(self):
         super(GeometryAugsModule, self).__init__()
@@ -432,7 +428,7 @@ class GeometryAugsModule(AugsBaseClass):
             data_keys=["input", "mask"]
         )  # Define the keys: image is "input", mask is "mask"
 
-    def forward(self, x: torch.Tensor, labels: Union[torch.Tensor, tuple[torch.Tensor]]) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, labels: torch.Tensor | tuple[torch.Tensor]) -> torch.Tensor:
         # TODO define interface (input, output format and return type)
         x, labels = self.augmentations(x, labels)
 
