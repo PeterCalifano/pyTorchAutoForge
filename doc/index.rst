@@ -6,6 +6,11 @@
 Welcome to pyTorchAutoForge's documentation!
 ============================================
 
+.. image:: _static/ptaf_logo_small.jpg
+   :alt: ptaf_logo_small
+   :align: center
+   :width: 200px
+
 .. toctree::
    :maxdepth: 4
    :caption: Contents:
