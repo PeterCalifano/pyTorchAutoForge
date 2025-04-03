@@ -18,33 +18,42 @@
 }
 */
 
-
 /* Adjust the input field of the search bar */
 .wy-side-nav-search input {
     width: 90%;
     /* Adjust the width if necessary */
 }
 
-/* Change background color */
+/* Apply a dark background with light text */
 body {
-    background-color: #f8f8f8;
+    background-color: #121212;
+    color: #e0e0e0;
 }
 
 /* Change text color */
 p {
-    color: #333;
+    color: #256103;
 }
 
 /* Customize sidebar background and link colors */
 .wy-nav-side {
-    background-color: #2c3e50;
+    background-color: #024463;
 }
 
 .wy-nav-side a {
-    color: #ecf0f1;
+    color: #026694;
+}
+
+/* Modify navigation bar */
+.wy-nav-top {
+    background-color: #d46000;
 }
 
 /* Customize main content links */
 a {
-    color: #2980b9;
+    color: #72049e;
+}
+
+a:hover {
+    color: #3700b3;
 }

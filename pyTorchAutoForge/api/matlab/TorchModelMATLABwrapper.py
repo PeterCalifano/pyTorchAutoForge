@@ -1,10 +1,10 @@
+from pickle import NONE
 from pyTorchAutoForge.utils.utils import GetDevice
 from pyTorchAutoForge.model_building.modelClasses import torchModel
 from pyTorchAutoForge.api.torch import LoadTorchModel
 import numpy as np
 import torch, os
 from torch import nn
-from typing import Union
 from dataclasses import dataclass
 
 @dataclass 
@@ -12,17 +12,17 @@ class MatlabWrapperConfig():
     # Default wrapper configuration
     DEBUG_MODE: bool = False
     device = GetDevice()
-    input_shape_validation: list = None # None for no validation
-    loading_mode: str = None # 'traced', 'state_dict', None
-    trained_model_path: str = None
+    input_shape_validation: list | None = None # None for no validation
+    loading_mode: str | None = None # 'traced', 'state_dict', None
+    trained_model_path: str | None = None
     
 
 # %% MATLAB wrapper class for Torch models evaluation - 11-06-2024 # TODO: update class
 class TorchModelMATLABwrapper():
     '''Class to wrap a trained PyTorch model for evaluation in MATLAB'''
-    def __init__(self, trainedModel: Union[str, nn.Module, torchModel], 
+    def __init__(self, trainedModel: str | nn.Module | torchModel, 
                  wrapperConfig: MatlabWrapperConfig = MatlabWrapperConfig(),
-                 modelArch: Union[callable, nn.Module] = None) -> None:
+                 modelArch: nn.Module | None = None) -> None:
         
         '''Constructor for TorchModelMATLABwrapper'''
 
@@ -66,16 +66,15 @@ class TorchModelMATLABwrapper():
             print("The following model has been loaded and will be used in forward() call: \n", self.trainedModel)
 
 
-
-    def forward(self, inputSample: Union[np.ndarray, torch.Tensor], numBatches: int = None, inputShape: list[int] = None) -> np.ndarray:
+    def forward(self, inputSample: np.ndarray | torch.Tensor, numBatches: int | None = None, inputShape: list[int] | None = None) -> np.ndarray:
         '''Forward method to perform inference on N sample input using loaded trainedModel. Batch size assumed as 1 if not given.'''
         
         if self.DEBUG_MODE:
-            print('Input sample shape: ', X.shape, 'on device: ', self.device)
+            print('Input sample shape: ', inputSample.shape, 'on device: ', self.device)
         
         if self.input_shape_validation is not None:
             if inputSample.shape != self.input_shape_validation:
-                raise ValueError(f'Input shape {X.shape} does not match the expected shape: {self.input_shape_validation}')
+                raise ValueError(f'Input shape {inputSample.shape} does not match the expected shape: {self.input_shape_validation}')
             
         try:
             # Set batch size if not provided

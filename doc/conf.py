@@ -65,11 +65,14 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 html_theme = 'sphinx_rtd_theme'
 
+# Path to the logo image
+html_logo = "_static/ptaf_logo_small.jpg"
+
 html_theme_options = {
     #'analytics_id': 'G-XXXXXXXXXX',  # Provided by Google in your dashboard
     #'analytics_anonymize_ip': False,
     'logo_only': False,
-    #'display_version': True,
+    'display_version': True,
     #'prev_next_buttons_location': 'bottom',
     #'style_external_links': False,
     #'vcs_pageview_mode': '',
@@ -89,7 +92,7 @@ html_static_path = ['_static']
 
 
 def setup(app):
-    app.add_css_file('custom.css')
+    app.add_css_file('ptaf_doc_theme.css')
 
 
 # -- Options for autodoc extensions -----------------------------------------------------

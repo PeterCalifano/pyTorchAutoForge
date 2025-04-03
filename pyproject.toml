@@ -9,7 +9,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dynamic = ["version"]
 license = {text = "MIT"}
-authors = [{name = "Pietro Califano (PC)", email = "petercalifano.gs@gmail.com"}]
+authors = [
+    { name = "Pietro Califano (PC)", email = "petercalifano.gs@gmail.com" }
+]
 dependencies = [
     "torch-tb-profiler<=0.4.3",
     "scikit-learn<=1.6.1",
