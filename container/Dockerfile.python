@@ -1,0 +1,19 @@
+FROM python:3.11
+
+# Set the working directory
+WORKDIR /devDir/
+
+# Git clone the repository
+RUN git clone <repository_url> .
+
+# Enter repository 
+WORKDIR /devDir/repository
+
+# Assuming there is a requirements.txt file in the repository --> Install dependencies
+#RUN pip install --no-cache-dir -r requirements.txt
+
+# Otherwise, if using new python build
+RUN python3 -m build .
+
+# Install the library
+RUN pip install --no-cache-dir dist/*.whl

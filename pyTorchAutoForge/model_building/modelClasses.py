@@ -483,16 +483,6 @@ class resizeCopyAdapter(nn.Module):
 
         return x
 
-
-
-# %% TEST CODE
-def test_model_classes_def():
-    pass
-
-if __name__ == "__main__":
-    test_model_classes_def()
-
-
 # %% TEMPORARY DEV (from OPERATIVE-DEVELOP)
 
 class MultiScaleRangeRegressor(nn.Module):
