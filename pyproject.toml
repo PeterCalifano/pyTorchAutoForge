@@ -121,6 +121,10 @@ enable_error_code = "possibly-undefined"
 # Versioning settings with hatch and hatch-vcs
 [tool.hatch.version]
 source = "vcs"
+raw-options = { version_scheme = "no-guess-dev", local_scheme = "no-local-version" }
 
 [tool.hatch.build.hooks.vcs]
 version-file = "_version.py"
+
+[tool.hatch.build.targets.sdist]
+only-include = ["pyTorchAutoForge", "examples", "conda_install.sh", "environment.yml", "README.md", "LICENSE", "pyproject.toml", "_version.py"]
