@@ -127,4 +127,4 @@ raw-options = { version_scheme = "no-guess-dev", local_scheme = "no-local-versio
 version-file = "_version.py"
 
 [tool.hatch.build.targets.sdist]
-only-include = ["pyTorchAutoForge", "examples", "conda_install.sh", "environment.yml", "README.md", "LICENSE", "pyproject.toml", "_version.py"]
+only-include = ["pyTorchAutoForge", "conda_install.sh", "environment.yml", "examples/example_*""README.md", "LICENSE", "pyproject.toml", "_version.py"]

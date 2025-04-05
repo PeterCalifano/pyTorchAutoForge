@@ -2,7 +2,6 @@ import numpy as np
 from pyTorchAutoForge.evaluation import ModelProfiler
 import torch
 import os 
-from experimental_sswcob_NNregr_module import LoadShallowResNetSkipToOut
 from pyTorchAutoForge.api.torch import SaveTorchModel
 
 saveTraced = True

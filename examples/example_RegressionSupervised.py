@@ -37,7 +37,8 @@ class SimpleNN(torch.nn.Module):
 
 
 # Define some dummy data
-
+dummy_X = torch.randn(1000, 20)  # 1000 samples, 20 features
+dummy_y = torch.randn(1000, 2)   # 1000 samples, 2 targets
 
 
 # %% Define the dataset to build the index
