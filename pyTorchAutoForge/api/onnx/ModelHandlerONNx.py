@@ -1,6 +1,6 @@
 import numpy
 import torch, onnx, os
-from pyTorchAutoForge.model_building.modelClasses import torchModel
+from pyTorchAutoForge.model_building.modelClasses import AutoForgeModule
 from pyTorchAutoForge.utils import AddZerosPadding, torch_to_numpy, timeit_averaged_
 from onnxruntime import InferenceSession
 from numpy.testing import assert_allclose
@@ -14,7 +14,7 @@ class ModelHandlerONNx:
     """
     # CONSTRUCTOR
 
-    def __init__(self, model: torch.nn.Module | torchModel | onnx.ModelProto, dummy_input_sample: torch.Tensor | numpy.ndarray, onnx_export_path: str = '.', opset_version: int = 13, run_export_validation: bool = True, generate_report: bool = False) -> None:
+    def __init__(self, model: torch.nn.Module | AutoForgeModule | onnx.ModelProto, dummy_input_sample: torch.Tensor | numpy.ndarray, onnx_export_path: str = '.', opset_version: int = 13, run_export_validation: bool = True, generate_report: bool = False) -> None:
         
         # Store shallow copy of model
         if isinstance(model, torch.nn.Module):
@@ -321,7 +321,7 @@ def LoadTorchModelFromONNx(dummyInputSample: torch.tensor, onnxExportPath: str =
 
     if os.path.isfile():
         modelONNx = onnx.load(modelSaveName)
-        torchModel = None
-        return torchModel, modelONNx
+        AutoForgeModule = None
+        return AutoForgeModule, modelONNx
     else:
         raise ImportError('Specified input path to .onnx model not found.')

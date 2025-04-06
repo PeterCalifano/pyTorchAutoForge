@@ -1,7 +1,7 @@
 from pickle import NONE
 from pyTorchAutoForge.utils.utils import GetDevice
-from pyTorchAutoForge.model_building.modelClasses import torchModel
-from pyTorchAutoForge.api.torch import LoadTorchModel
+from pyTorchAutoForge.model_building.modelClasses import AutoForgeModule
+from pyTorchAutoForge.api.torch import LoadModel
 import numpy as np
 import torch, os
 from torch import nn
@@ -20,7 +20,7 @@ class MatlabWrapperConfig():
 # %% MATLAB wrapper class for Torch models evaluation - 11-06-2024 # TODO: update class
 class TorchModelMATLABwrapper():
     '''Class to wrap a trained PyTorch model for evaluation in MATLAB'''
-    def __init__(self, trainedModel: str | nn.Module | torchModel, 
+    def __init__(self, trainedModel: str | nn.Module | AutoForgeModule, 
                  wrapperConfig: MatlabWrapperConfig = MatlabWrapperConfig(),
                  modelArch: nn.Module | None = None) -> None:
         
@@ -45,15 +45,15 @@ class TorchModelMATLABwrapper():
         #    raise ValueError(
         #        'Model architecture must be provided for state_dict loading mode. Please provide modelArch as nn.Module or callable function with modelArch as output.')
 
-        if isinstance(trainedModel, (nn.Module, torchModel)) and self.loading_mode is None:
+        if isinstance(trainedModel, (nn.Module, AutoForgeModule)) and self.loading_mode is None:
             self.trainedModel = trainedModel # Assume model is already loaded and provided
 
-        elif isinstance(trainedModel, (nn.Module, torchModel)) and self.loading_mode == 'traced':
-            self.trainedModel = LoadTorchModel(
+        elif isinstance(trainedModel, (nn.Module, AutoForgeModule)) and self.loading_mode == 'traced':
+            self.trainedModel = LoadModel(
                 None, self.trained_model_path, loadAsTraced=traced_loading).to(self.device)
 
-        elif isinstance(trainedModel, (nn.Module, torchModel)) and self.loading_mode == 'state_dict':
-            self.trainedModel = LoadTorchModel(
+        elif isinstance(trainedModel, (nn.Module, AutoForgeModule)) and self.loading_mode == 'state_dict':
+            self.trainedModel = LoadModel(
                 trainedModel, self.trained_model_path, loadAsTraced=traced_loading).to(self.device)
         else:
             raise ValueError(

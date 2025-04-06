@@ -20,13 +20,13 @@ print(model_assembly)
 exit(0)
 """
 from pyTorchAutoForge.utils import GetDevice 
-from pyTorchAutoForge.model_building import torchModel
+from pyTorchAutoForge.model_building import AutoForgeModule
 from typing import Union
 from torch import nn
 
 # DEVNOTE: verify is tracing now works with this class
 class MultiHeadAdapter(nn.Module):
-    def __init__(self, numOfHeads: int, headModels:Union[nn.Module, torchModel, nn.ModuleList, nn.ModuleDict]) -> "MultiHeadAdapter":
+    def __init__(self, numOfHeads: int, headModels:Union[nn.Module, AutoForgeModule, nn.ModuleList, nn.ModuleDict]) -> "MultiHeadAdapter":
         self.numOfHeads = numOfHeads
         self.headList = nn.ModuleDict()
         self.headNames = None
@@ -40,7 +40,7 @@ class MultiHeadAdapter(nn.Module):
             self.headList = headModels.values()
             self.headNames = headModels.keys()
 
-        elif isinstance(headModels, (nn.Module, torchModel)):
+        elif isinstance(headModels, (nn.Module, AutoForgeModule)):
             self.headList = [headModels]
             self.headNames = ["head_0"]
         
@@ -65,7 +65,7 @@ class MultiHeadAdapter(nn.Module):
 # DEVNOTE: try to make it a subclass of nn.Module
 class ModelAssembler(nn.Module):
     # DEVNOTE: behaviour for each type is TBC
-    def __init__(self, device:str = GetDevice(),  *args: Union[torchModel, nn.Module, nn.ModuleList, nn.ModuleList]) -> "ModelAssembler":
+    def __init__(self, device:str = GetDevice(),  *args: Union[AutoForgeModule, nn.Module, nn.ModuleList, nn.ModuleList]) -> "ModelAssembler":
         super(self).__init__()
 
         for idModule, module in enumerate(args):

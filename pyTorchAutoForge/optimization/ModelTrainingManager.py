@@ -81,7 +81,7 @@ from dataclasses import dataclass, asdict, fields, Field, MISSING
 
 from pyTorchAutoForge.datasets import DataloaderIndex
 from pyTorchAutoForge.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
-from pyTorchAutoForge.api.torch import SaveTorchModel, LoadTorchModel
+from pyTorchAutoForge.api.torch import SaveModel, LoadModel
 from pyTorchAutoForge.optimization import CustomLossFcn
 
 # import datetime
@@ -97,6 +97,7 @@ class TaskType(Enum):
     '''Enum class to define task types for training and validation'''
     CLASSIFICATION = 'classification'
     REGRESSION = 'regression'
+    SEGMENTATION = 'segmentation'
     CUSTOM = 'custom'
 
 
@@ -288,7 +289,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.checkpoint_to_load is not None:
             # Load model checkpoint
             try:
-                self.model = LoadTorchModel(model, self.checkpoint_to_load, False)
+                self.model = LoadModel(model, self.checkpoint_to_load, False)
             except Exception as errMsg:
                 # DEVNOTE: here there should be a timer to automatically stop if no input is given for TBD seconds. Need a second thread though.
                 Warning(f"Model checkpoint loading failed with error: {errMsg}")
@@ -755,7 +756,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                         # Save temporary best model
                         modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
-                        SaveTorchModel(self.bestModel, modelSaveName, saveAsTraced=False, targetDevice='cpu')
+                        SaveModel(self.bestModel, modelSaveName, saveAsTraced=False, targetDevice='cpu')
 
                 # Update current training and validation loss values
                 self.currentTrainingLoss = tmpTrainLoss
@@ -801,7 +802,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 examplePair = next(iter(self.validationDataloader))
                 modelSaveName = os.path.join(
                     self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
-                SaveTorchModel(modelToSave, modelSaveName, saveAsTraced=False,
+                SaveModel(modelToSave, modelSaveName, saveAsTraced=False,
                                exampleInput=examplePair[0], targetDevice=self.device)
 
             if self.mlflow_logging:
@@ -1552,12 +1553,12 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
                 1, -1)  # Get single input sample for model saving
             modelSaveName = os.path.join(
                 checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
-            SaveTorchModel(model, modelSaveName, saveAsTraced=True,
+            SaveModel(model, modelSaveName, saveAsTraced=True,
                            exampleInput=exampleInput, targetDevice=device)
 
             if swa_model != None and swa_has_improved:
                 swa_model.eval()
-                SaveTorchModel(swa_model, modelSaveName + '_SWA', saveAsTraced=True,
+                SaveModel(swa_model, modelSaveName + '_SWA', saveAsTraced=True,
                                exampleInput=exampleInput, targetDevice=device)
                 swa_model.train()
 

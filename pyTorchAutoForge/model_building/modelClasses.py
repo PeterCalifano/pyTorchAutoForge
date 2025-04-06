@@ -1,26 +1,34 @@
 # Module to apply activation functions in forward pass instead of defining them in the model class
 import torch.nn as nn
-from typing import Union
 from pyTorchAutoForge.api.torch import * 
 from pyTorchAutoForge.model_building.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, enumMultiHeadOutMode, MultiHeadRegressor
-from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel, LoadTorchModel
+
 from pyTorchAutoForge.model_building.modelBuildingFunctions import build_activation_layer
 from pyTorchAutoForge.model_building.ModelMutator import ModelMutator
-import inspect, pytest
+
 from torch import nn
-from torch.nn import init
 from torch.nn import functional as torchFunc
 import torch, optuna, os, kornia
+
 import numpy as np
 from torchvision import models
+
 
 # DEVNOTE TODO change name of this file to "modelBuildingBlocks.py" and move the OLD classes to the file "modelClasses.py" for compatibility with legacy codebase
  
 #############################################################################################################################################
-class torchModel(torch.nn.Module):
-    '''Custom base class inheriting nn.Module to define a PyTorch NN model, augmented with saving/loading routines like Pytorch Lightning.'''
+class AutoForgeModule(torch.nn.Module):
+    """
+    AutoForgeModule Custom base class inheriting nn.Module to define a PyTorch NN model, augmented with saving/loading routines like Pytorch Lightning.
 
-    def __init__(self, moduleName:str = None, enable_tracing:bool = False, *args, **kwargs) -> None:
+    _extended_summary_
+
+    :param torch: _description_
+    :type torch: _type_
+    :raises Warning: _description_
+    """
+    
+    def __init__(self, moduleName : str | None = None, enable_tracing : bool = False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         # Assign module name. If not provided by user, use class name
@@ -30,7 +38,7 @@ class torchModel(torch.nn.Module):
             self.moduleName  = moduleName
 
 
-    def saveState(self, exampleInput = None, target_device:str = None) -> None:
+    def save(self, exampleInput = None, target_device : str | None = None) -> None:
 
         if self.enable_tracing == True and exampleInput is None:
             self.enable_tracing = False
@@ -39,14 +47,11 @@ class torchModel(torch.nn.Module):
         if target_device is None:
             target_device = self.device
 
-        SaveTorchModel(modelpath = self.moduleName, 
-                        saveAsTraced = self.enable_tracing,
-                        exampleInput = exampleInput,
-                       targetDevice = target_device)
 
-    def loadState(self):
+
+    def load(self):
         
-        LoadTorchModel()
+        LoadModel()
 #############################################################################################################################################
 # TBC: class to perform code generation of net classes instead of classes with for and if loops? 
 # --> THe key problem with the latter is that tracing/scripting is likely to fail due to conditional statements
@@ -64,8 +69,8 @@ class ConvolutionalBlock():
 
 
 # %% TemplateConvNet - 19-09-2024
-class TemplateConvNet(torchModel):
-    '''Template class for a fully parametric CNN model in PyTorch. Inherits from torchModel class (nn.Module enhanced class).'''
+class TemplateConvNet(AutoForgeModule):
+    '''Template class for a fully parametric CNN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
     # TODO: not finished yet
     def __init__(self, parametersConfig) -> None:
         super().__init__()
@@ -207,8 +212,8 @@ class TemplateConvNet(torchModel):
 
 
 # %% TemplateDeepNet - 19-09-2024
-class TemplateDeepNet(torchModel):
-    '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from torchModel class (nn.Module enhanced class).'''
+class TemplateDeepNet(AutoForgeModule):
+    '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
 
     def __init__(self, parametersConfig) -> None:
         super().__init__()
@@ -290,8 +295,8 @@ class TemplateDeepNet(torchModel):
 
 
 # DEVELOPMENT CODE: DEVNOTE: test definition of template DNN using new build_activation_layer function
-class TemplateDeepNet_experimental(torchModel):
-    '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from torchModel class (nn.Module enhanced class).'''
+class TemplateDeepNet_experimental(AutoForgeModule):
+    '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
 
     def __init__(self, parametersConfig) -> None:
         super().__init__()
@@ -436,8 +441,8 @@ class conv2dResolutionAdapter(nn.Module):
     :type nn: _type_
     """
 
-    def __init__(self, targetDimsInPix: Union[list, np.ndarray, torch.Tensor],
-                 channelInOutSizes: Union[list, np.ndarray, torch.Tensor] = [1, 3]):
+    def __init__(self, targetDimsInPix: list | np.ndarray | torch.Tensor,
+                 channelInOutSizes: list | np.ndarray | torch.Tensor = [1, 3]):
         super().__init__()
 
         # Perform 1D convolution to get three feature maps
@@ -501,10 +506,10 @@ class MultiScaleRangeRegressor(nn.Module):
 class MultiHead_CentroidRange_V1(MultiHeadRegressor):
     # Centroid head: straight DNN from last layer of backbone
     # Range head:  straight DNN from last layer of backbone
-    def __init__(self, model_heads: Union[nn.ModuleList, nn.ModuleDict, nn.Module, dict]):
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict):
         super().__init__(model_heads, enumMultiHeadOutMode.Concatenate)
 
-    def forward(self, Xfeatures : Union[list, dict, torch.tensor]):
+    def forward(self, Xfeatures: list | dict | torch.Tensor):
         if isinstance(Xfeatures, dict):
             raise NotImplementedError("Not implemented yet")
             X = Xfeatures[''] # Get features from last layer of backbone
@@ -521,13 +526,13 @@ class MultiHead_CentroidRange_V1(MultiHeadRegressor):
 class MultiHead_CentroidRange_V2(MultiHeadRegressor):
     # Centroid head: straight DNN from last layer of backbone
     # Model using features from last layer after adaptive pooling fused with first layer output
-    def __init__(self, heads: Union[nn.ModuleList, nn.ModuleDict, nn.Module, dict]):
+    def __init__(self, heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict):
         super().__init__(heads, enumMultiHeadOutMode.Concatenate)
 
         self.adaptiveAvgPool_size24 = nn.AdaptiveAvgPool2d(output_size=24) # Define adaptive pooling layer to reduce size of last layer output 
         self.adaptiveAvgPool_size1 = nn.AdaptiveAvgPool2d(output_size=1)
 
-    def forward(self, Xfeatures:  Union[list, dict]):
+    def forward(self, Xfeatures:  list | dict):
 
         # Manually extract entries from Xfeatures
         if isinstance(Xfeatures, dict):
@@ -559,10 +564,10 @@ class MultiHead_CentroidRange_V2(MultiHeadRegressor):
 class MultiHead_CentroidRange_V3(MultiHeadRegressor):
     # Centroid head: straight DNN from last layer of backbone
     # Range head: Model using features from all layers of the backbone (full-multi scale)
-    def __init__(self, model_heads: Union[nn.ModuleList, nn.ModuleDict, nn.Module, dict]):
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict):
         super().__init__(model_heads, enumMultiHeadOutMode.Concatenate)
 
-    def forward(self, Xfeatures: list):
+    def forward(self, Xfeatures: list | dict):
         Y_centroid = self.model_heads[0](Xfeatures[-1]) 
         Y_range = self.model_heads[1](Xfeatures) # Use features from first and last layer of backbone
         return torch.cat((Y_centroid, Y_range), 1)
@@ -758,7 +763,7 @@ def ReloadModelFromOptuna(trial: optuna.trial.FrozenTrial, other_params: dict, m
     model = DefineModel(trial, other_params)
 
     # Load model parameters
-    model = LoadTorchModel(model, os.path.join(filepath, modelName), False)
+    model = LoadModel(model, os.path.join(filepath, modelName), False)
 
     # Loading validation
     validateDictLoading(model, modelName, filepath)

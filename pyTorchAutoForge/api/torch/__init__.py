@@ -1,3 +1,3 @@
-from .torchModulesIO import LoadTorchModel, SaveTorchModel, LoadTorchDataset, SaveTorchDataset, LoadModelAtCheckpoint
+from .torchModulesIO import LoadModel, SaveModel, LoadDataset, SaveDataset
 
-__all__ = ['LoadTorchModel', 'SaveTorchModel', 'LoadTorchDataset', 'SaveTorchDataset', 'LoadModelAtCheckpoint']
+__all__ = ['LoadModel', 'SaveModel', 'LoadDataset', 'SaveDataset']

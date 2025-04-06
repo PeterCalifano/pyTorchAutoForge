@@ -3,7 +3,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding
 from pyTorchAutoForge.optimization.ModelTrainingManager import TrainModel, ValidateModel
-from pyTorchAutoForge.api.torch.torchModulesIO import SaveTorchModel, LoadTorchModel
+from pyTorchAutoForge.api.torch.torchModulesIO import SaveModel, LoadModel
 import numpy as np
 import os, copy
 import torch
@@ -178,7 +178,7 @@ def TrainAndValidateModelForOptunaOptim(trial, dataloaderIndex: dict, model: nn.
                 1, -1)  # Get single input sample for model saving
             modelSaveName = os.path.join(
                 checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
-            SaveTorchModel(model, modelSaveName, saveAsTraced=True,
+            SaveModel(model, modelSaveName, saveAsTraced=True,
                            exampleInput=exampleInput, targetDevice=device)
 
         # Optuna functionalities

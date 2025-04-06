@@ -1,15 +1,46 @@
+"""
+    Module containing a set of basic functions to load and save objects inheriting nn.Module (models and datasets).
+"""
+
+from enum import Enum
+from numpy import deprecate
 import torch, sys, os
 from torch.utils.data import Dataset
-import torch.utils
-
 from pyTorchAutoForge.utils.utils import AddZerosPadding
 
-# TODO: UPDATE FUNCTION
-def SaveTorchModel(model: torch.nn.Module, modelpath: str = "./trainedModel", saveAsTraced: bool = False, exampleInput: torch.Tensor = None, targetDevice: str = 'cpu') -> None:
-   
+
+class AutoForgeModuleSaveMode(Enum):
+    """   
+    Enumeration for AutoForge Module Save Modes.
+
+    This enum defines the various methods available for saving modules,
+    including approaches that use tracing and state dictionary management.
+
+    Attributes:
+        traced_dynamo (str): Save the module using the traced dynamo approach.
+        traced_torchscript (str): Save the module using the traced TorchScript method.
+        model_state_dict (str): Save the module's state dictionary.
+        model_arch_state (str): Save the model's architecture state.
+    """
+    traced_dynamo = "traced_dynamo"
+    traced_torchscript = "traced_torchscript"
+    model_state_dict = "model_state_dict"
+    model_arch_state = "model_arch_state"
+
+
+def SaveModel(model: torch.nn.Module, modelpath: str = "./trainedModel", saveAsTraced: bool = False, weightsOnly : bool = False, exampleInput: torch.Tensor | None = None, targetDevice: str = 'cpu') -> None:
+    
+    # Determine extension
     if saveAsTraced:
+        # Overrides everything else
         extension = '.pt'
-    else:
+
+    elif weightsOnly:
+        # State dict only
+        extension = '_stateDict.pth'
+
+    else: 
+        # Default extension
         extension = '.pth'
 
     if exampleInput is not None:
@@ -72,7 +103,7 @@ def SaveTorchModel(model: torch.nn.Module, modelpath: str = "./trainedModel", sa
 
 
 # %% Function to load model state into empty model- 04-05-2024, updated 11-06-2024
-def LoadTorchModel(model: torch.nn.Module = None, modelpath: str = "savedModels/trainedModel.pt", loadAsTraced: bool = False) -> torch.nn.Module:
+def LoadModel(model: torch.nn.Module = None, modelpath: str = "savedModels/trainedModel.pt", loadAsTraced: bool = False) -> torch.nn.Module:
 
     # Check if input name has extension
     modelNameCheck, extension = os.path.splitext(str(modelpath))
@@ -118,7 +149,7 @@ def LoadTorchModel(model: torch.nn.Module = None, modelpath: str = "savedModels/
 
 
 # %% Function to save Dataset object - 01-06-2024
-def SaveTorchDataset(datasetObj: Dataset, datasetFilePath: str = '', datasetName: str = 'dataset') -> None:
+def SaveDataset(datasetObj: Dataset, datasetFilePath: str = '', datasetName: str = 'dataset') -> None:
 
     try:
         if not (os.path.isdir(datasetFilePath)):
@@ -129,34 +160,6 @@ def SaveTorchDataset(datasetObj: Dataset, datasetFilePath: str = '', datasetName
         print('Failed to save dataset object with error: ', exception)
 
 # %% Function to load Dataset object - 01-06-2024
-def LoadTorchDataset(datasetFilePath: str, datasetName: str = 'dataset') -> Dataset:
+def LoadDataset(datasetFilePath: str, datasetName: str = 'dataset') -> Dataset:
     return torch.load(os.path.join(datasetFilePath, datasetName + ".pt"))
 
-# %% Function to get model checkpoint and load it into nn.Module for training restart - 09-06-2024
-def LoadModelAtCheckpoint(model: torch.nn.Module, modelSavePath: str = './checkpoints', 
-                          modelName: str = 'trainedModel', modelEpoch: int = 0) -> torch.nn.Module:
-    # TODO: add checks that model and checkpoint matches: how to? Check number of parameters?
-
-    # Create path to model state file
-    checkPointPath = os.path.join(
-        modelSavePath, modelName + '_' + AddZerosPadding(modelEpoch, stringLength=4))
-
-    # Attempt to load the model state and evaluate it
-    if os.path.isfile(checkPointPath):
-        print('Loading model to RESTART training from checkpoint: ', checkPointPath)
-        try:
-            loadedModel = LoadTorchModel(model, modelName, modelSavePath)
-        except Exception as exception:
-            print('Loading of model for training restart failed with error:', exception)
-            print('Skipping reload and training from scratch...')
-            return model
-    else:
-        raise ValueError(
-            'Specified model state file not found. Check input path.')
-
-    # Get last saving of model (NOTE: getmtime does not work properly. Use scandir + list comprehension)
-    # with os.scandir(modelSavePath) as it:
-        # modelNamesWithTime = [(entry.name, entry.stat().st_mtime) for entry in it if entry.is_file()]
-        # modelName = sorted(modelNamesWithTime, key=lambda x: x[1])[-1][0]
-
-    return loadedModel

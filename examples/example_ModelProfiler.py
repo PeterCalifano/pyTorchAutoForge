@@ -2,7 +2,7 @@ import numpy as np
 from pyTorchAutoForge.evaluation import ModelProfiler
 import torch
 import os 
-from pyTorchAutoForge.api.torch import SaveTorchModel
+from pyTorchAutoForge.api.torch import SaveModel
 
 saveTraced = True
 def main():
@@ -43,7 +43,7 @@ def main():
     # Save traced and make netron diagram
     if saveTraced:
         # Save model as traced
-        SaveTorchModel(model, checkpoints_path + state_name,
+        SaveModel(model, checkpoints_path + state_name,
                     saveAsTraced=True, exampleInput = torch.rand(1, 14), targetDevice='cpu') 
         
         profiler.make_netron_diagram(checkpoints_path + state_name + ".pt")
