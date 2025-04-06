@@ -1,22 +1,19 @@
-from typing import Optional, Any, Union, IO
+from typing import Any, IO
 import torch
-import mlflow
-import os
 import sys
-import traceback
 from torch import NoneType, nn
 import numpy as np
-from dataclasses import dataclass, asdict, fields, Field, MISSING
+from dataclasses import dataclass
 
 from pyTorchAutoForge.datasets import DataloaderIndex
 from torch.utils.data import DataLoader
-from pyTorchAutoForge.utils.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
-from pyTorchAutoForge.api.torch import SaveModel
+from pyTorchAutoForge.utils.utils import GetDevice
 from pyTorchAutoForge.optimization import CustomLossFcn
 
 from collections.abc import Callable
 import torch.optim as optim
 from pyTorchAutoForge.evaluation import ResultsPlotter
+
 
 @dataclass
 class ModelEvaluatorConfig():
@@ -25,23 +22,31 @@ class ModelEvaluatorConfig():
 
 
 class ModelEvaluator():
-    """_summary_
     """
-    def __init__(self, model: nn.Module, lossFcn: nn.Module | CustomLossFcn,
-                 dataLoader: DataLoader, device: str = 'cpu', evalFunction: Callable | None = None, 
-                 plotter: ResultsPlotter = None) -> None:
-        """_summary_
+    ModelEvaluator _summary_
 
-        Args:
-            model (Union[nn.Module]): _description_
-            lossFcn (Union[nn.Module, CustomLossFcn]): _description_
-            dataLoaderIndex (DataloaderIndex): _description_
-            evalFunction (Callable, optional): _description_. Defaults to None.
+    _extended_summary_
+    """
+
+    def __init__(self, model: nn.Module, lossFcn: nn.Module | CustomLossFcn,
+                 dataLoader: DataLoader, device: str = 'cpu', evalFunction: Callable | None = None,
+                 plotter: ResultsPlotter | None = None) -> None:
+        """
+            model (nn.Module): PyTorch model to be evaluated.
+            lossFcn (nn.Module | CustomLossFcn): Loss function for evaluation.
+
+            dataLoader (DataLoader): DataLoader providing the evaluation dataset.
+
+            device (str, optional): Device to perform computations on. Defaults to 'cpu'.
+
+            evalFunction (Callable, optional): Function to compute evaluation metrics. Defaults to None.
+
+            plotter (ResultsPlotter, optional): Object to plot evaluation results. Defaults to None.
         """
 
         self.lossFcn = lossFcn
-        self.validationDataloader = dataLoader
-        self.trainingDataloaderSize = len(self.validationDataloader)
+        self.validationDataloader : DataLoader = dataLoader
+        self.trainingDataloaderSize : int = len(self.validationDataloader)
         self.evalFunction = evalFunction
         self.device = device
 
@@ -95,13 +100,15 @@ class ModelEvaluator():
                     # Compute loss for ith batch
                     batch_loss = self.lossFcn(Y_hat, Y)
                     # Accumulate loss
-                    total_loss += batch_loss.get('lossValue') if isinstance(batch_loss, dict) else batch_loss.item()
+                    total_loss += batch_loss.get('lossValue') if isinstance(
+                        batch_loss, dict) else batch_loss.item()
 
                 # Store residuals
                 if residuals is None:
                     residuals = errorPerComponent
                 else:
-                    residuals = torch.cat((residuals, errorPerComponent), dim=0)
+                    residuals = torch.cat(
+                        (residuals, errorPerComponent), dim=0)
 
                 # Print progress
                 current_batch = batch_idx + 1
@@ -125,7 +132,8 @@ class ModelEvaluator():
         # Pack data into dict
         self.stats = {}
         self.stats['prediction_err'] = residuals.to('cpu').numpy()
-        self.stats['average_prediction_err'] = avgResidualsErr.to('cpu').numpy()
+        self.stats['average_prediction_err'] = avgResidualsErr.to(
+            'cpu').numpy()
         self.stats['median_prediction_err'] = medianResiduals.to('cpu').numpy()
         self.stats['max_prediction_err'] = maxResiduals.to('cpu').numpy()
         self.stats['mean_prediction_err'] = meanResiduals.to('cpu').numpy()
@@ -141,16 +149,9 @@ class ModelEvaluator():
 
         return self.stats
 
-    def plotResults(self, entriesNames: list = None, units: list = None,
-                    unit_scalings: Union[dict, list, np.ndarray, float, int] = None, colours: list = None, num_of_bins: int = 100) -> None:
+    def plotResults(self, entriesNames: list = None, units: list | None = None, unit_scalings: dict | list | np.ndarray | float | int | None = None, colours: list | None = None, num_of_bins: int = 100) -> None:
         if self.plotter is not None:
-            self.plotter.histPredictionErrors(self.stats, entriesNames=entriesNames, units=units, unit_scalings=unit_scalings, colours=colours, num_of_bins=num_of_bins)
+            self.plotter.histPredictionErrors(self.stats, entriesNames=entriesNames, units=units,
+                                              unit_scalings=unit_scalings, colours=colours, num_of_bins=num_of_bins)
         else:
             Warning('No plotter object provided. Cannot plot results.')
-        
-
-    
-
-
-
-

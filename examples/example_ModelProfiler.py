@@ -7,6 +7,8 @@ from pyTorchAutoForge.api.torch import SaveModel
 saveTraced = True
 def main():
 
+    raise NotImplementedError("This example is not working yet, need to fix the model loading and saving")
+
     # Load model from state dictionary
     home_dir = os.path.expanduser("~")
     checkpoints_path = f"{home_dir}/devDir/nav-frontend/.experimental/checkpoints/"
@@ -44,7 +46,7 @@ def main():
     if saveTraced:
         # Save model as traced
         SaveModel(model, checkpoints_path + state_name,
-                    saveAsTraced=True, exampleInput = torch.rand(1, 14), targetDevice='cpu') 
+                    save_as_traced=True, example_input = torch.rand(1, 14), target_device='cpu') 
         
         profiler.make_netron_diagram(checkpoints_path + state_name + ".pt")
     

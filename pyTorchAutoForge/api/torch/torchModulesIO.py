@@ -3,10 +3,13 @@
 """
 
 from enum import Enum
-from numpy import deprecate
+from matplotlib.patches import Patch
+from onnx import save
 import torch, sys, os
 from torch.utils.data import Dataset
+from zipp import Path
 from pyTorchAutoForge.utils.utils import AddZerosPadding
+import pathlib
 
 
 class AutoForgeModuleSaveMode(Enum):
@@ -18,95 +21,138 @@ class AutoForgeModuleSaveMode(Enum):
 
     Attributes:
         traced_dynamo (str): Save the module using the traced dynamo approach.
-        traced_torchscript (str): Save the module using the traced TorchScript method.
+        scripted_torchscript (str): Save the module using the traced TorchScript method.
         model_state_dict (str): Save the module's state dictionary.
         model_arch_state (str): Save the model's architecture state.
     """
     traced_dynamo = "traced_dynamo"
-    traced_torchscript = "traced_torchscript"
+    scripted_torchscript = "scripted_torchscript"
     model_state_dict = "model_state_dict"
     model_arch_state = "model_arch_state"
 
 
-def SaveModel(model: torch.nn.Module, modelpath: str = "./trainedModel", saveAsTraced: bool = False, weightsOnly : bool = False, exampleInput: torch.Tensor | None = None, targetDevice: str = 'cpu') -> None:
-    
-    # Determine extension
-    if saveAsTraced:
-        # Overrides everything else
-        extension = '.pt'
+def SaveModel(model: torch.nn.Module, 
+              model_filename: str | pathlib.Path, 
+              save_mode : AutoForgeModuleSaveMode | str = AutoForgeModuleSaveMode.model_arch_state, 
+              example_input: torch.Tensor | None = None, 
+              target_device: str = 'cpu', 
+              model_base_name : str | None = None) -> None:
+    """
+    Saves a PyTorch model to a file.
 
-    elif weightsOnly:
-        # State dict only
-        extension = '_stateDict.pth'
+    Depending on the provided save_mode, this function either saves the entire model,
+    its state dictionary, or a traced/scripted version of the model. If an example_input
+    is provided for tracing/scripted modes, the model is processed accordingly.
+
+    Args:
+        model (torch.nn.Module): The PyTorch model to be saved.
+        model_filename (str | pathlib.Path): The path or file name to save the model.
+        save_mode (AutoForgeModuleSaveMode | str, optional): The mode for saving the model.
+            It can be one of the following:
+                - traced_dynamo: Save the model using the traced dynamo approach.
+                - scripted_torchscript: Save the model using the TorchScript method.
+                - model_state_dict: Save only the model's state dictionary.
+                - model_arch_state: Save the model's architectural state.
+            Defaults to AutoForgeModuleSaveMode.model_arch_state.
+        example_input (torch.Tensor | None, optional): A sample input tensor for tracing or scripting.
+            Defaults to None.
+        target_device (str, optional): The target device (e.g., 'cpu' or 'cuda:0') to save the model.
+            Defaults to 'cpu'.
+        model_base_name (str | None, optional): An optional base name for the model.
+            Defaults to None.
+
+    Raises:
+        ValueError: If an invalid save_mode is provided for traced/scripted saving, or if required
+            parameters for tracing/scripted saving are missing.
+    """
+
+    # Cast modelpath to string
+    model_filename = str(model_filename)
+
+    # Stip extension if it exists
+    model_filename, _ = os.path.splitext(model_filename)
+
+    # Determine extension if not provided
+    traced_or_scripted = False
+
+    if example_input is not None:
+        example_input = example_input.detach()
+        example_input.requires_grad = False
+
+    elif save_mode == AutoForgeModuleSaveMode.traced_dynamo or save_mode == AutoForgeModuleSaveMode.scripted_torchscript:
+        print('Warning: tracing/scripting requested, but no sample input was provided. Defaulting to save model without.')
+
+    if save_mode == AutoForgeModuleSaveMode.traced_dynamo or save_mode == AutoForgeModuleSaveMode.scripted_torchscript and example_input is not None:
+
+        extension = '.pt'
+        traced_or_scripted = True
+
+    elif save_mode == AutoForgeModuleSaveMode.model_state_dict:
+        extension = '_statedict.pth'
 
     else: 
-        # Default extension
         extension = '.pth'
-
-    if exampleInput is not None:
-        exampleInput = exampleInput.detach()
-        exampleInput.requires_grad = False
         
     # Format target device string to remove ':' from name
-    targetDeviceName = targetDevice
-    targetDeviceName = targetDeviceName.replace(':', '')
+    target_device_name = target_device
+    target_device_name = target_device_name.replace(':', '')
 
+    # Form filename for saving
     # Check if device is in model name and remove it
-    if ("_" + targetDeviceName) in modelpath:
-        modelpath = modelpath.replace("_" + targetDeviceName, '')
+    if save_mode == AutoForgeModuleSaveMode.traced_dynamo or save_mode == AutoForgeModuleSaveMode.scripted_torchscript:
 
-    if modelpath == 'trainedModel':
-        if not (os.path.isdir('./savedModels')):
-            os.mkdir('savedModels')
-            if not (os.path.isfile('.gitignore')):
-                # Write gitignore in the current folder if it does not exist
-                gitignoreFile = open('.gitignore', 'w')
-                gitignoreFile.write("\nsavedModels/*")
-                gitignoreFile.close()
-            else:
-                # Append to gitignore if it exists
-                gitignoreFile = open('.gitignore', 'a')
-                gitignoreFile.write("\nsavedModels/*")
-                gitignoreFile.close()
+        # Append device for which the traced model was saved on
+        if ("_" + target_device_name) in str(model_filename):
+            model_filename = str(model_filename).replace("_" + target_device_name, "")
 
-        filename = "savedModels/" + modelpath + '_' + targetDeviceName + extension
-    else:
-        filename = modelpath + '_' + targetDeviceName + extension
+        model_filename = model_filename + "_" + target_device_name
 
-        # Get directory from modelpath and check it exists
-        modelpath_only = os.path.dirname(filename)
-        if not (os.path.isdir(modelpath_only)):
-            os.makedirs(modelpath_only)
+    model_filename = model_filename + extension
 
-    # Attach timetag to model checkpoint
-    # currentTime = datetime.datetime.now()
-    # formattedTimestamp = currentTime.strftime('%d-%m-%Y_%H-%M') # Format time stamp as day, month, year, hour and minute
+    # Get directory from modelpath and check it exists
+    saving_dir = os.path.dirname(model_filename)
+    os.makedirs(saving_dir, exist_ok=True)
 
-    # filename =  filename + "_" + formattedTimestamp
-    print("Saving PyTorch Model State to:", filename)
+    if traced_or_scripted == True and example_input is not None:
+        
+        if save_mode == AutoForgeModuleSaveMode.traced_dynamo:
 
-    if saveAsTraced:
-        print('Saving traced model...')
-        if exampleInput is not None:
-            tracedModel = torch.jit.trace((model).to(
-                targetDevice), exampleInput.to(targetDevice))
-            tracedModel.save(filename)
-            print('Model correctly saved with filename: ', filename)
+            traced_model = torch._dynamo.export(model.to(target_device), example_input.to(target_device))
+            print("Saving traced_dynamo torch model as file:", model_filename)
+
+        elif save_mode == AutoForgeModuleSaveMode.scripted_torchscript:
+            
+            traced_model = torch.jit.trace(model.to(target_device), example_input.to(target_device))
+            print("Saving scripted_torchscript torch model as file:", model_filename)
+
         else:
-            raise ValueError(
-                'You must provide an example input to trace the model through torch.jit.trace()')
-    else:
-        print('Saving NOT traced model...')
-        # Save model as internal torch representation
-        torch.save(model.state_dict(), filename)
-        print('Model correctly saved with filename: ', filename)
+            raise ValueError('Invalid save mode for traced model. Valid options: traced_dynamo, scripted_torchscript')
+        
+        torch.jit.save(traced_model, model_filename) 
+        return
+    
+    elif traced_or_scripted == False:
+        
+        if save_mode == AutoForgeModuleSaveMode.model_state_dict:
+            
+            print("Saving state dict of torch model as file:", model_filename)
+            # Save model as internal torch representation
+            torch.save(model.state_dict(), model_filename)
+
+        else:
+
+            print("Saving torch model as file:", model_filename)
+            # Save model as internal torch representation
+            torch.save(model, model_filename)
+
+        return
 
 
 # %% Function to load model state into empty model- 04-05-2024, updated 11-06-2024
-def LoadModel(model: torch.nn.Module = None, modelpath: str = "savedModels/trainedModel.pt", loadAsTraced: bool = False) -> torch.nn.Module:
+def LoadModel(model: torch.nn.Module | None = None, model_filename: str, loadAsTraced: bool = False) -> torch.nn.Module:
 
     # Check if input name has extension
-    modelNameCheck, extension = os.path.splitext(str(modelpath))
+    modelNameCheck, extension = os.path.splitext(str(model_filename))
 
     # print(modelName, ' ', modelNameCheck, ' ', extension)
 
@@ -119,7 +165,7 @@ def LoadModel(model: torch.nn.Module = None, modelpath: str = "savedModels/train
         extension = ''
 
     # Contatenate file path
-    modelPath = modelpath + extension
+    modelPath = model_filename + extension
 
     if not (os.path.isfile(modelPath)):
         raise FileNotFoundError('No file found at:', modelPath)

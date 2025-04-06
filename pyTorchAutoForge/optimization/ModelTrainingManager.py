@@ -67,6 +67,7 @@
 # to set the configuration class. Default values are specified as the class defaults.
 # Loading methods only modify the parameters the user has specified
 
+#from warnings import deprecated
 from typing import Optional, Any, Union, IO
 import torch
 import mlflow
@@ -81,7 +82,7 @@ from dataclasses import dataclass, asdict, fields, Field, MISSING
 
 from pyTorchAutoForge.datasets import DataloaderIndex
 from pyTorchAutoForge.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
-from pyTorchAutoForge.api.torch import SaveModel, LoadModel
+from pyTorchAutoForge.api.torch import SaveModel, LoadModel, AutoForgeModuleSaveMode
 from pyTorchAutoForge.optimization import CustomLossFcn
 
 # import datetime
@@ -756,7 +757,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                         # Save temporary best model
                         modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
-                        SaveModel(self.bestModel, modelSaveName, saveAsTraced=False, targetDevice='cpu')
+
+                        SaveModel(self.bestModel, modelSaveName,
+                                  save_mode=AutoForgeModuleSaveMode.model_arch_state, 
+                                  target_device='cpu')
 
                 # Update current training and validation loss values
                 self.currentTrainingLoss = tmpTrainLoss
@@ -802,8 +806,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 examplePair = next(iter(self.validationDataloader))
                 modelSaveName = os.path.join(
                     self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
-                SaveModel(modelToSave, modelSaveName, saveAsTraced=False,
-                               exampleInput=examplePair[0], targetDevice=self.device)
+
+                SaveModel(model=self.bestModel, model_filename=modelSaveName,
+                        save_mode=AutoForgeModuleSaveMode.model_arch_state, 
+                        example_input=examplePair[0], 
+                        target_device=self.device)
 
             if self.mlflow_logging:
                 mlflow.log_param('checkpoint_best_epoch', self.bestEpoch)
@@ -1377,6 +1384,7 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
 
 
 # %% TRAINING and VALIDATION template function (LEGACY, no longer maintained) - 04-06-2024
+#@deprecated() # DEVNOTE requires Python 3.13
 def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lossFcn: nn.Module, optimizer, config: dict = {}):
 
     '''Function to train and validate a model using specified dataloaders and loss function'''
@@ -1553,13 +1561,12 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
                 1, -1)  # Get single input sample for model saving
             modelSaveName = os.path.join(
                 checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
-            SaveModel(model, modelSaveName, saveAsTraced=True,
-                           exampleInput=exampleInput, targetDevice=device)
+            
+            SaveModel(model, modelSaveName, save_mode=AutoForgeModuleSaveMode.traced_dynamo, example_input=exampleInput, target_device=device)
 
             if swa_model != None and swa_has_improved:
                 swa_model.eval()
-                SaveModel(swa_model, modelSaveName + '_SWA', saveAsTraced=True,
-                               exampleInput=exampleInput, targetDevice=device)
+                SaveModel(swa_model, modelSaveName + '_SWA', save_mode=AutoForgeModuleSaveMode.traced_dynamo, example_input=exampleInput, target_device=device)
                 swa_model.train()
 
         # MODEL PREDICTION EXAMPLES

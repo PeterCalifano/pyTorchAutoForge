@@ -174,12 +174,14 @@ def TrainAndValidateModelForOptunaOptim(trial, dataloaderIndex: dict, model: nn.
             if not (os.path.isdir(checkpointDir)):
                 os.mkdir(checkpointDir)
 
+            raise NotImplementedError('Update required. Function call not found')
             exampleInput = GetSamplesFromDataset(validationDataset, 1)[0][0].reshape(
                 1, -1)  # Get single input sample for model saving
+            
             modelSaveName = os.path.join(
                 checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
-            SaveModel(model, modelSaveName, saveAsTraced=True,
-                           exampleInput=exampleInput, targetDevice=device)
+            
+            SaveModel(model, modelSaveName, example_input=exampleInput, target_device=device, save_mode='traced_dynamo')
 
         # Optuna functionalities
         # Report validation loss to Optuna pruner
