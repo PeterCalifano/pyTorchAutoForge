@@ -28,4 +28,4 @@ Option A:
 
 Option B;
   1) Clone the repository
-  2) Use the automatic installation script `conda_install.sh`. There are several options, use those you need. It will automatically create and environment named "autoforge".
+  2) Use the automatic installation script `conda_install.sh`. There are several options, use those you need. It will automatically create a new environment named **autoforge**.
