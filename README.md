@@ -4,6 +4,7 @@ A library based on PyTorch (<https://pytorch.org/>) and designed to automate ML 
 
 ## Installation using pip
 
+This is the suggested installation method, the others are mostly intended for development and may not be completely up-to-date with the newest release versions. 
 Run in a conda or virtual environment:
 
 ```bash
