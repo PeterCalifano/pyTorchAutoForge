@@ -12,10 +12,20 @@ pip install pyTorchAutoForge
 
 Dependencies for the core modules should be installed automatically using pip.
 
-## Manual installation (bash)
+## Manual installation (venv)
 
 1) Clone the repository
 2) Create a virtual environment using python >= 3.10 (tested with 3.11), using `python -m venv <your_venv_name>`
-3) Activate the virtual environment using `source <your_venv_name>/bin/activate` on Linux
+3) Activate the virtual environment using `source <your_venv_name>/bin/activate`
 4) Install the requirements using `pip install -r requirements.txt`
 5) Install the package using `pip install .` in the root folder of the repository
+
+## Manual installation (conda)
+
+Option A:
+  1) Clone the repository
+  2) Create a new conda environment (python >=3.10) using the provided `enrivonment.yml` file
+
+Option B;
+  1) Clone the repository
+  2) Use the automatic installation script `conda_install.sh`. There are several options, use those you need. It will automatically create and environment named "autoforge".
