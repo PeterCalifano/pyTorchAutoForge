@@ -22,10 +22,10 @@ Dependencies for the core modules should be installed automatically using pip.
 
 ## Manual installation (conda)
 
-Option A:
+### Option A:
   1) Clone the repository
   2) Create a new conda environment (python >=3.10) using the provided `enrivonment.yml` file
 
-Option B;
+### Option B;
   1) Clone the repository
   2) Use the automatic installation script `conda_install.sh`. There are several options, use those you need. It will automatically create a new environment named **autoforge**.
