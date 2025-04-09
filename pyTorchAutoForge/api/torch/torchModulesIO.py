@@ -149,7 +149,7 @@ def SaveModel(model: torch.nn.Module,
 
 
 # %% Function to load model state into empty model- 04-05-2024, updated 11-06-2024
-def LoadModel(model: torch.nn.Module | None = None, model_filename: str, loadAsTraced: bool = False) -> torch.nn.Module:
+def LoadModel(model: torch.nn.Module | None, model_filename: str, loadAsTraced: bool = False) -> torch.nn.Module:
 
     # Check if input name has extension
     modelNameCheck, extension = os.path.splitext(str(model_filename))
