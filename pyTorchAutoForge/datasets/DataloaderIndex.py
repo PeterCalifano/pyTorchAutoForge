@@ -34,8 +34,8 @@ class DataloaderIndex:
             # Perform random splitting of training data to get validation dataset
             print(f'\033[93mNo validation dataset provided: training dataset automatically split with ratio {split_ratio}\033[0m')
 
-            training_size = floor(split_ratio * trainLoader.__len__())
-            validation_size = trainLoader.__len__() - training_size
+            training_size = floor(split_ratio * len(trainLoader.dataset))
+            validation_size = len(trainLoader.dataset) - training_size
 
             # Split the dataset
             trainingData, validationData = random_split(trainLoader.dataset, [training_size, validation_size])
