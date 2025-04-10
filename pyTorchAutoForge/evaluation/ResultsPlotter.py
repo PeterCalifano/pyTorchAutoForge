@@ -21,7 +21,7 @@ class ResultsPlotterConfig():
     entriesNames: list = None
     output_folder: str = None
 
-class ResultsPlotter():
+class ResultsPlotterHelper():
     """
     ResultsPlotter is a class for plotting the results of prediction errors using different backends like Matplotlib or Seaborn.
     Attributes:
@@ -39,8 +39,8 @@ class ResultsPlotter():
         histPredictionErrors(stats: dict = None, entriesNames: list = None, units: list = None, unit_scalings: dict = None, colours: list = None, num_of_bins: int = 100) -> None:
             Plots a histogram of prediction errors per component without absolute value. Requires EvaluateRegressor() to be called first and matplotlib to work in Interactive Mode.
     """
-    def __init__(self, stats: dict = None, backend_module_: backend_module = backend_module.SEABORN, 
-                 config: ResultsPlotterConfig = None) -> None:
+    def __init__(self, stats: dict | None = None, backend_module_: backend_module = backend_module.SEABORN, 
+                 config: ResultsPlotterConfig | None = None) -> None:
 
         self.loaded_stats = stats
         self.backend_module = backend_module_
@@ -215,7 +215,7 @@ def setup_plotter():
         entriesNames=['Component 0', 'Component 1', 'Component 2'],
         output_folder='test_output'
     )
-    plotter = ResultsPlotter(
+    plotter = ResultsPlotterHelper(
         stats=stats, backend_module_=backend_module.SEABORN, config=config)
     if os.path.isdir('test_output'):
         for file in os.listdir('test_output'):

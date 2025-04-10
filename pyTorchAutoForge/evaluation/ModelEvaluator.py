@@ -12,14 +12,13 @@ from pyTorchAutoForge.optimization import CustomLossFcn
 
 from collections.abc import Callable
 import torch.optim as optim
-from pyTorchAutoForge.evaluation import ResultsPlotter
+from pyTorchAutoForge.evaluation import ResultsPlotterHelper
 
 
 @dataclass
 class ModelEvaluatorConfig():
     device = GetDevice()
     # TODO
-
 
 class ModelEvaluator():
     """
@@ -30,7 +29,7 @@ class ModelEvaluator():
 
     def __init__(self, model: nn.Module, lossFcn: nn.Module | CustomLossFcn,
                  dataLoader: DataLoader, device: str = 'cpu', evalFunction: Callable | None = None,
-                 plotter: ResultsPlotter | None = None) -> None:
+                 plotter: ResultsPlotterHelper | None = None) -> None:
         """
             model (nn.Module): PyTorch model to be evaluated.
             lossFcn (nn.Module | CustomLossFcn): Loss function for evaluation.

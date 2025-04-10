@@ -22,7 +22,7 @@ class CaptumExplainMethods(Enum):
     Saliency = "Saliency" 
     GradientShap = "GradientShap"
 
-class ModelExplainer():
+class ModelExplainerHelper():
     def __init__(self, model: nn.Module | AutoForgeModule, 
                  task_type: TaskType, 
                  input_samples: Tensor | np.ndarray | pd.DataFrame, 

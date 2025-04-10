@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import os
-from pyTorchAutoForge.evaluation.ResultsPlotter import ResultsPlotter, ResultsPlotterConfig, backend_module
+from pyTorchAutoForge.evaluation.ResultsPlotter import ResultsPlotterHelper, ResultsPlotterConfig, backend_module
 
 @pytest.fixture
 def setup_plotter():
@@ -18,7 +18,7 @@ def setup_plotter():
         entriesNames=['Component 0', 'Component 1', 'Component 2'],
         output_folder='test_output'
     )
-    plotter = ResultsPlotter(stats=stats, backend_module_=backend_module.SEABORN, config=config)
+    plotter = ResultsPlotterHelper(stats=stats, backend_module_=backend_module.SEABORN, config=config)
     yield plotter, stats, config
     if os.path.isdir('test_output'):
         for file in os.listdir('test_output'):

@@ -5,7 +5,7 @@ import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 import os
 
-class ModelProfiler():
+class ModelProfilerHelper():
     """
     A class to profile PyTorch models.
 

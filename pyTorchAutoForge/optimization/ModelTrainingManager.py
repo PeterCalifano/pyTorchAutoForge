@@ -739,6 +739,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # DEVNOTE: this could go into a separate method
                 if self.keep_best:
                     if tmpValidLoss <= self.bestValidationLoss:
+                        
                         # Transfer best model to CPU to avoid additional memory allocation on GPU
                         self.bestModel = copy.deepcopy(self.model).to('cpu')
 
@@ -758,9 +759,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         # Save temporary best model
                         modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
 
-                        SaveModel(self.bestModel, modelSaveName,
-                                  save_mode=AutoForgeModuleSaveMode.model_arch_state, 
-                                  target_device='cpu')
+                        if self.bestModel is not None:
+                            SaveModel(model=self.bestModel, model_filename=modelSaveName,
+                                    save_mode=AutoForgeModuleSaveMode.model_arch_state, 
+                                    target_device='cpu')
 
                 # Update current training and validation loss values
                 self.currentTrainingLoss = tmpTrainLoss
@@ -795,6 +797,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     os.remove(modelSaveName) 
 
             modelToSave = ( self.bestModel if self.bestModel is not None else self.model).to('cpu')
+            
             if self.keep_best:
                 print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))

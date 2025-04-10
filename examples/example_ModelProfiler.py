@@ -1,5 +1,5 @@
 import numpy as np
-from pyTorchAutoForge.evaluation import ModelProfiler
+from pyTorchAutoForge.evaluation import ModelProfilerHelper
 import torch
 import os 
 from pyTorchAutoForge.api.torch import SaveModel
@@ -34,7 +34,7 @@ def main():
     ################################
 
     # Define profiler object
-    profiler = ModelProfiler(model, input_shape_or_sample=(1, 14), device='cpu', record_shapes=True, with_stack=True, output_prof_filename=output_prof_filename)
+    profiler = ModelProfilerHelper(model, input_shape_or_sample=(1, 14), device='cpu', record_shapes=True, with_stack=True, output_prof_filename=output_prof_filename)
 
     # Print model summary
     model_stats = profiler.make_summary()
