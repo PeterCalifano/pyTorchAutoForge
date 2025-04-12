@@ -385,6 +385,25 @@ class TemplateDeepNet_experimental(AutoForgeModule):
         return x 
 
 
+# %% Image normalization classes
+class NormalizeImg(nn.Module):
+    def __init__(self, normaliz_value : float = 255.0):
+        super(NormalizeImg, self).__init__()
+        self.normaliz_value = normaliz_value
+
+    def forward(self, x):
+        return x / self.normaliz_value  # Normalize to [0, 1]
+
+# Define the ReNormalize layer
+class ReNormalizeImg(nn.Module):
+    def __init__(self, normaliz_value: float = 255.0):
+        super(ReNormalizeImg, self).__init__()
+        self.normaliz_value = normaliz_value
+
+    def forward(self, x):
+        return x * self.normaliz_value  # Re-normalize to [0, 255]
+
+
 class EfficientNetBackbone(nn.Module):
     def __init__(self, efficient_net_ID, output_type: str = 'last', device='cpu'):
         super(EfficientNetBackbone, self).__init__()
@@ -431,7 +450,7 @@ class EfficientNetBackbone(nn.Module):
         return x if self.output_type == 'last' else self.features
 
 # RESOLUTION ADAPTERS
-class conv2dResolutionAdapter(nn.Module):
+class Conv2dResolutionChannelsAdapter(nn.Module):
     """
     conv2dResolutionAdapter _summary_
 
@@ -463,16 +482,11 @@ class conv2dResolutionAdapter(nn.Module):
 
 
 
-class resizeCopyAdapter(nn.Module):
-    """
-    resizeCopyAdapter Torch module working as size and channels adapter for input images. It resizes input images to a target size (default: EfficientNet_B0 input size) and copies the data along the channel dimension if necessary.
+class ResizeCopyChannelsAdapter(nn.Module):
 
-    :param nn: _description_
-    :type nn: _type_
-    """
     def __init__(self, output_size: list = [224, 224], num_channels: list = [1, 3], interp_method: str = 'bilinear'):
 
-        super(resizeCopyAdapter, self).__init__()
+        super(ResizeCopyChannelsAdapter, self).__init__()
         self.output_size = output_size
         self.input_channels, self.output_channels = num_channels
         self.interp_method = interp_method
@@ -487,166 +501,6 @@ class resizeCopyAdapter(nn.Module):
             x = x.repeat(1, self.output_channels // self.input_channels, 1, 1)
 
         return x
-
-# %% TEMPORARY DEV (from OPERATIVE-DEVELOP)
-
-class MultiScaleRangeRegressor(nn.Module):
-    def __init__(self, headRange_config: dict):
-        super(MultiScaleRangeRegressor, self).__init__()
-
-        self.feature_merger = FeatureMerger_tailoredForV2()  # TODO
-        self.headRange = TemplateDeepNet(headRange_config)
-
-    def forward(self, Xfeatures: list):
-        x = self.feature_merger(Xfeatures)
-        return self.headRange(x)
-
-
-
-class MultiHead_CentroidRange_V1(MultiHeadRegressor):
-    # Centroid head: straight DNN from last layer of backbone
-    # Range head:  straight DNN from last layer of backbone
-    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict):
-        super().__init__(model_heads, enumMultiHeadOutMode.Concatenate)
-
-    def forward(self, Xfeatures: list | dict | torch.Tensor):
-        if isinstance(Xfeatures, dict):
-            raise NotImplementedError("Not implemented yet")
-            X = Xfeatures[''] # Get features from last layer of backbone
-
-        elif isinstance(Xfeatures, list):   
-            X = Xfeatures[-1] # Get features from last layer of backbone
-        elif isinstance(Xfeatures, torch.Tensor):
-            X = Xfeatures
-        else:
-            raise ValueError("Input type not supported")
-        
-        return super().forward(X) 
-        
-class MultiHead_CentroidRange_V2(MultiHeadRegressor):
-    # Centroid head: straight DNN from last layer of backbone
-    # Model using features from last layer after adaptive pooling fused with first layer output
-    def __init__(self, heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict):
-        super().__init__(heads, enumMultiHeadOutMode.Concatenate)
-
-        self.adaptiveAvgPool_size24 = nn.AdaptiveAvgPool2d(output_size=24) # Define adaptive pooling layer to reduce size of last layer output 
-        self.adaptiveAvgPool_size1 = nn.AdaptiveAvgPool2d(output_size=1)
-
-    def forward(self, Xfeatures:  list | dict):
-
-        # Manually extract entries from Xfeatures
-        if isinstance(Xfeatures, dict):
-            raise NotImplementedError("Not implemented yet")
-            X = Xfeatures['']  # Get features from last layer of backbone
-
-        elif isinstance(Xfeatures, list):
-            
-            # Get features from last layer of backbone
-            Xlast_resized = self.adaptiveAvgPool_size24(Xfeatures[-1])
-            
-            # Manually extract entries from Xfeatures
-            # Use features from last layer of backbone
-            # Use features from last layer of backbone
-            Y_centroid = self.heads[0](
-                self.adaptiveAvgPool_size1(Xlast_resized))
-
-            # Use features from first and last layer of backbone
-            list_of_features = [*Xfeatures[:-1], Xlast_resized]
-            Y_range = self.heads[1](list_of_features)
-
-        else:
-            raise ValueError("Input type not supported")
-
-        return torch.cat((Y_centroid, Y_range), 1)
-        
-
-
-class MultiHead_CentroidRange_V3(MultiHeadRegressor):
-    # Centroid head: straight DNN from last layer of backbone
-    # Range head: Model using features from all layers of the backbone (full-multi scale)
-    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict):
-        super().__init__(model_heads, enumMultiHeadOutMode.Concatenate)
-
-    def forward(self, Xfeatures: list | dict):
-        Y_centroid = self.model_heads[0](Xfeatures[-1]) 
-        Y_range = self.model_heads[1](Xfeatures) # Use features from first and last layer of backbone
-        return torch.cat((Y_centroid, Y_range), 1)
-
-
-class MultiHead_CentroidRange_BiFPN(MultiHeadRegressor):
-    # Centroid head: straight DNN from last layer of backbone
-    # Range head: Model using features from all layers of the backbone fused through BiFPN structure
-    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict, output_mode: enumMultiHeadOutMode = enumMultiHeadOutMode.Concatenate, *args, **kwargs):
-        super().__init__(model_heads, output_mode, *args, **kwargs)
-        raise NotImplementedError("Not implemented yet")
-        pass 
-
-def build_multiHeadV1(feature_extractor: nn.Module, resAdapter: nn.Module, headCentroid_config: dict, headRange_config: dict) -> nn.Module:
-
-    module_list = nn.ModuleList()
-    module_list.append(TemplateDeepNet(headCentroid_config))
-    module_list.append(TemplateDeepNet(headRange_config))
-
-    # Define model
-    multihead = MultiHead_CentroidRange_V1(module_list)
-
-    model = nn.Sequential(resAdapter, feature_extractor, multihead)
-
-    return model
-
-
-# DEVNOTE TODO
-class FeatureMerger_tailoredForV2(nn.Module):
-    def __init__(self):
-        super(FeatureMerger_tailoredForV2, self).__init__()
-
-        self.adaptiveMaxPool112 = nn.AdaptiveMaxPool2d(112)
-
-        # Convolutional block for Layer 1 output processing
-        self.convBlock = nn.Sequential(
-            nn.Conv2d(kernel_size=7, in_channels=32,
-                      out_channels=64, stride=1, padding=0),
-            nn.BatchNorm2d(64),
-            nn.SiLU(),
-            nn.Conv2d(kernel_size=5, in_channels=64,
-                      out_channels=128, stride=1, padding=0),
-            nn.BatchNorm2d(128),
-            nn.Conv2d(kernel_size=5, in_channels=128,
-                      out_channels=256, stride=1, padding=0),
-            nn.BatchNorm2d(256),
-            nn.SiLU(),
-            nn.Conv2d(kernel_size=3, in_channels=256,
-                      out_channels=512, stride=2, padding=0),
-            nn.SiLU()
-        )
-
-        self.adaptiveMaxPool24 = nn.AdaptiveMaxPool2d(24)
-        self.convMerger = nn.Conv2d(
-            1280 + 512, 1280, kernel_size=1, stride=1, padding=0)
-
-        self.adaptiveAvgPool1 = nn.AdaptiveMaxPool2d(1)
-        self.feature_merger = FeatureMerger_tailoredForV2()  # TODO
-        self.headRange = TemplateDeepNet(headRange_config)
-
-    def forward(self, Xfeatures: list):
-        x = self.feature_merger(Xfeatures)
-        return self.headRange(x)
-
-
-def build_multiHeadV2(feature_extractor: nn.Module, resAdapter: nn.Module, headCentroid_config: dict, headRange_config: dict) -> nn.Module:
-
-    module_list = nn.ModuleList()
-    module_list.append(TemplateDeepNet(headCentroid_config))
-    range_head = MultiScaleRangeRegressor(headRange_config)
-
-    module_list.append(range_head)  # TODO: Implement range head for V2
-
-    # Define multihead model
-    multihead = MultiHead_CentroidRange_V2(module_list)
-    model = nn.Sequential(resAdapter, feature_extractor, multihead)
-
-    return model
-
 
 # %% TEMPORARY DEV
 # TODO: make this function generic!
@@ -857,7 +711,7 @@ def DefineModel(trial: optuna.trial.Trial | optuna.trial.FrozenTrial, other_para
                 feature_extractor = (ModelMutator(
                     feature_extractor, 32)).mutate()
 
-        resAdapter = conv2dResolutionAdapter([input_size, input_size], [1, 3])
+        resAdapter = Conv2dResolutionChannelsAdapter([input_size, input_size], [1, 3])
 
     elif image_adapter_strategy == 'resize_copy':
 
@@ -875,7 +729,7 @@ def DefineModel(trial: optuna.trial.Trial | optuna.trial.FrozenTrial, other_para
                 feature_extractor = (ModelMutator(
                     feature_extractor, 32)).mutate()
 
-        resAdapter = resizeCopyAdapter(output_size=[input_size, input_size], num_channels=[
+        resAdapter = ResizeCopyChannelsAdapter(output_size=[input_size, input_size], num_channels=[
                                        1, 3], interp_method='bicubic')  # ACHTUNG: trilinear is for volumetric data
 
         # Freeze EfficientNet backbone in this strategy

@@ -1,40 +1,26 @@
 import matplotlib
-from tailoredModels import *
-from datasetHandling import *
-from definitionFcns import LoadDataset
 from pyTorchAutoForge.api.torch import SaveModel, LoadModel
 from pyTorchAutoForge.model_building import ModelAutoBuilder, TemplateDeepNet, TemplateConvNet
 from pyTorchAutoForge.utils import GetDevice
 import torchvision.models as models
-import cv2 as ocv
 from typing import Union
 import numpy as np
-import mlflow
-from torchvision import transforms
-from torchvision import datasets  # Import vision default datasets from torchvision
 from torch.utils.data import DataLoader
 from torchsummary import summary
 from torch import nn
-import json
-import torch
 import matplotlib.pyplot as plt
-from tailoredModels import FullDiskDataset, ShiftDiskTransform, NormalizeImage, conv2dResolutionAdapter, CentroidRangeDeepMSEloss
-import sys
-import os
-
-# Add path to sys
-sys.path.append(os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '../src')))
-
-# Import modules
-# Utils for dataset management, storing pairs of (sample, label)
-
+import sys, os
 
 matplotlib.use('agg')  # or 'Qt5Agg'
 plt.ion()
 
-DEBUG = False
 
+def test_TemplateDeepNet():
+    pass
+
+
+def test_TemplateConvNet():
+    pass
 
 def main():
     # TODO
@@ -159,7 +145,3 @@ def main():
     except Exception as e:
         # Print error message limiting to 300 characters
         print(f"Error message: {str(e)[:300]}")
-
-
-if __name__ == "__main__":
-    main()

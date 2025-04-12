@@ -1,5 +1,7 @@
 from pyTorchAutoForge.model_building.modelBuildingFunctions import *
+import torch
 
+from pyTorchAutoForge.model_building.modelClasses import ResizeCopyChannelsAdapter
 
 # Block builders
 def test_convolutional_block_builder():
@@ -26,6 +28,33 @@ def test_block_builder():
     # Build the block
     block = build_block(block_config)
     print(block)
+
+
+def test_resizeCopyAdapter():
+
+    # Example Sequential model integration
+    # input_size = 224  # Example input size
+    input_size = 512  # Example input size
+    output_channels = 3  # Set to match feature extractor input channels
+    resAdapter = nn.Sequential(
+        # For grayscale input repeated to 3 channels
+        ResizeCopyChannelsAdapter([input_size, input_size], [1, output_channels])
+    )
+
+    # Test with a grayscale image Tensor
+    # Example grayscale Tensor with size 512x512
+    x = torch.rand(1, 1, 512, 512)
+    resized_copied_image = resAdapter(x)
+
+    # Check output size
+    assert resized_copied_image.size() == torch.Size(
+        [1, 3, input_size, input_size])
+
+    # Check values of the output Tensor
+    assert resized_copied_image.shape == torch.Size(
+        [1, 3, input_size, input_size])
+
+
 
 if __name__ == "__main__":
     # Test set

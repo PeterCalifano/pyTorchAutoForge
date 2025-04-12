@@ -107,8 +107,30 @@ def SplitIdsArray_RandPerm(array_of_ids, training_perc, validation_perc, rng_see
 
     return training_set_ids, validation_set_ids, testing_set_ids, varargout
 
+# TODO, move to MachineLearningGears
+def ComputeRangeFromApparentRadius(apparentRadiusInPix: Union[float, torch.Tensor], focal_length: float, range_metric_scale: float, IFOV: float) -> Union[float, torch.Tensor]:
 
+    # Check input types validity
+    assert isinstance(focal_length, float), "Focal length should be a float"
+    assert isinstance(range_metric_scale,
+                      float), "range_metric_scale should be a float"
+    assert isinstance(IFOV, float), "IFOV should be a float"
 
+    assert IFOV > 0, "IFOV should be positive"
+    assert range_metric_scale > 0, "range_metric_scale should be positive"
+    assert focal_length > 0, "focal_length should be positive"
+
+    apparent_angular_size = apparentRadiusInPix * IFOV
+
+    if isinstance(apparent_angular_size, float):
+        range_from_pix = range_metric_scale * np.cos(apparent_angular_size) * (
+            np.tan(apparent_angular_size) + focal_length/apparentRadiusInPix)
+
+    elif isinstance(apparent_angular_size, torch.Tensor):
+        range_from_pix = range_metric_scale * torch.cos(apparent_angular_size) * (
+            torch.tan(apparent_angular_size) + focal_length/apparentRadiusInPix)
+
+    return range_from_pix
 
 def test_SplitIdsArray_RandPerm():
     # Example usage
