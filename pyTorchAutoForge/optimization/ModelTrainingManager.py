@@ -119,7 +119,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     batch_size: int
 
     # DIFFERENTIABLE DATA AUGMENTATION using kornia
-    kornia_transform: torch.nn.Sequential = None
+    kornia_transform: torch.nn.Sequential | None = None
     kornia_augs_in_validation: bool = False
     
     # FIELDS with DEFAULTS
@@ -142,7 +142,8 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     optimizer: Any = torch.optim.Adam  # optimizer class
 
     # Model checkpoint if any
-    checkpoint_to_load: str = None  # Path to model checkpoint to load
+    checkpoint_to_load: str | None = None  # Path to model checkpoint to load
+    load_strict : bool = False  # Load model checkpoint with strict matching of parameters
 
     # Hardware settings
     device: str = GetDevice()  # Default device is GPU if available
@@ -252,8 +253,7 @@ class enumOptimizerType(Enum):
 
 # %% ModelTrainingManager class - 24-07-2024
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    def __init__(self, model: Union[nn.Module], lossFcn: Union[nn.Module, CustomLossFcn], config: Union[ModelTrainingManagerConfig, dict, str],
-                 optimizer: Union[optim.Optimizer, enumOptimizerType, None] = None, dataLoaderIndex: Optional[DataloaderIndex] = None, paramsToLogDict: dict = None) -> None:
+    def __init__(self, model: nn.Module, lossFcn: nn.Module | CustomLossFcn, config: ModelTrainingManagerConfig | dict | str, optimizer: optim.Optimizer | enumOptimizerType | None = None, dataLoaderIndex: DataloaderIndex | None = None, paramsToLogDict: dict = None) -> None:
         """
         Initializes the ModelTrainingManager class.
 
@@ -290,7 +290,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.checkpoint_to_load is not None:
             # Load model checkpoint
             try:
-                self.model = LoadModel(model, self.checkpoint_to_load, False)
+                self.model = LoadModel(model, self.checkpoint_to_load, False, load_strict=self.load_strict)
+
             except Exception as errMsg:
                 # DEVNOTE: here there should be a timer to automatically stop if no input is given for TBD seconds. Need a second thread though.
                 Warning(f"Model checkpoint loading failed with error: {errMsg}")
@@ -639,6 +640,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         - Device:                     {self.device}
         - Checkpoint Directory:       {self.checkpointDir}
         - Mlflow Logging:             {self.mlflow_logging}
+        - Checkpoint file:            {self.checkpoint_to_load}
 
         SETTINGS
 
