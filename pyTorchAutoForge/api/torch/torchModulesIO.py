@@ -2,6 +2,7 @@
     Module containing a set of basic functions to load and save objects inheriting nn.Module (models and datasets).
 """
 
+from email.policy import strict
 from enum import Enum
 from matplotlib.patches import Patch
 from onnx import save
@@ -149,15 +150,14 @@ def SaveModel(model: torch.nn.Module,
 
 
 # %% Function to load model state into empty model- 04-05-2024, updated 11-06-2024
-def LoadModel(model: torch.nn.Module | None, model_filename: str, loadAsTraced: bool = False) -> torch.nn.Module:
+def LoadModel(model: torch.nn.Module | None, model_filename: str, load_as_traced: bool = False, load_strict : bool = False) -> torch.nn.Module:
 
     # Check if input name has extension
     modelNameCheck, extension = os.path.splitext(str(model_filename))
 
-    # print(modelName, ' ', modelNameCheck, ' ', extension)
-
+    # TODO improve this section of LoadModel using enumeration class
     if extension != '.pt' and extension != '.pth':
-        if loadAsTraced:
+        if load_as_traced:
             extension = '.pt'
         else:
             extension = '.pth'
@@ -165,33 +165,41 @@ def LoadModel(model: torch.nn.Module | None, model_filename: str, loadAsTraced: 
         extension = ''
 
     # Contatenate file path
-    modelPath = model_filename + extension
+    model_filepath = model_filename + extension
 
-    if not (os.path.isfile(modelPath)):
-        raise FileNotFoundError('No file found at:', modelPath)
+    if not (os.path.isfile(model_filepath)):
+        raise FileNotFoundError('No file found at:', model_filepath)
 
-    if loadAsTraced and model is None:
-        print('Loading traced model from filename: ', modelPath)
+    if load_as_traced:
+        print('Loading traced model from filename: ', model_filepath)
         # Load traced model using torch.jit
-        model = torch.jit.load(modelPath)
+
+        if model is not None:
+            print('\033[38;5;208mload_as_traced is specified as true, but model has been provided. Model will be overwritten by checkpoint load.\033[0m')
+
+        model = torch.jit.load(model_filepath)
         print('Traced model correctly loaded.')
 
-    elif not (loadAsTraced) or (loadAsTraced and model is not None):
-
-        if loadAsTraced and model is not None:
-            print('loadAsTraced is specified as true, but model has been provided. Loading from state: ', modelPath)
-        else:
-            print('Loading model from filename: ', modelPath)
-
-        # Load model from file
-        model.load_state_dict(torch.load(modelPath))
-        # Evaluate model to set (weights, biases)
-        model.eval()
-
+        return model
+    
     else:
-        raise ValueError('Incorrect combination of inputs! Valid options: \n  1) model is None AND loadAsTraced is True; \n  2) model is nn.Module AND loadAsTraced is False; \n  3) model is nn.Module AND loadAsTraced is True (fallback to case 2)')
+        print('Loading model, load_strict=', load_strict, ' from file: ', model_filepath)
 
-    return model
+        if model is not None:
+            model.load_state_dict(torch.load(model_filepath), 
+                                  strict=load_strict,
+                                  weights_only=True)
+
+        else:
+            model = torch.load(model_filepath, 
+                               map_location='cpu', 
+                               weights_only=False, 
+                               strict=False)
+            
+        print('Model correctly loaded.')
+        return model.eval()
+
+
 
 
 # %% Function to save Dataset object - 01-06-2024
