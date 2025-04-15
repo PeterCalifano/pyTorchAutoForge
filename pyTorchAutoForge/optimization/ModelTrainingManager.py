@@ -136,10 +136,10 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     modelName: str = "trained_model"      # Name of the model to be saved
 
     # Optimization parameters
-    lr_scheduler: Any = None
+    lr_scheduler: Any | None = None
     initial_lr: float = 1e-4
     optim_momentum: float = 0.5  # Momentum value for SGD optimizer
-    optimizer: Any = torch.optim.Adam  # optimizer class
+    optimizer: Any | None = torch.optim.Adam  # optimizer class
 
     # Model checkpoint if any
     checkpoint_to_load: str | None = None  # Path to model checkpoint to load

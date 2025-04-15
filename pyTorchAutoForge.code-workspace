@@ -32,6 +32,9 @@
 		},
 		{
 			"path": "../spiking-networks/norse_PeterCdev"
+		},
+		{
+			"path": "../MachineLearningGears_for_SpaceNav"
 		}
 	],
 	"settings": {}

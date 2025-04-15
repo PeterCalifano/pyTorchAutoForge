@@ -17,9 +17,9 @@ class ResultsPlotterConfig():
     unit_scalings: dict = field(default_factory=dict)
     num_of_bins: int = 100
     colours: list = field(default_factory=list)
-    units: list = None
-    entriesNames: list = None
-    output_folder: str = None
+    units: list | None = None
+    entriesNames: list | None = None
+    output_folder: str | None = None
 
 class ResultsPlotterHelper():
     """
@@ -30,13 +30,13 @@ class ResultsPlotterHelper():
         stats (dict): Dictionary containing the statistics to be plotted.
         units (list): List of units for each entry.
         colours (list): List of colours for each entry.
-        entriesNames (list): List of names for each entry.
+        entriesNames (list | None): List of names for each entry.
         unit_scalings (dict): Dictionary containing scaling factors for each entry.
-        save_figs (bool): Flag to indicate whether to save the figures.
+        save_figs (bool | None): Flag to indicate whether to save the figures.
     Methods:
         __init__(stats: dict = None, backend_module_: backend_module = backend_module.SEABORN, config: ResultsPlotterConfig = None) -> None:
             Initializes the ResultsPlotter with the given statistics, backend module, and configuration.
-        histPredictionErrors(stats: dict = None, entriesNames: list = None, units: list = None, unit_scalings: dict = None, colours: list = None, num_of_bins: int = 100) -> None:
+        histPredictionErrors(stats: dict = None, entriesNames: list | None = None, units: list | None = None, unit_scalings: dict | list | np.ndarray | float | int = None, colours: list | None = None, num_of_bins: int = 100) -> None:
             Plots a histogram of prediction errors per component without absolute value. Requires EvaluateRegressor() to be called first and matplotlib to work in Interactive Mode.
     """
     def __init__(self, stats: dict | None = None, backend_module_: backend_module = backend_module.SEABORN, 
