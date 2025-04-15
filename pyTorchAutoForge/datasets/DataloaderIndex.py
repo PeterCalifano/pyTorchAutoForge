@@ -65,9 +65,20 @@ class DataloaderIndex:
                 if len(split_ratio) != 3:
                     raise ValueError('split_ratio must be a float | int | a tuple of three floats [train, valid, test].')
 
-                training_split_fraction = split_ratio[0]
-                validation_split_fraction = split_ratio[1]
-                test_split_fraction = split_ratio[2]
+                if any(ratio < 0 or ratio > 1 for ratio in split_ratio):
+                    raise ValueError('Invalid split ratios: must be between 0 and 1.')
+
+                if sum(split_ratio) != 1:
+                    print(f'\033[93mWarning: split_ratio does not sum to 1.0, but to {sum(split_ratio)}. Validation split will be overridden.\033[0m')
+                    
+                    training_split_fraction = split_ratio[0]
+                    test_split_fraction = split_ratio[2]
+                    validation_split_fraction = 1 - training_split_fraction - test_split_fraction
+
+                else:
+                    training_split_fraction = split_ratio[0]
+                    validation_split_fraction = split_ratio[1]
+                    test_split_fraction = split_ratio[2]
 
                 with_test_dataset = True
 
