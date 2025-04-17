@@ -64,8 +64,8 @@ class AutoForgeModule(torch.nn.Module):
 
 # TODO --> convolutional building block
 class ConvolutionalBlock():
-    def __init__(self, dict_key, *args, **kwargs) -> nn.Sequential:
-        return nn.Sequential() 
+    def __init__(self, dict_key, *args, **kwargs):
+        pass
 
 
 # %% TemplateConvNet - 19-09-2024

@@ -1,6 +1,6 @@
 from pickle import NONE
 from pyTorchAutoForge.utils.utils import GetDevice
-from pyTorchAutoForge.model_building.modelClasses import AutoForgeModule
+from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule
 from pyTorchAutoForge.api.torch import LoadModel
 import numpy as np
 import torch, os

@@ -1,7 +1,7 @@
 from pyTorchAutoForge.model_building.modelBuildingFunctions import *
 import torch
 
-from pyTorchAutoForge.model_building.modelClasses import ResizeCopyChannelsAdapter
+from pyTorchAutoForge.model_building.modelBuildingBlocks import ResizeCopyChannelsAdapter
 
 # Block builders
 def test_convolutional_block_builder():
