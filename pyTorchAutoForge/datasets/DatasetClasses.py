@@ -147,7 +147,7 @@ class ImagesLabelsDataset(Dataset):
         indices = np.array(list_of_indices)
 
         # Get data
-        image = self.images[indices, :, :, :]
+        image = self.images[indices, :, :, :] if self.images.dim() == 4 else self.images[indices, :, :]
         label = self.labels[indices, :]
 
         if self.transforms is not None:
@@ -156,7 +156,7 @@ class ImagesLabelsDataset(Dataset):
         return image, label
     
     def load_from_paths(self, images_path:str, labels_path:str) -> ImagesLabelsContainer:
-        images, labels = [], [] # TODO
+        images, labels = [], [] # TODO: Implement loading logic for images and labels
         return ImagesLabelsContainer(images, labels)
 
 
