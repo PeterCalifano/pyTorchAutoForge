@@ -109,7 +109,7 @@ def AutoComputeConvBlocksOutput(self, kernelSizes: inputAllowedTypes, poolingKer
 
 
 # %% MultiHeadRegressor class implementation
-class enumMultiHeadOutMode(Enum):
+class EnumMultiHeadOutMode(Enum):
     Concatenate = 0
     Append = 1
     Sum = 2
@@ -117,7 +117,8 @@ class enumMultiHeadOutMode(Enum):
 
 
 class MultiHeadRegressor(nn.Module):
-    def __init__(self, model_heads: Union[nn.ModuleList, nn.ModuleDict, nn.Module, dict], output_mode: enumMultiHeadOutMode = enumMultiHeadOutMode.Concatenate, *args, **kwargs):
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict, output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate, *args, **kwargs):
+        
         # Initialize nn.Module base class
         super(MultiHeadRegressor, self).__init__()
         self.heads = nn.ModuleList()
@@ -154,14 +155,14 @@ class MultiHeadRegressor(nn.Module):
     def pack_output(self, predictions: list):
 
         # Define output object depending on self.output_mode
-        if self.output_mode == enumMultiHeadOutMode.Concatenate:
+        if self.output_mode == EnumMultiHeadOutMode.Concatenate:
             return cat(predictions, 1)  # Concatenate along 2nd dimension
 
-        if self.output_mode == enumMultiHeadOutMode.Append:
+        if self.output_mode == EnumMultiHeadOutMode.Append:
             return predictions
 
         else:
-            raise NotImplementedError("This output mode is not implemented yet")
+            raise NotImplementedError(f"Output mode {self.output_mode} not implemented yet >.<")
 
 # %% ModelAutoBuilder class implementation
 

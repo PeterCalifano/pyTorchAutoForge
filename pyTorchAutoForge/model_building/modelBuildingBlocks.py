@@ -1,8 +1,11 @@
 # Module to apply activation functions in forward pass instead of defining them in the model class
 import torch.nn as nn
 from pyTorchAutoForge.api.torch import * 
-from pyTorchAutoForge.model_building.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, enumMultiHeadOutMode, MultiHeadRegressor
+from pyTorchAutoForge.model_building.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, EnumMultiHeadOutMode, MultiHeadRegressor
+from typing import Literal
 
+from pyTorchAutoForge.utils import GetDeviceMulti
+from pyTorchAutoForge.setup import BaseConfigClass
 from pyTorchAutoForge.model_building.modelBuildingFunctions import build_activation_layer
 from pyTorchAutoForge.model_building.ModelMutator import ModelMutator
 
@@ -12,7 +15,7 @@ import torch, optuna, os, kornia
 
 import numpy as np
 from torchvision import models
-
+from abc import ABC
 
 # DEVNOTE TODO change name of this file to "modelBuildingBlocks.py" and move the OLD classes to the file "modelClasses.py" for compatibility with legacy codebase
  
@@ -47,11 +50,9 @@ class AutoForgeModule(torch.nn.Module):
         if target_device is None:
             target_device = self.device
 
-
-
     def load(self):
-        
-        LoadModel()
+        pass
+        #LoadModel()
 #############################################################################################################################################
 # TBC: class to perform code generation of net classes instead of classes with for and if loops? 
 # --> THe key problem with the latter is that tracing/scripting is likely to fail due to conditional statements
@@ -59,7 +60,8 @@ class AutoForgeModule(torch.nn.Module):
 # TODO The structure of the model building blocks should be as follows:
 # Normalization Layer example:
 
-# TBC: classes versus functions?
+###########################################################
+
 
 
 # TODO --> convolutional building block
@@ -215,22 +217,28 @@ class TemplateConvNet(AutoForgeModule):
 class TemplateDeepNet(AutoForgeModule):
     '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
 
-    def __init__(self, parametersConfig) -> None:
+    def __init__(self, cfg) -> None:
         super().__init__()
 
-        useBatchNorm = parametersConfig.get('useBatchNorm', True)
-        alphaDropCoeff = parametersConfig.get('alphaDropCoeff', 0)
-        alphaLeaky = parametersConfig.get('alphaLeaky', 0)
-        outChannelsSizes = parametersConfig.get('outChannelsSizes', [])
+        model_name = cfg.get('model_name', 'template_deepnet')
+        norm_layer_type = cfg.get('norm_layer_type', 'batchnorm').lower()
+
+        if norm_layer_type == 'batchnorm':
+            self.use_batchnorm = True
+        else:
+            self.use_batchnorm = False
+
+        alphaDropCoeff = cfg.get('alphaDropCoeff', 0)
+        out_channel_sizes = cfg.get('out_channel_sizes', [])
         
         # Initialize input size for first layer
-        input_size = parametersConfig.get('input_size')
+        input_size = cfg.get('input_size')
 
         # Model parameters
-        self.outChannelsSizes = outChannelsSizes
-        self.useBatchNorm = useBatchNorm
+        self.out_channel_sizes = out_channel_sizes
+        self.use_batchnorm = self.use_batchnorm
 
-        self.num_layers = len(self.outChannelsSizes)
+        self.num_layers = len(self.out_channel_sizes)
 
         # Model architecture
         self.layers = nn.ModuleList()
@@ -239,24 +247,26 @@ class TemplateDeepNet(AutoForgeModule):
         # Fully Connected autobuilder
         self.layers.append(nn.Flatten())
 
-
         for i in range(idLayer, self.num_layers+idLayer-1):
 
             # Fully Connected layers block
-            self.layers.append(nn.Linear(input_size, self.outChannelsSizes[i], bias=True))
-            self.layers.append(nn.PReLU(self.outChannelsSizes[i]))
-            self.layers.append(nn.Dropout(alphaDropCoeff))
+            self.layers.append(nn.Linear(input_size, self.out_channel_sizes[i], bias=True))
+            self.layers.append(nn.PReLU(self.out_channel_sizes[i]))
+
+            # Dropout is inhibited if batch normalization
+            if not self.use_batchnorm:
+                self.layers.append(nn.Dropout(alphaDropCoeff))
 
             # Add batch normalization layer if required
-            if self.useBatchNorm:
+            if self.use_batchnorm:
                 self.layers.append(nn.BatchNorm1d(
-                    self.outChannelsSizes[i], eps=1E-5, momentum=0.1, affine=True))
+                    self.out_channel_sizes[i], eps=1E-5, momentum=0.1, affine=True))
 
             # Update input size for next layer
-            input_size = self.outChannelsSizes[i]
+            input_size = self.out_channel_sizes[i]
 
         # Add output layer
-        self.layers.append(nn.Linear(input_size, self.outChannelsSizes[-1], bias=True))
+        self.layers.append(nn.Linear(input_size, self.out_channel_sizes[-1], bias=True))
 
         # Initialize weights of layers
         self.__initialize_weights__()
@@ -403,104 +413,6 @@ class ReNormalizeImg(nn.Module):
     def forward(self, x):
         return x * self.normaliz_value  # Re-normalize to [0, 255]
 
-
-class EfficientNetBackbone(nn.Module):
-    def __init__(self, efficient_net_ID, output_type: str = 'last', device='cpu'):
-        super(EfficientNetBackbone, self).__init__()
-
-        self.output_type = output_type
-        self.device = device
-        self.features = []
-
-        if efficient_net_ID == 0:
-            self.modelType = models.efficientnet_b0
-        elif efficient_net_ID == 1:
-            self.modelType = models.efficientnet_b1
-
-        # Remove last Linear classifier and dropout layer (Classifier nn.Sequential module)
-        if self.output_type == 'last':
-            self.feature_extractor = nn.ModuleList(nn.Sequential(
-                *list((self.modelType(weights=True).to(self.device)).children())[:-1]))
-
-        elif self.output_type == 'features':
-            # self._register_hooks()
-            self.feature_extractor = nn.ModuleList(
-                list((self.modelType(weights=True).to(self.device)).children())[0].children())
-
-    def _register_hooks(self):
-        def get_activation(name):
-            def hook(model, input, output):
-                self.features[name] = output
-            return hook
-
-        for name, layer in self.feature_extractor.named_children():
-            if 'blocks' in name:  # Register hook for each block layer
-                for idx, block in enumerate(layer):
-                    block.register_forward_hook(get_activation(f'block_{idx}'))
-
-    def forward(self, x):
-        self.features = []  # Reset features list state
-        for module in self.feature_extractor:
-            # Evaluate each module in the feature extractor
-            x = module(x)
-            # If output type is 'features', append to list to store intermediate features
-            if self.output_type == 'features':
-                self.features.append(x)
-
-        return x if self.output_type == 'last' else self.features
-
-# RESOLUTION ADAPTERS
-class Conv2dResolutionChannelsAdapter(nn.Module):
-    """
-    conv2dResolutionAdapter _summary_
-
-    _extended_summary_
-
-    :param nn: _description_
-    :type nn: _type_
-    """
-
-    def __init__(self, targetDimsInPix: list | np.ndarray | torch.Tensor,
-                 channelInOutSizes: list | np.ndarray | torch.Tensor = [1, 3]):
-        super().__init__()
-
-        # Perform 1D convolution to get three feature maps
-        self.channelExpander = torch.nn.Conv2d(
-            channelInOutSizes[0], channelInOutSizes[1], kernel_size=1, stride=2, padding=0, bias=False)
-
-        # Define adapter model to bring resolution down to feature_extractor input size
-        self.adaptive_pool_L0 = torch.nn.AdaptiveAvgPool2d(
-            output_size=(targetDimsInPix[0], targetDimsInPix[1]))
-
-    def forward(self, inputImage):
-
-        # Forward pass of the adapter model
-        x = self.channelExpander(inputImage)
-        x = self.adaptive_pool_L0(x)
-
-        return x
-
-
-
-class ResizeCopyChannelsAdapter(nn.Module):
-
-    def __init__(self, output_size: list = [224, 224], num_channels: list = [1, 3], interp_method: str = 'bilinear'):
-
-        super(ResizeCopyChannelsAdapter, self).__init__()
-        self.output_size = output_size
-        self.input_channels, self.output_channels = num_channels
-        self.interp_method = interp_method
-
-    def forward(self, x):
-        # Resize to output size
-        x = kornia.geometry.transform.resize(
-            x, self.output_size, interpolation=self.interp_method)
-
-        # Copy tensor data along channels size if necessary
-        if self.output_channels > self.input_channels:
-            x = x.repeat(1, self.output_channels // self.input_channels, 1, 1)
-
-        return x
 
 # %% TEMPORARY DEV
 # TODO: make this function generic!

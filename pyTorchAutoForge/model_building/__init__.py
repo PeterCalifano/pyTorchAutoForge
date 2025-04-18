@@ -1,6 +1,30 @@
 from .ModelAutoBuilder import ModelAutoBuilder
-from .modelBuildingBlocks import AutoForgeModule, ConvolutionalBlock, TemplateConvNet, TemplateDeepNet, TemplateDeepNet_experimental
-from .ModelAssembler import ModelAssembler, MultiHeadAdapter
+from .modelBuildingBlocks import AutoForgeModule, ConvolutionalBlock, TemplateConvNet, TemplateDeepNet, TemplateDeepNet_experimental, MultiHeadRegressor
+from .ModelAssembler import ModelAssembler
 from .ModelMutator import ModelMutator
 
-__all__ = ['ModelAutoBuilder', 'AutoForgeModule', 'ConvolutionalBlock', 'TemplateConvNet', 'TemplateDeepNet', 'TemplateDeepNet_experimental', 'ModelAssembler', 'MultiHeadAdapter', 'ModelMutator']
+# Backbones
+from .backbones.base_backbones import FeatureExtractorConfig, FeatureExtractorFactory
+from .backbones.efficient_net import EfficientNetConfig, EfficientNetBackbone
+from .backbones.input_adapters import BaseAdapterConfig, Conv2dAdapterConfig, ResizeAdapterConfig, Conv2dResolutionChannelsAdapter, ResizeCopyChannelsAdapter
+
+__all__ = [
+    'ModelAutoBuilder', 
+    'AutoForgeModule', 
+    'ConvolutionalBlock', 
+    'TemplateConvNet', 
+    'TemplateDeepNet', 
+    'TemplateDeepNet_experimental', 
+    'ModelAssembler', 
+    'ModelMutator', 
+    'MultiHeadRegressor',
+    'FeatureExtractorConfig',
+    'FeatureExtractorFactory',
+    'EfficientNetConfig',
+    'EfficientNetBackbone',
+    'BaseAdapterConfig',
+    'Conv2dAdapterConfig',
+    'ResizeAdapterConfig',
+    'Conv2dResolutionChannelsAdapter',
+    'ResizeCopyChannelsAdapter'
+]
