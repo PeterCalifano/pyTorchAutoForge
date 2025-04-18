@@ -4,7 +4,7 @@ from .ModelAssembler import ModelAssembler
 from .ModelMutator import ModelMutator
 
 # Backbones
-from .backbones.base_backbones import FeatureExtractorConfig, FeatureExtractorFactory
+from .backbones.base_backbones import FeatureExtractorConfig, FeatureExtractorFactory, BackboneConfig
 from .backbones.efficient_net import EfficientNetConfig, EfficientNetBackbone
 from .backbones.input_adapters import BaseAdapterConfig, Conv2dAdapterConfig, ResizeAdapterConfig, Conv2dResolutionChannelsAdapter, ResizeCopyChannelsAdapter
 
@@ -26,5 +26,6 @@ __all__ = [
     'Conv2dAdapterConfig',
     'ResizeAdapterConfig',
     'Conv2dResolutionChannelsAdapter',
-    'ResizeCopyChannelsAdapter'
+    'ResizeCopyChannelsAdapter',
+    'BackboneConfig'
 ]

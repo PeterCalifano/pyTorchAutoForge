@@ -29,15 +29,15 @@ class BaseAdapter(nn.Module, ABC):
 
 @dataclass
 class Conv2dAdapterConfig(BaseAdapterConfig):
-    output_size: list      # [H, W]
-    channel_sizes: list    # [in_channels, out_channels]
+    output_size: tuple      # [H, W]
+    channel_sizes: tuple    # [in_channels, out_channels]
 
 
 @dataclass
 class ResizeAdapterConfig(BaseAdapterConfig):
-    output_size: list      # [H, W]
-    channel_sizes: list     # [in_channels, out_channels]
-    interp_method: str = 'bilinear'
+    output_size: tuple      # [H, W]
+    channel_sizes: tuple  = (1, 3)   # [in_channels, out_channels]
+    interp_method: Literal['linear', 'bilinear', 'bicubic', 'trilinear'] = 'bilinear'
 
 
 # ===== Adapter modules =====

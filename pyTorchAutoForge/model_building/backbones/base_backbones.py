@@ -2,10 +2,9 @@ from typing import Literal
 from pyTorchAutoForge.utils import GetDeviceMulti
 from pyTorchAutoForge.setup import BaseConfigClass
 from functools import singledispatch
-from .efficient_net import EfficientNetBackbone, EfficientNetConfig
 from torch import nn
 from dataclasses import dataclass, field
-from .input_adapters import BaseAdapterConfig, InputAdapterFactory
+from pyTorchAutoForge.model_building.backbones.input_adapters import BaseAdapterConfig, InputAdapterFactory
 
 
 @dataclass
@@ -96,11 +95,6 @@ class EfficientNetConfig(FeatureExtractorConfig):
 
     def __post_init__(self):
         self.input_channels = 3
-
-
-@FeatureExtractorFactory.register
-def _(model_cfg: EfficientNetConfig) -> EfficientNetBackbone:
-    return EfficientNetBackbone(model_cfg)
 
 ### ResNet
 @dataclass

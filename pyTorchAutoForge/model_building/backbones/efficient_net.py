@@ -1,6 +1,6 @@
 from torch import nn
 from torchvision import models
-from .base_backbones import EfficientNetConfig
+from .base_backbones import EfficientNetConfig, FeatureExtractorFactory
 
 class EfficientNetBackbone(nn.Module):
     def __init__(self, cfg : EfficientNetConfig ):
@@ -62,3 +62,8 @@ class EfficientNetBackbone(nn.Module):
             out = features
 
         return out
+
+# Define factory method for EfficientNet backbone
+@FeatureExtractorFactory.register
+def _(model_cfg: EfficientNetConfig) -> EfficientNetBackbone:
+    return EfficientNetBackbone(model_cfg)
