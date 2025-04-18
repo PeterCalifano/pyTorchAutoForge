@@ -35,6 +35,51 @@ class DatasetScope(enum.Enum):
             return self.value == other.value
 
 
+# %% Experimental code
+# DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
+
+class ptaf_dtype(enum.Enum):
+    INT8 = "int8"
+    INT16 = "int16"
+    INT32 = "int32"
+    FLOAT32 = "single"
+    FLOAT64 = "double"
+
+    # DOUBT (PC) can it be convertible to torch and numpy types directly?
+
+
+@dataclass
+class DatasetLoaderConfig():
+    """
+    DatasetStructureConfig _summary_
+
+    _extended_summary_
+    """
+    # Required fields
+    # Generics
+    dataset_name: str
+
+    # Labels
+    label_size: int
+    num_samples: int = 0
+    label_folder_name: str = ""
+
+    # Optional
+    # Generics
+    dataset_root_path: str = "."
+    hostname: str = "localhost"  # Default is local machine
+
+    # Additional details/options
+    max_num_samples: int = -1  # If -1, all samples are loaded
+
+
+@dataclass
+class ImagesDatasetConfig(DatasetLoaderConfig):
+    image_folder: str = ""
+    image_format: str = "png"
+    image_dtype: type | torch.dtype = np.uint8
+
+
 @dataclass
 class ImagesLabelsContainer:
     """
@@ -115,107 +160,9 @@ class ImagesLabelsDataset(Dataset):
 
 
 # TODO function to rework as method of ImagesLabelsDataset
-def LoadDataset(datasetID: Union[int, list[int]], datasetsRootFolder: str, hostname: str, limit: int = 0) -> dict:
-
-    # Select loading mode (single or multiple datasets)
-    if isinstance(datasetID, int):
-        datasetID_array = [datasetID]
-    elif isinstance(datasetID, list):
-        datasetID_array = datasetID
-    else:
-        raise TypeError("datasetID must be an integer or a list of integers")
-
-    # Get index list of datasets and print
-    with open(datasetsRootFolder + "/datasetList.json") as datasetListFile:
-        fileDict = json.load(datasetListFile)
-        localDatasetNames = [fileDict["datasetFolders"][id] for id in range(
-            len(fileDict["datasetFolders"])) if fileDict["hostDeviceName"][id] == hostname]
-
-        print("Available datasets: ", localDatasetNames)
-
-    # Initialize index of datasets to load
-    image_folder = []
-    label_folder = []
-    numOfImagesInSets = []
-
-    imgPaths = []
-    lblPaths = []
-
-    for count, datasetID in enumerate(datasetID_array):
-
-        # Get dataset paths
-        image_folder.append(fileDict["datasetPaths"]["images"][datasetID])
-        label_folder.append(fileDict["datasetPaths"]["labels"][datasetID])
-
-        # Load all images into torch.tensor
-        numOfImagesInSets.append(len(os.listdir(image_folder[count])))
-
-        # Check size of names in the folder
-        sample_file = next((f for f in os.listdir(image_folder[count]) if os.path.isfile(
-            os.path.join(image_folder[count], f))), None)
-
-        if sample_file:
-            name_size = len(os.path.splitext(sample_file)[0])
-            print(f"Name size is: {name_size}")
-        else:
-            print("No files found in the folder.")
-
-        # Build paths index
-
-        if name_size == 6:
-            imgPaths.extend([os.path.join(
-                image_folder[count], f"{id+1:06d}.png") for id in range(numOfImagesInSets[count])])
-        elif name_size == 8:
-            imgPaths.extend([os.path.join(
-                image_folder[count], f"{id*150:08d}.png") for id in range(numOfImagesInSets[count])])
-
-        lblPaths.extend([os.path.join(
-            label_folder[count], f"{id+1:06d}.json") for id in range(numOfImagesInSets[count])])
-
-    totalNumOfImages = sum(numOfImagesInSets)
-
-    if limit > 0:
-        totalNumOfImages = min(totalNumOfImages, limit)
-        imgPaths = imgPaths[:limit]
-        lblPaths = lblPaths[:limit]
-
-    # Allocate tensors for images and labels
-    imgData = torch.zeros(1, 1024, 1024, totalNumOfImages, dtype=torch.uint8)
-    lblData = torch.zeros(4, totalNumOfImages, dtype=torch.float32)
-
-    for id, (imgPath, labelPath) in enumerate(zip(imgPaths, lblPaths)):
-
-        # Load image
-        tmpImage = ocv.imread(imgPath, -1)
-
-        # Check the data type
-        if tmpImage.dtype == 'uint8' and id == 0:
-            imageScalingValue = 1.0
-            print("\nLoading uint8 (8-bit) images...\n")
-        elif tmpImage.dtype == 'uint16' and id == 0:
-            imageScalingValue = 1.0/256.0
-            print("\nLoading uint16 (16-bit) images...\n")
-        elif tmpImage.dtype != 'uint8' and tmpImage.dtype != 'uint16' and id == 0:
-            raise TypeError("Image data type is not uint8 or uint16.")
-
-        print(f"\rLoading image {id+1}/{totalNumOfImages}", end='', flush=True)
-        imgData[0, :, :, id] = torch.tensor(
-            imageScalingValue * tmpImage, dtype=torch.uint8).permute(0, 1)
-
-        # Load label
-        labelFile = json.load(open(labelPath))
-        lblData[0:2, id] = torch.tensor(
-            labelFile["dCentroid"], dtype=torch.float32)
-        lblData[2, id] = torch.tensor(
-            labelFile["dRangeInRadii"], dtype=torch.float32)
-        lblData[3, id] = torch.tensor(
-            labelFile["dRadiusInPix"], dtype=torch.float32)
-    print("\n")
-
-    # Create dictionary
-    dataDict = {'images': imgData, 'labels': lblData}
-
-    return dataDict
+def LoadDataset(datasetID: int | list[int], datasetsRootFolder: str, hostname: str, limit: int = 0):
+    # See Gears, reworked function is there
+    pass 
 
 # %% EXPERIMENTAL STUFF
 # TODO: python Generics to implement? EXPERIMENTAL
