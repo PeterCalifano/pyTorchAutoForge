@@ -5,6 +5,18 @@ from torch.utils.data import DataLoader
 
 from typing import Any, Literal
 
+# ComputeModelParamsStorageSize
+def ComputeModelParamsStorageSize(model: torch.nn.Module) -> float:
+    '''Function to compute the size of the model parameters in MB.'''
+
+    # Sum size of all parameters in bytes
+    total_bytes = sum(p.numel() * p.element_size()
+                    for p in model.parameters())
+    
+    # Convert to MB
+    size_mb = total_bytes / 1024**2
+    return size_mb
+
 
 # GetDevice:
 def GetDevice() -> Literal['cuda:0', 'cpu', 'mps']:
@@ -38,74 +50,6 @@ def AddZerosPadding(intNum: int, stringLength: str = '4'):
 def getNumOfTrainParams(model):
     '''Function to get the total number of trainable parameters in a model'''
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-def SplitIdsArray_RandPerm(array_of_ids, training_perc, validation_perc, rng_seed=0, *args):
-    """
-    Randomly split an array of IDs into three sets (training, validation, and testing)
-    based on the input percentages. Optionally extracts values into any number of input
-    arrays (using *args) generating three sets corresponding to the IDs.
-
-    Parameters:
-    - array_of_ids (torch.Tensor): Array of IDs to be split.
-    - training_perc (float): Percentage of IDs for the training set.
-    - validation_perc (float): Percentage of IDs for the validation set.
-    - rng_seed (int): Random seed for reproducibility.
-    - *args (torch.Tensor): Additional arrays to be split based on the IDs.
-
-    Returns:
-    - training_set_ids (torch.Tensor): IDs for the training set.
-    - validation_set_ids (torch.Tensor): IDs for the validation set.
-    - testing_set_ids (torch.Tensor): IDs for the testing set.
-    - varargout (list): List of dictionaries containing split arrays for each input in *args.
-    """
-
-    # Set random seed for reproducibility
-    random.seed(rng_seed)
-    np.random.seed(rng_seed)
-    torch.manual_seed(rng_seed)
-
-    array_len = len(array_of_ids)
-
-    # Shuffle the array to ensure randomness
-    shuffled_ids_array = array_of_ids[torch.randperm(array_len)]
-
-    # Calculate the number of elements for each set
-    num_in_set1 = round(training_perc * array_len)
-    num_in_set2 = round(validation_perc * array_len)
-
-    # Ensure that the sum of num_in_set1 and num_in_set2 does not exceed the length of the array
-    if num_in_set1 + num_in_set2 > array_len:
-        raise ValueError(
-            'The sum of percentages exceeds 100%. Please adjust the percentages.')
-
-    # Assign elements to each set
-    training_set_ids = shuffled_ids_array[:num_in_set1]
-    validation_set_ids = shuffled_ids_array[num_in_set1:num_in_set1 + num_in_set2]
-    testing_set_ids = shuffled_ids_array[num_in_set1 + num_in_set2:]
-
-    varargout = []
-
-    if args:
-        # Optionally split input arrays in *args
-        for array in args:
-            if array.size(1) != array_len:
-                raise ValueError(
-                    'Array to split does not match length of array of IDs.')
-
-            # Get values corresponding to the IDs
-            training_set = array[:, training_set_ids]
-            validation_set = array[:, validation_set_ids]
-            testing_set = array[:, testing_set_ids]
-
-            tmp_dict = {
-                'trainingSet': training_set,
-                'validationSet': validation_set,
-                'testingSet': testing_set
-            }
-
-            varargout.append(tmp_dict)
-
-    return training_set_ids, validation_set_ids, testing_set_ids, varargout
 
 # TODO, move to MachineLearningGears
 def ComputeRangeFromApparentRadius(apparentRadiusInPix: float | torch.Tensor, focal_length: float, range_metric_scale: float, IFOV: float) -> float | torch.Tensor:

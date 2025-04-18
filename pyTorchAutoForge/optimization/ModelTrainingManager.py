@@ -68,12 +68,12 @@
 # Loading methods only modify the parameters the user has specified
 
 #from warnings import deprecated
-from typing import Optional, Any, Union, IO
+from typing import Any, IO
 import torch
 import mlflow
 import optuna
 import kornia
-import os, sys, time, colorama, glob
+import os, sys, time, colorama, glob, signal
 import traceback
 from torch import nn
 import numpy as np
@@ -81,9 +81,10 @@ from torch.utils.data import DataLoader
 from dataclasses import dataclass, asdict, fields, Field, MISSING
 
 from pyTorchAutoForge.datasets import DataloaderIndex
-from pyTorchAutoForge.utils import GetDevice, AddZerosPadding, GetSamplesFromDataset
+from pyTorchAutoForge.utils import GetDeviceMulti, AddZerosPadding, GetSamplesFromDataset, ComputeModelParamsStorageSize
 from pyTorchAutoForge.api.torch import SaveModel, LoadModel, AutoForgeModuleSaveMode
 from pyTorchAutoForge.optimization import CustomLossFcn
+from inputimeout import inputimeout, TimeoutOccurred
 
 # import datetime
 import yaml
@@ -124,15 +125,16 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     
     # FIELDS with DEFAULTS
     # Optimization strategy
-    num_of_epochs: int = 10  # Number of epochs for training
+    num_of_epochs: int = 100  # Number of epochs for training
     keep_best: bool = True  # Keep best model during training
-    enable_early_stop: bool = False  # Enable early stopping
+    enable_early_pruning: bool = False  # Enable early pruning
+    pruning_patience: int = 50  # Number of epochs to wait before pruning
     enable_batch_accumulation: bool = False  # Enable batch accumulation
 
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
     eval_example: bool = False  # Evaluate example input during training
-    checkpointDir: str = "./checkpoints"  # Directory to save model checkpoints
+    checkpoint_dir: str = "./checkpoints"  # Directory to save model checkpoints
     modelName: str = "trained_model"      # Name of the model to be saved
 
     # Optimization parameters
@@ -146,7 +148,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     load_strict : bool = False  # Load model checkpoint with strict matching of parameters
 
     # Hardware settings
-    device: str = GetDevice()  # Default device is GPU if available
+    device: str = GetDeviceMulti()  # Default device is GPU if available
 
     # OPTUNA MODE options
     optuna_trial: Any = None  # Optuna optuna_trial object
@@ -180,7 +182,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
 
     @classmethod
     # DEVNOTE: classmethod is like static methods, but apply to the class itself and passes it implicitly as the first argument
-    def load_from_yaml(cls, yamlFile: Union[str, IO]) -> 'ModelTrainingManagerConfig':
+    def load_from_yaml(cls, yamlFile: str | IO) -> 'ModelTrainingManagerConfig':
         '''Method to load configuration parameters from a yaml file containing configuration dictionary'''
 
         if isinstance(yamlFile, str):
@@ -253,7 +255,12 @@ class enumOptimizerType(Enum):
 
 # %% ModelTrainingManager class - 24-07-2024
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    def __init__(self, model: nn.Module, lossFcn: nn.Module | CustomLossFcn, config: ModelTrainingManagerConfig | dict | str, optimizer: optim.Optimizer | enumOptimizerType | None = None, dataLoaderIndex: DataloaderIndex | None = None, paramsToLogDict: dict = None) -> None:
+    def __init__(self, model: nn.Module, 
+                 lossFcn: nn.Module | CustomLossFcn, 
+                 config: ModelTrainingManagerConfig | dict | str, 
+                 optimizer: optim.Optimizer | enumOptimizerType | None = None, 
+                 dataLoaderIndex: DataloaderIndex | None = None, 
+                 paramsToLogDict: dict | None = None) -> None:
         """
         Initializes the ModelTrainingManager class.
 
@@ -282,9 +289,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             super().__init__(**config.getConfigDict())
 
         # Check that checkpoingDir exists, if not create it
-        if not os.path.isdir(self.checkpointDir):
-            Warning(f"Checkpoint directory {self.checkpointDir} does not exist. Creating it...")
-            os.makedirs(self.checkpointDir)
+        if not os.path.isdir(self.checkpoint_dir):
+            Warning(f"Checkpoint directory {self.checkpoint_dir} does not exist. Creating it...")
+            os.makedirs(self.checkpoint_dir)
         
         # Initialize ModelTrainingManager-specific attributes
         if self.checkpoint_to_load is not None:
@@ -300,14 +307,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     raise ValueError("Got stop command. Termination signal...")
                 
 
-        self.model = (model).to(self.device)
+        self.model : torch.nn.Module | None = (model).to(self.device)
         self.bestModel = None
         self.lossFcn = lossFcn
         self.trainingDataloader = None
         self.validationDataloader = None
         self.trainingDataloaderSize = 0
         self.currentEpoch = 0
-        self.numOfUpdates = 0
+        self.num_of_updates = 0
 
         self.currentTrainingLoss = None
         self.currentValidationLoss = None
@@ -352,7 +359,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
 
 
-    def define_optimizer_(self, optimizer: Union[optim.Optimizer, enumOptimizerType]) -> None:
+    def define_optimizer_(self, optimizer: optim.Optimizer | enumOptimizerType) -> None:
         """
         Define and set the optimizer for the model training.
 
@@ -369,7 +376,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         if optimizer == enumOptimizerType.SGD or optimizer == torch.optim.SGD:
             self.optimizer = torch.optim.SGD(
-                self.model.parameters(), lr=self.initial_lr, momentum=self.momentumValue)
+                self.model.parameters(), lr=self.initial_lr, momentum=self.optim_momentum)
             
         elif optimizer == enumOptimizerType.ADAM or optimizer == torch.optim.Adam:
             self.optimizer = torch.optim.Adam(
@@ -382,17 +389,21 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             raise ValueError('Optimizer not recognized. Please provide a valid optimizer type or ID from enumOptimizerType enumeration class.')
         
 
-    def reinstantiate_optimizer_(self, optimizer_override: optim.Optimizer = None) -> None:
+    def reinstantiate_optimizer_(self, optimizer_override: optim.Optimizer | None = None) -> None:
         """
         Reinstantiates the optimizer with the same hyperparameters but with the current model parameters.
         """
         if optimizer_override is not None:
             self.optimizer = optimizer_override
 
+        if self.model is None:
+            raise ValueError('Model is not defined. Cannot reinstantiate optimizer.')
+
         optim_class = self.optimizer.__class__
         optim_params = self.optimizer.param_groups[0]
         optimizer_hyperparams = {key: value for key, value in optim_params.items() if (
             (key != 'params') and (key != 'initial_lr'))}
+        
         self.optimizer = optim_class(
             self.model.parameters(), **optimizer_hyperparams)
 
@@ -410,9 +421,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             dataloaderIndex (DataloaderIndex): An instance of DataloaderIndex that provides
                                                the training and validation dataloaders.
         """
-        self.trainingDataloader = dataloaderIndex.getTrainLoader()
-        self.validationDataloader = dataloaderIndex.getValidationLoader()
+        self.trainingDataloader : DataLoader = dataloaderIndex.TrainingDataLoader
+        self.validationDataloader : DataLoader = dataloaderIndex.ValidationDataLoader
         self.trainingDataloaderSize = len(self.trainingDataloader)
+        self.validationDataloaderSize = len(self.validationDataloader)
+
+        print(f"Training DataLoader size: {self.trainingDataloaderSize}, Validation DataLoader size: {self.validationDataloaderSize}")
+
 
     def getTracedModel(self):
         raise NotImplementedError('Method not implemented yet.')
@@ -423,16 +438,20 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.trainingDataloader is None:
             raise ValueError('No training dataloader provided.')
 
+        if self.model is None:
+            raise ValueError('No model provided.')
+
         # Set model instance in training mode ("informing" backend that the training is going to start)
         self.model.train()
 
         running_loss = 0.0
         run_time_total = 0.0
+        current_batch = 1
         # prev_model = copy.deepcopy(self.model)
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
             
             # Start timer for batch processing time
-            start_time = time.time()
+            start_time = time.perf_counter()
 
             # Get input and labels and move to target device memory
             # Define input, label pairs for target device
@@ -465,14 +484,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.optimizer.zero_grad()  # Reset gradients for next iteration
             trainLossVal.backward()     # Compute gradients
             self.optimizer.step()       # Apply gradients from the loss
-            self.numOfUpdates += 1
+            self.num_of_updates += 1
 
             # Accumulate batch processing time
-            run_time_total += time.time() - start_time
+            run_time_total += time.perf_counter() - start_time
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.numOfUpdates}, average loop time: {1000*run_time_total/current_batch:4.4g} [ms], current lr: {self.current_lr:.06g}"
+            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.num_of_updates}, average loop time: {1000*run_time_total/current_batch:4.4g} [ms], current lr: {self.current_lr:.06g}"
 
             # Print progress on the same line
             sys.stdout.write('\r' + progress)
@@ -481,11 +500,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # TODO: implement management of SWA model
             # if swa_model is not None and epochID >= swa_start_epoch:
 
-        # DEBUG:
-        # print(f"\n\nDEBUG: Model parameters before and after optimizer step:")
-        # for param1, param2 in zip(prev_model.parameters(), self.model.parameters()):
-        #    if torch.equal(param1, param2) or param1 is param2:
-        #        raise ValueError("Model parameters are the same after 1 epoch.")
         print('\n') # Add newline after progress bar
         return running_loss / current_batch
 
@@ -493,7 +507,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """Method to validate the model using the specified datasets and loss function. Not intended to be called as standalone."""
         if self.validationDataloader is None:
             raise ValueError('No validation dataloader provided.')
-
+        if self.model is None:
+            raise ValueError('No model provided.')
+        
         self.model.eval()
         validationLossVal = 0.0  # Accumulation variables
         # batchMaxLoss = 0
@@ -531,13 +547,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 for batch_idx, (X, Y) in enumerate(tmpdataloader):
 
                     # Start timer for batch processing time
-                    start_time = time.time()
+                    start_time = time.perf_counter()
 
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform data augmentation on batch using kornia modules
                     if self.kornia_transform is not None and self.kornia_augs_in_validation:
+                        # TODO remove hardcoding (max intensity value need to be set)
                         X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
 
                     # Perform FORWARD PASS
@@ -549,11 +566,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         validationLossDict, dict) else validationLossDict.item()
 
                     # Evaluate how many correct predictions (assuming CrossEntropyLoss)
-                    correctPredictions += (predVal.argmax(1)
-                                           == Y).type(torch.float).sum().item()
+                    correctPredictions += (predVal.argmax(1) == Y).type(torch.float).sum().item()
 
                     # Accumulate batch processing time
-                    run_time_total += time.time() - start_time
+                    run_time_total += time.perf_counter() - start_time
 
                     # Calculate progress
                     current_batch = batch_idx + 1
@@ -574,7 +590,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 for batch_idx, (X, Y) in enumerate(tmpdataloader):
 
                     # Start timer for batch processing time
-                    start_time = time.time()
+                    start_time = time.perf_counter()
 
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
@@ -594,7 +610,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         validationLossDict, dict) else validationLossDict.item()
 
                     # Accumulate batch processing time
-                    run_time_total += time.time() - start_time
+                    run_time_total += time.perf_counter() - start_time
 
                     # Calculate progress
                     current_batch = batch_idx + 1
@@ -638,7 +654,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         - Task Type:                  {self.tasktype}
         - Model Name:                 {self.modelName}
         - Device:                     {self.device}
-        - Checkpoint Directory:       {self.checkpointDir}
+        - Checkpoint Directory:       {self.checkpoint_dir}
         - Mlflow Logging:             {self.mlflow_logging}
         - Checkpoint file:            {self.checkpoint_to_load}
 
@@ -679,9 +695,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         print(f'\n\n{colorama.Style.BRIGHT}{colorama.Fore.BLUE}-------------------------- Training and validation session start --------------------------\n')
         self.printSessionInfo()
 
-
-        modelSaveName = None
-        noNewBestCounter = 0
+        model_save_name = None
+        no_new_best_counter = 0
 
         try:
             if self.OPTUNA_MODE:
@@ -693,6 +708,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 print(f"\n{colorama.Fore.GREEN}Training epoch" + trial_printout, f"{colorama.Fore.GREEN}: {epoch_num+1}/{self.num_of_epochs}")
                 cycle_start_time = time.time()
+
                 # Update current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
@@ -733,9 +749,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if tmpValidLoss <= self.bestValidationLoss:
                     self.bestEpoch = epoch_num
                     self.bestValidationLoss = tmpValidLoss
-                    noNewBestCounter = 0
+                    no_new_best_counter = 0
                 else:
-                    noNewBestCounter += 1
+                    no_new_best_counter += 1
 
                 # "Keep best" strategy implementation (trainer will output the best overall model at cycle end)
                 # DEVNOTE: this could go into a separate method
@@ -743,13 +759,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     if tmpValidLoss <= self.bestValidationLoss:
                         
                         # Transfer best model to CPU to avoid additional memory allocation on GPU
-                        self.bestModel = copy.deepcopy(self.model).to('cpu')
+                        self.bestModel: torch.nn.Module | None = copy.deepcopy(self.model).to('cpu') 
 
                         # Delete previous best model checkpoint if it exists
-                        if modelSaveName is not None:
+                        if model_save_name is not None:
 
                             # Get file name with modelSaveName as prefix
-                            checkpoint_files = glob.glob( f"{os.path.join(self.checkpointDir, self.modelName)}_epoch*" )
+                            checkpoint_files = glob.glob( f"{os.path.join(self.checkpoint_dir, self.modelName)}_epoch*" )
 
                             if checkpoint_files:
                                 # If multiple files match, delete all or choose one (e.g., the first one)
@@ -759,22 +775,26 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                         break  
 
                         # Save temporary best model
-                        modelSaveName = os.path.join(self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
+                        model_save_name = os.path.join(self.checkpoint_dir, self.modelName + f"_epoch_{self.bestEpoch}")
 
                         if self.bestModel is not None:
-                            SaveModel(model=self.bestModel, model_filename=modelSaveName,
+                            SaveModel(model=self.bestModel, model_filename=model_save_name,
                                     save_mode=AutoForgeModuleSaveMode.model_arch_state, 
                                     target_device='cpu')
 
                 # Update current training and validation loss values
-                self.currentTrainingLoss = tmpTrainLoss
-                self.currentValidationLoss = tmpValidLoss
+                self.currentTrainingLoss: float = tmpTrainLoss
+                self.currentValidationLoss: float = tmpValidLoss
 
-                if self.mlflow_logging:
-                    mlflow.log_metric( 'train_loss', self.currentTrainingLoss, step=self.currentEpoch)
-                    mlflow.log_metric( 'validation_loss', self.currentValidationLoss, step=self.currentEpoch)
+                if self.mlflow_logging and self.currentMlflowRun is not None:
+                    if self.currentTrainingLoss is not None:
+                        mlflow.log_metric( 'train_loss', self.currentTrainingLoss, step=self.currentEpoch)
+
+                    if self.currentValidationLoss is not None:
+                        mlflow.log_metric( 'validation_loss', self.currentValidationLoss, step=self.currentEpoch)
+
                     mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss, step=self.currentEpoch)
-                    mlflow.log_metric( 'num_of_updates', self.numOfUpdates, step=self.currentEpoch)
+                    mlflow.log_metric( 'num_of_updates', self.num_of_updates, step=self.currentEpoch)
 
                 print('\tCurrent best at epoch {best_epoch}, with validation loss: {best_loss:.06g}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
@@ -782,7 +802,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # "Early stopping" strategy implementation
                 if self.OPTUNA_MODE == False:
-                    if self.checkForEarlyStop(noNewBestCounter):
+                    if self.checkForEarlyStop(no_new_best_counter):
                         break
                 elif self.OPTUNA_MODE == True:
                     # Safety exit for model divergence
@@ -792,30 +812,32 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # Post epoch operations
                 self.updateLerningRate()  # Update learning rate if scheduler is provided
                 self.currentEpoch += 1
+            ### END OF TRAINING-VALIDATION LOOP
 
             # Model saving code
-            if modelSaveName is not None:
-                if os.path.exists(modelSaveName):
-                    os.remove(modelSaveName) 
-
-            modelToSave = ( self.bestModel if self.bestModel is not None else self.model).to('cpu')
+            if model_save_name is not None:
+                if os.path.exists(model_save_name):
+                    os.remove(model_save_name) 
             
             if self.keep_best:
                 print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
 
-            if not (os.path.isdir(self.checkpointDir)):
-                os.mkdir(self.checkpointDir)
+            if not (os.path.isdir(self.checkpoint_dir)):
+                os.mkdir(self.checkpoint_dir)
 
             with torch.no_grad():
                 examplePair = next(iter(self.validationDataloader))
-                modelSaveName = os.path.join(
-                    self.checkpointDir, self.modelName + f"_epoch_{self.bestEpoch}")
+                model_save_name = os.path.join(
+                    self.checkpoint_dir, self.modelName + f"_epoch_{self.bestEpoch}")
 
-                SaveModel(model=self.bestModel, model_filename=modelSaveName,
-                        save_mode=AutoForgeModuleSaveMode.model_arch_state, 
-                        example_input=examplePair[0], 
-                        target_device=self.device)
+                if self.bestModel is not None:
+                    SaveModel(model=self.bestModel, model_filename=model_save_name,
+                            save_mode=AutoForgeModuleSaveMode.model_arch_state, 
+                            example_input=examplePair[0], 
+                            target_device=self.device)
+                else:
+                    print("\033[38;5;208mWarning: SaveModel skipped due to bestModel being None!\033[0m")
 
             if self.mlflow_logging:
                 mlflow.log_param('checkpoint_best_epoch', self.bestEpoch)
@@ -828,33 +850,60 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             return self.bestModel if self.keep_best else self.model
 
         except KeyboardInterrupt:
-            print('\nModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.')
+            print('\n\033[38;5;208mModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.\033[0m')
+            
             if self.mlflow_logging:
-                mlflow.end_run(status='KILLED')
+                mlflow.end_run(status='KILLED') # Mark run as killed
 
             if self.OPTUNA_MODE:
-                user_input = input('\n\nStop execution (Y) or mark as pruned (N)?').strip().lower()
-                if user_input == 'n':
-                    raise optuna.TrialPruned()
-                else: 
-                    raise KeyboardInterrupt() # Stop the program
-            else:
-                # Exit from program
-                raise KeyboardInterrupt()
+                #signal.signal(signal.SIGALRM, _timeout_handler) # Does not work for Windows
+                while True:
+                    try:
+                        user_input = inputimeout(
+                            '\n\n\033[38;5;208mStop execution (Y) or mark as pruned (N)?\033[0m', 
+                            timeout=60
+                            ).strip().lower()
+                    
+                        if user_input in ('n', 'no'):
+                            raise optuna.TrialPruned()
+                        
+                        elif user_input in ('y', 'yes'):
+                            # exit the loop & program gracefully
+                            sys.exit(0)
+                        else:
+                            print("Invalid choice — please type Y or N (timeout set to 60 s).")
+
+                    except TimeoutOccurred:
+                        print("\033[31mTimeout error triggered, program stop.\033[0m")
+
+                    except EOFError:
+                        sys.exit("No input available, program stop.")
+            
+            # Exit from program gracefully
+            sys.exit(0)
 
         except optuna.TrialPruned:
+
             # Optuna trial kill raised
-            print('\nModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.')
+            print('\033[33m\nModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.\033[0m')
+
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
             raise optuna.TrialPruned() # Re-raise exception to stop optuna trial --> this is required due to how optuna handles it.
 
-        except Exception as e:
-            max_chars = 500  # Define the max length you want to print
-            print(
-                f"\nError during training and validation cycle: {str(e)[:max_chars]}...")
+        except Exception as e: # Any other exception
+            max_chars = 1000  # Define the max length you want to print
+            error_message = str(e)[:max_chars]
+
+            traceback = traceback.format_exc(limit=5)
+
+            print(f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback (most recent 5 calls):\n{traceback}\033[0m")
+
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
+
+            # Exit from program gracefully
+            sys.exit(0)
 
 
     def evalExample(self, num_samples: int = 128) -> None:
@@ -1090,7 +1139,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Get the single learning rate value
             current_lr = self.lr_scheduler.get_last_lr()[0]
-            print('\nLearning rate changed: {prev_lr:.6g} --> {current_lr:.6g}\n'.format(prev_lr=self.current_lr, current_lr=current_lr))
+
+            print('\n{light_blue}Learning rate changed: {prev_lr:.6g} --> {current_lr:.6g}{reset}\n'.format(light_blue=colorama.Fore.LIGHTBLUE_EX,
+                prev_lr=self.current_lr,
+                current_lr=current_lr,
+                reset=colorama.Style.RESET_ALL))
 
             # Update current learning rate
             self.current_lr = current_lr
@@ -1105,10 +1158,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """
         returnValue = False
 
-        if self.enable_early_stop:
-            if counter >= self.early_stop_patience:
-                print(
-                    'Early stopping criteria met: ModelTrainingManager execution stop. Run marked as KILLED.')
+        if self.enable_early_pruning:
+            if counter >= self.pruning_patience:
+                print('\033[38;5;208mEarly stopping criteria met: ModelTrainingManager execution stop. Run marked as KILLED.\033[0m')
                 returnValue = True
                 if self.mlflow_logging:
                     mlflow.end_run(status='KILLED')
@@ -1122,31 +1174,45 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         If there is an active MLflow run, it ends the current run before starting a new one.
         Updates the current MLflow run to the newly started run.
 
-        Prints messages indicating the status of the MLflow runs.
+        Args:
+            None
 
         Raises:
             Warning: If MLflow logging is disabled.
+
+        Prints:
+            Messages indicating the status of the MLflow runs.
         """
+        if self.model is None:
+            raise ValueError('No model provided for MLflow logging.')
+
         if self.mlflow_logging:
             if self.currentMlflowRun is not None:
                 mlflow.end_run()
-                print(('\nActive mlflow run {active_run} ended before creating new one.').format(
-                    active_run=self.currentMlflowRun.info.run_name))
+                print(('\033[38;5;208m\nActive mlflow run {active_run} ended before creating new one.\033[0m').format(active_run=self.currentMlflowRun.info.run_name))
 
             mlflow.start_run()
             # Update current mlflow run
             self.currentMlflowRun = mlflow.active_run()
-            print(('\nStarted new mlflow run witn name: {active_run}.').format(
-                active_run=self.currentMlflowRun.info.run_name))
+            print(colorama.Fore.BLUE + ('\nStarted new Mlflow run with name: {active_run}.').format(
+                active_run=self.currentMlflowRun.info.run_name) + colorama.Style.RESET_ALL)
 
             # Set model name from mlflow run
             self.modelName = self.currentMlflowRun.info.run_name
 
             # Log configuration parameters
             ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()
-            # print("DEBUG:", ModelTrainerConfigParamsNames)
             mlflow.log_params({key: getattr(self, key)
                               for key in ModelTrainerConfigParamsNames})
+
+            # Log model info (size, number of parameters)
+            mlflow.log_param('num_trainable_parameters', sum(p.numel() for p in self.model.parameters() if p.requires_grad))
+
+            mlflow.log_param('num_total_parameters', sum(p.numel() for p in self.model.parameters()))
+
+            size_mb = ComputeModelParamsStorageSize(self.model)
+            mlflow.log_param(key='model_storage_MB', value=round(size_mb, 6))
+
 
             # Log additional parameters if provided
             if self.paramsToLogDict is not None:
@@ -1156,9 +1222,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 mlflow.log_param('optuna_trial_ID', self.optuna_trial.number)
                 self.optuna_trial.set_user_attr('mlflow_name', self.modelName)
                 self.optuna_trial.set_user_attr('mlflow_ID', self.currentMlflowRun.info.run_id)
-
-        # else:
-        #    Warning('MLFlow logging is disabled. No run started.')
 
 
 # %% Function to freeze a generic nn.Module model parameters to avoid backpropagation
@@ -1173,8 +1236,8 @@ def FreezeModel(model: nn.Module) -> nn.Module:
 # Updated by PC 04-06-2024
 
 def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
-               optimizer, epochID: int, device=GetDevice(), taskType: str = 'classification', lr_scheduler=None,
-               swa_scheduler=None, swa_model=None, swa_start_epoch: int = 15) -> Union[float, int]:
+               optimizer, epochID: int, device=GetDeviceMulti(), taskType: str = 'classification', lr_scheduler=None,
+               swa_scheduler=None, swa_model=None, swa_start_epoch: int = 15) -> float | int:
     '''Function to perform one step of training of a model using dataset and specified loss function'''
     model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
 
@@ -1246,7 +1309,7 @@ def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
 # Updated by PC 04-06-2024
 
 
-def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDevice(), taskType: str = 'classification') -> Union[float, dict]:
+def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDeviceMulti(), taskType: str = 'classification') -> float | dict:
     '''Function to validate model using dataset and specified loss function'''
     # Get size of dataset (How many samples are in the dataset)
     size = len(dataloader.dataset)
@@ -1266,10 +1329,10 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
         avgAbsAccuracy = 0.0
 
     elif taskType.lower() == 'custom':
-        print('TODO')
+        raise NotImplementedError("This is a deprecated function, please use ModelTrainingManager.")
+
 
     with torch.no_grad():  # Tell torch that gradients are not required
-        # TODO: try to modify function to perform one single forward pass for the entire dataset
 
         # Backup the original batch size
         original_dataloader = dataloader
@@ -1330,13 +1393,6 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
                 correctOuputs += (predVal.argmax(1) ==
                                   Y).type(torch.float).sum().item()
 
-            # elif taskType.lower() == 'regression':
-            #    #print('TODO')
-            # elif taskType.lower() == 'custom':
-            #    print('TODO')
-            # predVal = model(dataX) # Evaluate model at input
-            # validationLoss += lossFcn(predVal, dataY).item() # Evaluate loss function and accumulate
-
     # Log additional metrics to MLFlow if any
     if lossTerms != {}:
         lossTerms = {key: (value / numberOfBatches)
@@ -1370,7 +1426,6 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
             f"\n VALIDATION (Classification) Accuracy: {(100*correctOuputs):>0.2f}%, Avg loss: {validationLoss:>8f} \n")
 
     elif taskType.lower() == 'regression':
-        # print('TODO')
         correctOuputs = None
 
         if isinstance(tmpLossVal, dict):
@@ -1385,7 +1440,6 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
         print('TODO')
 
     return validationLoss, validationData
-    # TODO: add command for Tensorboard here
 
 
 # %% TRAINING and VALIDATION template function (LEGACY, no longer maintained) - 04-06-2024
@@ -1416,10 +1470,10 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
     # Setup config from input dictionary
     # NOTE: Classification is not developed (July, 2024)
     taskType = config.get('taskType', 'regression')
-    device = config.get('device', GetDevice())
+    device = config.get('device', GetDeviceMulti())
     numOfEpochs = config.get('epochs', 10)
     enableSave = config.get('saveCheckpoints', True)
-    checkpointDir = config.get('checkpointsOutDir', './checkpoints')
+    checkpoint_dir = config.get('checkpointsOutDir', './checkpoints')
     modelName = config.get('modelName', 'trainedModel')
     lossLogName = config.get('lossLogName', 'Loss_value')
     epochStart = config.get('epochStart', 0)
@@ -1559,13 +1613,13 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
                               validationData['WorstLossAcrossBatches'], step=epochID + epochStart)
 
         if enableSave:
-            if not (os.path.isdir(checkpointDir)):
-                os.mkdir(checkpointDir)
+            if not (os.path.isdir(checkpoint_dir)):
+                os.mkdir(checkpoint_dir)
 
             exampleInput = GetSamplesFromDataset(validationDataset, 1)[0][0].reshape(
                 1, -1)  # Get single input sample for model saving
             modelSaveName = os.path.join(
-                checkpointDir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
+                checkpoint_dir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
             
             SaveModel(model, modelSaveName, save_mode=AutoForgeModuleSaveMode.traced_dynamo, example_input=exampleInput, target_device=device)
 
@@ -1637,7 +1691,7 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
 # %% Model evaluation function on a random number of samples from dataset - 06-06-2024
 # Possible way to solve the issue of having different cost function terms for training and validation --> add setTrain and setEval methods to switch between the two
 
-def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDevice(), numOfSamples: int = 10,
+def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDeviceMulti(), numOfSamples: int = 10,
                   inputSample: torch.tensor = None, labelsSample: torch.tensor = None) -> np.array:
     '''Torch model evaluation function to perform inference using either specified input samples or input dataloader'''
     model.eval()  # Set model in prediction mode
@@ -1712,133 +1766,3 @@ def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
                 'Either both inputSample and labelsSample must be provided or neither!')
 
         return examplePredictions, exampleLosses, X.to(device), Y.to(device)
-
-
-
-# %% TEST CODE
-def ModelTrainingManager_test_():
-
-    from torchvision import models
-    from torchvision import transforms
-    from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConfig, TaskType
-    from torchvision import datasets  # Import vision default datasets from torchvision
-
-    def DefineModel(trial:optuna.Trial = None):
-
-        model = models.resnet101(weights=False)  # Load pretrained weights
-
-        # Therefore, let's modify the last layer! (Named fc)
-        if trial is not None:
-            numInputFeatures = trial.suggest_int('numInputFeatures', 2, 1000)
-        else:
-            numInputFeatures = model.fc.in_features  # Same as what the model uses
-
-        numOutClasses = 10  # Selected by user
-        model.fc = (nn.Linear(in_features=numInputFeatures,
-                            out_features=numOutClasses, bias=True))  # 100 classes in our case
-        
-        return model
-
-    def DefineDataloaders(trial:optuna.Trial = None):
-        # Load CIFAR10 dataset from torchvision
-        transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(
-            (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])  # Apply normalization
-
-        # Get dataset objects
-        train_dataset = datasets.CIFAR10(
-            root='./data', train=True, download=True, transform=transform)
-        validation_dataset = datasets.CIFAR10(
-            root='./data', train=False, download=True, transform=transform)
-
-        # Define dataloaders
-        if trial is not None:
-            batch_size = trial.suggest_int('batch_size', 32, 512)
-            train_loader = DataLoader(
-                train_dataset, batch_size=batch_size, shuffle=True)
-        else:
-            batch_size = 128
-            train_loader = DataLoader(
-                train_dataset, batch_size=batch_size, shuffle=True)
-
-        validation_loader = DataLoader(
-            validation_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
-        
-        return train_loader, validation_loader
-
-    def DefineOptimStrategy(trial:optuna.Trial = None):
-        if trial is not None:
-            initial_lr = trial.suggest_loguniform('initial_lr', 1E-2, 1E-1)
-        
-        else:
-            initial_lr = 1E-3
-        
-        lossFcn = nn.CrossEntropyLoss()
-
-        return lossFcn, initial_lr
-
-    # Set mlflow experiment
-    mlflow.set_experiment('ImageClassificationCIFAR10_Example')
-
-    # Get model backbone from torchvision
-    # All models in torchvision.models for classification are trained on ImageNet, thus have 1000 classes as output
-    model = DefineModel()
-    device = GetDevice()
-    model.to(device)
-    print(model)  # Check last layer
-
-    # Define loss function and optimizer
-    lossFcn, initial_lr = DefineOptimStrategy()
-    numOfEpochs = 20
-
-    fused = True if device == "cuda:0" else False
-    #optimizer = torch.optim.Adam(
-    #    model.parameters(), lr=initial_lr, fused=fused)
-
-    optimizer = torch.optim.SGD(
-        model.parameters(), lr=initial_lr)
-
-    #optimizer = torch.optim.AdamW(model.parameters(), lr=initial_lr, weight_decay=0.01)
-    
-    # Define dataloader index for training
-    train_loader, validation_loader = DefineDataloaders()  # With defaul batch size
-    dataloaderIndex = DataloaderIndex(train_loader, validation_loader)
-
-    # CHECK: versus TrainAndValidateModel
-    # model2 = copy.deepcopy(model).to(device)
-    # optimizer2 = torch.optim.Adam(model2.parameters(), lr=initial_lr, fused=fused)
-    # for epoch in range(numOfEpochs):
-    #    print(f"Epoch TEST: {epoch}/{numOfEpochs-1}")
-    #    TrainModel(dataloaderIndex.getTrainLoader(), model2, lossFcn, optimizer2, 0)
-    #    ValidateModel(dataloaderIndex.getValidationLoader(), model2, lossFcn)
-
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
-
-    # Define model training manager config  (dataclass init)
-    trainerConfig = ModelTrainingManagerConfig(tasktype=TaskType.CLASSIFICATION,
-                                               initial_lr=initial_lr, lr_scheduler=lr_scheduler,
-                                               num_of_epochs=numOfEpochs, optimizer=optimizer,
-                                               batch_size=train_loader.batch_size)
-
-    # DEVNOTE: TODO, add check on optimizer from ModelTrainingManagerConfig. It must be of optimizer type
-    print("\nModelTrainingManagerConfig instance:", trainerConfig)
-    print("\nDict of ModelTrainingManagerConfig instance:",
-          trainerConfig.getConfigDict())
-
-    # Test overriding of optimizer
-    optimizer = torch.optim.SGD(
-        model.parameters(), lr=initial_lr, momentum=0.9)
-     
-    
-    # Define model training manager instance
-    trainer = ModelTrainingManager(
-        model=model, lossFcn=lossFcn, config=trainerConfig)
-    print("\nModelTrainingManager instance:", trainer)
-
-    # Set dataloaders for training and validation
-    trainer.setDataloaders(dataloaderIndex)
-
-    # Perform training and validation of model
-    trainer.trainAndValidate()
-
-if __name__ == '__main__':
-    ModelTrainingManager_test_()
