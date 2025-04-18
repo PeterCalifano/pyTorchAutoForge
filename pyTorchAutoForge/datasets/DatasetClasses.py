@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from torch.utils.data.dataset import TensorDataset
 from zipp import Path
-from pyTorchAutoForge.utils import numpy_to_torch, Align_batch_dim
+from pyTorchAutoForge.utils import numpy_to_torch, Align_batch_dim, torch_to_numpy
 from torchvision.transforms import Compose
 
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -58,40 +58,73 @@ class ptaf_dtype(enum.Enum):
     # DOUBT (PC) can it be convertible to torch and numpy types directly?
 
 # TODO temporary version, make a unified class to handle normalizations
-def NormalizeDataMatrix(data_matrix: np.ndarray, 
+def NormalizeDataMatrix(data_matrix: np.ndarray | torch.Tensor, 
                         normalization_type : NormalizationType, 
                         params : dict | None = None) :
     """
     Normalize the data matrix based on the specified normalization type.
 
     Args:
-        data_matrix (numpy.ndarray): The data matrix to be normalized.
+        data_matrix (numpy.ndarray | torch.Tensor): The data matrix to be normalized.
         normalization_type (NormalizationType): The type of normalization to apply.
         params (dict | None): Additional arguments for normalization.
 
     Returns:
-        numpy.ndarray: The normalized data matrix.
+        numpy.ndarray | torch.Tensor: The normalized data matrix.
     """
+
+    was_tensor = False
+
+    if isinstance(data_matrix, torch.Tensor):
+        was_tensor = True
+        data_matrix_ : np.ndarray= torch_to_numpy(data_matrix).copy()
+    elif isinstance(data_matrix, np.ndarray):
+        data_matrix_ = data_matrix.copy()
+    else:
+        raise TypeError("data_matrix must be a numpy array or a torch tensor.")
+
     if normalization_type == NormalizationType.ZSCORE:
 
         scaler = StandardScaler(with_mean=True, with_std=True)
-        return scaler.fit_transform(data_matrix), scaler
+        data_matrix_ = scaler.fit_transform(data_matrix_)
+
+        if was_tensor:
+            data_matrix_ = numpy_to_torch(data_matrix_)
+
+        return data_matrix_, scaler
 
     elif normalization_type == NormalizationType.MINMAX:
 
         scaler = MinMaxScaler(feature_range=(0, 1))
-        return scaler.fit_transform(data_matrix), scaler
+        data_matrix_ = scaler.fit_transform(data_matrix_)
+
+        if was_tensor:
+            data_matrix_ = numpy_to_torch(data_matrix_)
+
+        return data_matrix_, scaler
 
     elif normalization_type == NormalizationType.RESOLUTION:
 
         if params is None or 'resx' not in params or 'resy' not in params or 'normalization_indices' not in params:
             raise ValueError("NormalizationType.RESOLUTION requires 'resx', 'resy', and 'normalization_indices' parameters.")
+
+        data_matrix_ = data_matrix_[:, params['normalization_indices']
+                                  ] / np.array([params['resx'], params['resy']])
         
-        return data_matrix[:, params['normalization_indices']] / np.array([params['resx'], params['resy']]), None
+        if was_tensor:
+            data_matrix_ = torch_to_numpy(tensor=data_matrix_)
+            
+        return data_matrix_, None
         
     elif normalization_type == NormalizationType.NONE:
-        return data_matrix, None
 
+        if was_tensor:
+            data_matrix_ = torch_to_numpy(data_matrix_)
+        
+        return data_matrix_, None
+
+
+        
 
 def DeNormalizeDataMatrix(data_matrix: np.ndarray, scaler: StandardScaler | MinMaxScaler):
     pass # TODO
