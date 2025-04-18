@@ -17,6 +17,44 @@ def ComputeModelParamsStorageSize(model: torch.nn.Module) -> float:
     size_mb = total_bytes / 1024**2
     return size_mb
 
+# Function aligning batch size of two tensors
+
+
+def Align_batch_dim(images: torch.Tensor,
+                    labels: torch.Tensor) -> torch.Tensor:
+    """
+        If labels has one axis whose length == images.size(0),
+        assume that's the batch-axis, permute it to dim 0, and return.
+        Otherwise, leave labels untouched (or raise).
+    """
+
+    batch_size = images.size(0)
+    lab_shape: tuple = labels.shape
+
+    # find all axes in labels matching batch_size
+    match_axes = [i for i, L in enumerate(lab_shape) if L == batch_size]
+
+    if not match_axes:
+        raise ValueError(
+            f"labels array shape {lab_shape} does not contain any axes matching batch size {batch_size}.")
+
+    if len(match_axes) > 1:
+        print(f"\033[93mWarning: found multiple axes {match_axes} "
+                f"in labels matching batch‐size {batch_size}, picking first.\033[0m")
+
+    # Pick first matching axis
+    axes_id = match_axes[0]
+
+    if axes_id == 0:
+        # Already in front
+        return labels
+
+    # Build a permutation that brings ax → 0, and shifts others right
+    perm = [axes_id] + [i for i in range(len(lab_shape)) if i != ax]
+    print(f"\033[93mInfo: permuting labels dims {lab_shape} → "
+            f"{[lab_shape[i] for i in perm]} (perm={perm})\033[0m")
+    return labels.permute(*perm)
+
 
 # GetDevice:
 def GetDevice() -> Literal['cuda:0', 'cpu', 'mps']:

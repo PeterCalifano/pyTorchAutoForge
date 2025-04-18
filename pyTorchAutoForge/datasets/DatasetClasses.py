@@ -5,8 +5,9 @@ import numpy as np
 import torch
 from dataclasses import dataclass
 
+from torch.utils.data.dataset import TensorDataset
 from zipp import Path
-from pyTorchAutoForge.utils import numpy_to_torch
+from pyTorchAutoForge.utils import numpy_to_torch, Align_batch_dim
 from torchvision.transforms import Compose
 
 # %% EXPERIMENTAL: Generic Dataset class for Supervised learning - 30-05-2024
@@ -92,9 +93,9 @@ class ImagesLabelsContainer:
     labels : np.ndarray | torch.Tensor
     
     
-class ImagesLabelsDataset(Dataset):
+class ImagesLabelsCachedDataset(TensorDataset):
     """
-    ImagesLabelsDataset _summary_
+    ImagesLabelsCachedDataset _summary_
 
     _extended_summary_
 
@@ -118,46 +119,54 @@ class ImagesLabelsDataset(Dataset):
         if images_labels is None:
             raise ValueError("images_labels container is None after loading from paths. Something may have gone wrong. Report this issue please.")
         
-        self.images = numpy_to_torch(images_labels.images)
-        self.labels = numpy_to_torch(images_labels.labels)
+        # Initialize X and Y
+        images_labels.images = numpy_to_torch(images_labels.images)
+        images_labels.labels = numpy_to_torch(images_labels.labels)
+
+        # Unsqueeze images to 4D [B, C, H, W] if 3D [B, H, W]
+        if images_labels.images.dim() == 3:
+            images_labels.images = images_labels.images.unsqueeze(1)
+
+        # Check batch size (must be identical)
+        if images_labels.images.shape[0] != images_labels.labels.shape[0]:
+            print('\033[93mWarning: found mismatch of batch size, automatic resolution attempt using the largest dimension between images and labels...\033[0m')
+
+            try:
+                images_labels.labels = Align_batch_dim(
+                    images_labels.images, images_labels.labels)
+
+            except Exception as err:
+                print(f'\033[93mAutomatic alignment failed due to error: {err}. Please check the input dataset.\033[0m')
+                raise ValueError(f"Automatic alignment failed due to error {err}. Please check the input dataset.") 
+            
+        # Initialize base class TensorDataset(X, Y)
+        super().__init__(images_labels.images, images_labels.labels)
 
         # Initialize transform objects
         self.transforms = transforms
 
-    def __len__(self):
-        # Number of images is batch dimension
-        return np.shape(self.images)[0]
+        def __getitem__(self, idx):
+            # Apply transform to the image and label
+            img, lbl = super().__getitem__(idx)
 
-
-    # TODO investigate difference between __getitem__ and __getitems__
-    def __getitem__(self, index):
-        # Get data
-        image = self.images[index, :, :, :]
-        label = self.labels[index, :]
-
-        if self.transforms is not None:
-            image, label = self.transforms(image, label)
-
-        return image, label
-
-    # Batch fetching
-    def __getitems__(self, list_of_indices):
-
-        # Create a numpy array from the list of indices
-        indices = np.array(list_of_indices)
-
-        # Get data
-        image = self.images[indices, :, :, :] if self.images.dim() == 4 else self.images[indices, :, :]
-        label = self.labels[indices, :]
-
-        if self.transforms is not None:
-            image, label = self.transforms(image, label)
-
-        return image, label
+            if self.transforms is not None:
+                return self.transforms(img), self.transforms(lbl)
+            
+            return img, lbl
     
-    def load_from_paths(self, images_path:str, labels_path:str) -> ImagesLabelsContainer:
-        images, labels = [], [] # TODO: Implement loading logic for images and labels
-        return ImagesLabelsContainer(images, labels)
+    # Batch fetching
+    #def __getitem__(self, index):
+    #    # Get data
+    #    image = self.images[index, :, :, :] if self.images.dim() == 4 else self.images[index, :, :]
+    #    label = self.labels[index, :]
+    #    if self.transforms is not None:
+    #        image, label = self.transforms(image, label)
+    #    return image, label
+    
+
+    #def load_from_paths(self, images_path:str, labels_path:str) -> ImagesLabelsContainer:
+    #    images, labels = [], [] # TODO: Implement loading logic for images and labels
+    #    return ImagesLabelsContainer(images, labels)
 
 
 # TODO function to rework as method of ImagesLabelsDataset
