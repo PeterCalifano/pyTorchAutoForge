@@ -37,7 +37,7 @@ PTAF_training_parser.add_argument("--evaluation_dataset", type=str,
 ## Training hyperparameters
 # Batch size
 PTAF_training_parser.add_argument(
-    '--batch_size', type=int, default=32, help='Batch size for training')
+    '--batch_size', type=int, default=16, help='Batch size for training')
 
 # Number of epochs
 PTAF_training_parser.add_argument(

@@ -73,6 +73,10 @@ class Conv2dResolutionChannelsAdapter(BaseAdapter):
         Returns:
           Tensor of shape [B, out_ch, target_h, target_w]
         """
+        # Cast to torch.float32 if needed
+        if x.dtype != torch.float32:
+            x = x.to(torch.float32)
+
         x = self.channel_expander(x)
         return self.adaptive_pool(x)
 
@@ -105,6 +109,11 @@ class ResizeCopyChannelsAdapter(BaseAdapter):
         Returns:
           Tensor [B, out_ch, target_h, target_w]
         """
+        
+        # Cast to torch.float32 if needed
+        if x.dtype != torch.float32:
+            x = x.to(torch.float32)
+
         # Spatial resize to desired output_size through kornia 2D interpolation function
         x = kornia.geometry.transform.resize(
             x, self.output_size, interpolation=self.interp)

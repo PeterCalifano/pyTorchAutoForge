@@ -79,7 +79,7 @@ class DatasetLoaderConfig():
 class ImagesDatasetConfig(DatasetLoaderConfig):
     image_folder: str = ""
     image_format: str = "png"
-    image_dtype: type | torch.dtype = np.uint8
+    image_dtype: type | torch.dtype = np.uint8 
 
 
 @dataclass
@@ -122,6 +122,13 @@ class ImagesLabelsCachedDataset(TensorDataset):
         # Initialize X and Y
         images_labels.images = numpy_to_torch(images_labels.images)
         images_labels.labels = numpy_to_torch(images_labels.labels)
+
+        # Normalize to [0,1] if max > 1 and based on dtype
+        if images_labels.images.max() > 1.0 and images_labels.images.dtype == torch.uint8:
+            images_labels.images = images_labels.images.float() / 255.0
+            
+        elif images_labels.images.max() > 1.0 and images_labels.images.dtype == torch.uint16:
+            images_labels.images = images_labels.images.float() / 65535.0
 
         # Unsqueeze images to 4D [B, C, H, W] if 3D [B, H, W]
         if images_labels.images.dim() == 3:
