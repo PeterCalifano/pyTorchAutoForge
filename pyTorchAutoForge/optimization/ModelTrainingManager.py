@@ -140,7 +140,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     # Optimization parameters
     lr_scheduler: Any | None = None
     initial_lr: float = 1e-4
-    optim_momentum: float = 0.5  # Momentum value for SGD optimizer
+    optim_momentum: float = 0.75  # Momentum value for SGD optimizer
     optimizer: Any | None = torch.optim.Adam  # optimizer class
 
     # Model checkpoint if any
@@ -288,12 +288,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Call init of parent class for shallow copy
             super().__init__(**config.getConfigDict())
 
-        # Check that checkpoingDir exists, if not create it
+        # Check that checkpoint_dir exists, if not create it
         if not os.path.isdir(self.checkpoint_dir):
             Warning(f"Checkpoint directory {self.checkpoint_dir} does not exist. Creating it...")
             os.makedirs(self.checkpoint_dir)
         
         # Initialize ModelTrainingManager-specific attributes
+
         if self.checkpoint_to_load is not None:
             # Load model checkpoint
             try:
@@ -895,9 +896,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             max_chars = 1000  # Define the max length you want to print
             error_message = str(e)[:max_chars]
 
-            traceback = traceback.format_exc(limit=5)
+            traceback_ = traceback.format_exc(limit=5)
 
-            print(f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback (most recent 5 calls):\n{traceback}\033[0m")
+            print(
+                f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback (most recent 5 calls):\n{traceback_}\033[0m")
 
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')

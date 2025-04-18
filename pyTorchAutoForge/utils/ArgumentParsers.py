@@ -58,7 +58,7 @@ PTAF_training_parser.add_argument(
 
 # Output folder for artifacts
 PTAF_training_parser.add_argument(
-    '--artifacts_folder', type=str, default='.', help='Output folder for artifacts')
+    '--artifacts_folder', type=str, default='checkpoints', help='Output folder for artifacts and checkpoints savings')
 
 # Mlflow tracking URI
 PTAF_training_parser.add_argument(
