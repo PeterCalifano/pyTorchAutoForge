@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from zipp import Path
 from pyTorchAutoForge.utils import numpy_to_torch
+from torchvision.transforms import Compose
 
 # %% EXPERIMENTAL: Generic Dataset class for Supervised learning - 30-05-2024
 # Base class for Supervised learning datasets
@@ -102,7 +103,7 @@ class ImagesLabelsDataset(Dataset):
     """
 
     def __init__(self, images_labels: ImagesLabelsContainer | None = None, # type: ignore
-                 transforms: None = None, # TODO which type?
+                 transforms: torch.nn.Module | Compose | None = None,  
                  images_path: str | None = None, 
                  labels_path: str | None = None) -> None:
         
@@ -124,8 +125,8 @@ class ImagesLabelsDataset(Dataset):
         self.transforms = transforms
 
     def __len__(self):
-        # Number of images is 4th dimension of the torch Tensor
-        return np.shape(self.images)[3]
+        # Number of images is batch dimension
+        return np.shape(self.images)[0]
 
 
     # TODO investigate difference between __getitem__ and __getitems__

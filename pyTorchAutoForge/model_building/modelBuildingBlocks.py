@@ -165,17 +165,17 @@ class TemplateConvNet(AutoForgeModule):
             # Check if layer is a Linear layer
             if isinstance(layer, nn.Linear):
                 # Apply Kaiming initialization
-                init.kaiming_uniform_(layer.weight, nonlinearity='leaky_relu')
+                nn.init.kaiming_uniform_(layer.weight, nonlinearity='leaky_relu')
                 if layer.bias is not None:
                     # Initialize bias to zero if present
-                    init.constant_(layer.bias, 0)
+                    nn.init.constant_(layer.bias, 0)
 
             elif isinstance(layer, nn.Conv2d):
                 # Apply Kaiming initialization
-                init.kaiming_uniform_(layer.weight, nonlinearity='leaky_relu')
+                nn.init.kaiming_uniform_(layer.weight, nonlinearity='leaky_relu')
                 if layer.bias is not None:
                     # Initialize bias to zero if present
-                    init.constant_(layer.bias, 0)
+                    nn.init.constant_(layer.bias, 0)
 
     def forward(self, inputSample):
 
@@ -278,10 +278,10 @@ class TemplateDeepNet(AutoForgeModule):
             # Check if layer is a Linear layer
             if isinstance(layer, nn.Linear):
                 # Apply Kaiming initialization
-                init.kaiming_uniform_(layer.weight, nonlinearity='leaky_relu')
+                nn.init.kaiming_uniform_(layer.weight, nonlinearity='leaky_relu')
                 if layer.bias is not None:
                     # Initialize bias to zero if present
-                    init.constant_(layer.bias, 0)
+                    nn.init.constant_(layer.bias, 0)
 
     def forward(self, inputSample):
         # Perform forward pass iterating through all layers of DNN
@@ -380,13 +380,13 @@ class TemplateDeepNet_experimental(AutoForgeModule):
             if isinstance(layer, nn.Linear):
                 # Apply Kaiming initialization
                 if self.activation_fcn_name.lower() in ['relu', 'leakyrelu', 'prelu']:
-                    init.kaiming_uniform_(layer.weight, nonlinearity='leaky_relu')
+                    nn.init.kaiming_uniform_(layer.weight, nonlinearity='leaky_relu')
                 elif self.activation_fcn_name.lower() in ['tanh', 'sigmoid']:
-                    init.xavier_uniform_(layer.weight)
+                    nn.init.xavier_uniform_(layer.weight)
 
                 if layer.bias is not None:
                     # Initialize bias to zero if present
-                    init.constant_(layer.bias, 0)
+                    nn.init.constant_(layer.bias, 0)
 
     def forward(self, x):
         # Perform forward pass iterating through all layers of DNN
