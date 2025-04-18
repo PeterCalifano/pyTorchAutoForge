@@ -1,5 +1,15 @@
 # List of TODOs
 
+## Planned changelog for next releases
+
+- [ ] v0.2.0
+  - [ ] Add working argument parser for training scripts
+  - [ ] Add configurable dataclasses from template yml files
+  - [ ] Add prototype version of model hyperparams optim tuning with default params to search (scheduler, its parameters, batch size, num of epochs, what else?)
+  - [ ] Add abstract meta class for loss functions to enforce interface
+  - [ ] Improve model profiler
+  - [ ] Fix all unit tests
+
 ## Library management and config
 
 - [x] Review linters/code formatting tools and configure them properly to comply with standards

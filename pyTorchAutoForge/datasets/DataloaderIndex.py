@@ -35,9 +35,9 @@ class DataloaderIndex:
         
         if validLoader is not None:
             # Just assign dataloaders
-            self.TrainingDataLoader = trainLoader
-            self.ValidationDataLoader = validLoader
-            self.testLoader = testLoader
+            self.TrainingDataLoader: DataLoader = trainLoader
+            self.ValidationDataLoader: DataLoader = validLoader
+            self.testLoader: DataLoader | None = testLoader
 
         else:
             # Perform random splitting of training data to get validation dataset
