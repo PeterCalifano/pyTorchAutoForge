@@ -10,11 +10,16 @@ from zipp import Path
 from pyTorchAutoForge.utils import numpy_to_torch, Align_batch_dim
 from torchvision.transforms import Compose
 
-# %% EXPERIMENTAL: Generic Dataset class for Supervised learning - 30-05-2024
-# Base class for Supervised learning datasets
-# Reference for implementation of virtual methods: https://stackoverflow.com/questions/4714136/how-to-implement-virtual-methods-in-python
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
 from abc import abstractmethod
 from abc import ABCMeta
+
+class NormalizationType(enum.Enum):
+    NONE = "None"
+    ZSCORE = "ZScore"
+    RESOLUTION = "Resolution"
+    MINMAX = "MinMax"
 
 class DatasetScope(enum.Enum):
     """
@@ -42,12 +47,55 @@ class DatasetScope(enum.Enum):
 
 class ptaf_dtype(enum.Enum):
     INT8 = "int8"
+    UINT8 = "uint8"
     INT16 = "int16"
+    UINT16 = "uint16"
     INT32 = "int32"
+    UINT32 = "uint32"
     FLOAT32 = "single"
     FLOAT64 = "double"
 
     # DOUBT (PC) can it be convertible to torch and numpy types directly?
+
+# TODO temporary version, make a unified class to handle normalizations
+def NormalizeDataMatrix(data_matrix: np.ndarray, 
+                        normalization_type : NormalizationType, 
+                        params : dict | None = None) :
+    """
+    Normalize the data matrix based on the specified normalization type.
+
+    Args:
+        data_matrix (numpy.ndarray): The data matrix to be normalized.
+        normalization_type (NormalizationType): The type of normalization to apply.
+        params (dict | None): Additional arguments for normalization.
+
+    Returns:
+        numpy.ndarray: The normalized data matrix.
+    """
+    if normalization_type == NormalizationType.ZSCORE:
+
+        scaler = StandardScaler(with_mean=True, with_std=True)
+        return scaler.fit_transform(data_matrix), scaler
+
+    elif normalization_type == NormalizationType.MINMAX:
+
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        return scaler.fit_transform(data_matrix), scaler
+
+    elif normalization_type == NormalizationType.RESOLUTION:
+
+        if params is None or 'resx' not in params or 'resy' not in params or 'normalization_indices' not in params:
+            raise ValueError("NormalizationType.RESOLUTION requires 'resx', 'resy', and 'normalization_indices' parameters.")
+        
+        return data_matrix[:, params['normalization_indices']] / np.array([params['resx'], params['resy']]), None
+        
+    elif normalization_type == NormalizationType.NONE:
+        return data_matrix, None
+
+
+def DeNormalizeDataMatrix(data_matrix: np.ndarray, scaler: StandardScaler | MinMaxScaler):
+    pass # TODO
+    return 0
 
 
 @dataclass
@@ -114,6 +162,7 @@ class ImagesLabelsCachedDataset(TensorDataset):
         
         elif not (images_path is None or labels_path is None):
             # Load dataset from paths
+            raise NotImplementedError("Loading from paths is not implemented yet.")
             images_labels: ImagesLabelsContainer = self.load_from_paths(images_path, labels_path)
 
         if images_labels is None:
@@ -172,6 +221,7 @@ class ImagesLabelsCachedDataset(TensorDataset):
     
 
     #def load_from_paths(self, images_path:str, labels_path:str) -> ImagesLabelsContainer:
+    # DEVNOTE this should be implemented in a base class since in common!
     #    images, labels = [], [] # TODO: Implement loading logic for images and labels
     #    return ImagesLabelsContainer(images, labels)
 
@@ -182,7 +232,10 @@ def LoadDataset(datasetID: int | list[int], datasetsRootFolder: str, hostname: s
     pass 
 
 # %% EXPERIMENTAL STUFF
-# TODO: python Generics to implement? EXPERIMENTAL
+# TODO: python Generics to implement? 
+# Generic Dataset class for Supervised learning - 30-05-2024
+# Base class for Supervised learning datasets
+# Reference for implementation of virtual methods: https://stackoverflow.com/questions/4714136/how-to-implement-virtual-methods-in-python
 class GenericSupervisedDataset(Dataset, metaclass=ABCMeta):
     """
     A generic dataset class for supervised learning.
