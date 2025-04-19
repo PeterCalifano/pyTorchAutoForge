@@ -1,4 +1,5 @@
 from pickle import NONE
+import cli
 from kornia.augmentation import AugmentationSequential
 import kornia.augmentation as K
 import kornia.geometry as KG
@@ -35,19 +36,19 @@ class AugmentationConfig:
     is_torch_layout: bool | None = None  
 
     # Gaussian noise
-    sigma_gaussian_noise: float = 0.05
-    gaussian_noise_aug_prob: float = 0.5
+    sigma_gaussian_noise_dn: float = 0.05
+    gaussian_noise_aug_prob: float = 0.0
 
     # Gaussian blur
     kernel_size: tuple[int, int] = (5, 5)
     sigma_gaussian_blur: tuple[float, float] = (0.1, 2.0)
-    gaussian_blur_aug_prob: float = 0.5
+    gaussian_blur_aug_prob: float = 0.0
 
     # Brightness & contrast
     min_max_brightness_factor: tuple[float, float] = (0.8, 1.2)
     min_max_contrast_factor: tuple[float, float] = (0.8, 1.2)
-    brightness_aug_prob: float = 0.5
-    contrast_aug_prob: float = 0.5
+    brightness_aug_prob: float = 0.0
+    contrast_aug_prob: float = 0.0
 
     # Batch‐mode flag
     batch_size: int | None = None  # inferred at runtime if None
@@ -66,13 +67,15 @@ class ImageAugmentationsHelper(torch.nn.Module):
             # Random brightness scaling
             augs_ops.append(module=K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,
                                                       p=augs_cfg.brightness_aug_prob,
-                                                      keepdim=True))
+                                                      keepdim=True,
+                                                      clip_output=False))
 
         if augs_cfg.contrast_aug_prob > 0:
             # Random contrast scaling
             augs_ops.append(module=K.RandomContrast(contrast=augs_cfg.min_max_contrast_factor,
                                                     p=augs_cfg.contrast_aug_prob,
-                                                    keepdim=True))
+                                                    keepdim=True,
+                                                    clip_output=False))
 
         if augs_cfg.gaussian_blur_aug_prob > 0:
             # Random Gaussian blur
@@ -84,7 +87,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
         if augs_cfg.gaussian_noise_aug_prob > 0:
             # Random Gaussian noise
             augs_ops.append(module=K.RandomGaussianNoise(mean=0.0,
-                                                         std=augs_cfg.sigma_gaussian_noise,
+                                                         std=augs_cfg.sigma_gaussian_noise_dn,
                                                          p=augs_cfg.gaussian_noise_aug_prob,
                                                          keepdim=True))
         # Stack into nn.Sequential module
@@ -101,7 +104,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
 
         # Detect type and convert to torch Tensor [B,C,H,W]
         is_numpy = isinstance(images, np.ndarray)
-        img_tensor, to_numpy = self.preprocess_images_(images)
+        img_tensor, to_numpy, scale_factor = self.preprocess_images_(images)
 
         # Apply translation
         if self.augs_cfg.shift_aug_prob > 0:
@@ -111,7 +114,17 @@ class ImageAugmentationsHelper(torch.nn.Module):
             lbl_shifted = numpy_to_torch(labels).float()
 
         # Apply kornia augmentations
+        if scale_factor is not None: # Perhaps just avoid scaling in the preprocess?
+            img_shifted = scale_factor * img_shifted
+
         aug_img = self.kornia_augs_module(img_shifted)
+
+        # Apply inverse scaling if needed
+        if scale_factor is not None:
+            aug_img = aug_img / scale_factor
+
+        # Apply clamping to [0,1]
+        aug_img = torch.clamp(aug_img, 0.0, 1.0)
 
         # Convert back to numpy if was ndarray
         if to_numpy is True:
@@ -144,7 +157,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
 
         if isinstance(images, np.ndarray):
             
-            imgs_array = images
+            imgs_array = images.copy()
             dtype = imgs_array.dtype
 
             if imgs_array.ndim < 2 or imgs_array.ndim > 4:
@@ -185,12 +198,12 @@ class ImageAugmentationsHelper(torch.nn.Module):
                 # else: If not numpy layout, there is nothing to do
 
             # Apply normalization if needed
+            scale_factor = 1.0 
             if not self.augs_cfg.is_normalized:
                 if self.augs_cfg.normalization_factor is not None:
                     scale_factor = self.augs_cfg.normalization_factor  
                 else:
                     # Guess based on dtype
-                    scale_factor = 1.0 
                     if dtype == torch.uint8 or dtype == np.uint8:
                         scale_factor = 255.0
                     elif dtype == torch.uint16 or dtype == np.uint16:
@@ -200,18 +213,36 @@ class ImageAugmentationsHelper(torch.nn.Module):
                 
                 imgs_array = imgs_array / scale_factor
 
-            return imgs_array, True
+            return imgs_array, True, scale_factor
         
         elif torch.is_tensor(images):
-            x = images 
-            if x.dim() == 3:
-                x = x.unsqueeze(0) 
+
+            imgs_array = images
+            dtype = imgs_array.dtype
+            scale_factor = 1.0
+
+            if not self.augs_cfg.is_normalized:
+                if self.augs_cfg.normalization_factor is not None:
+                    scale_factor = self.augs_cfg.normalization_factor  
+                else:
+                    # Guess based on dtype
+                    if dtype == torch.uint8 or dtype == np.uint8:
+                        scale_factor = 255.0
+                    elif dtype == torch.uint16 or dtype == np.uint16:
+                        scale_factor = 65535.0
+                    elif dtype == torch.uint32 or dtype == np.uint32:
+                        scale_factor = 4294967295.0
+                
+                imgs_array = imgs_array / scale_factor
+        
+            if imgs_array.dim() == 3:
+                imgs_array = imgs_array.unsqueeze(0) 
 
             # Detect [B,H,W,C] vs [B,C,H,W]
-            if x.shape[-1] in (1,3) and x.dim()==4:
-                x = x.permute(0,3,1,2) # Detected numpy layout, permute
+            if imgs_array.shape[-1] in (1,3) and imgs_array.dim()==4:
+                imgs_array = imgs_array.permute(0,3,1,2) # Detected numpy layout, permute
 
-            return x, False
+            return imgs_array, False, scale_factor
         
         else:
             raise TypeError("Unsupported image array type.")
@@ -451,36 +482,42 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     cfg = AugmentationConfig(
-                    max_shift=(150, 150),
+                    max_shift=(500, 500),
                     is_normalized=False,
-                    sigma_gaussian_noise=0.1,
-                    gaussian_noise_aug_prob=0.7,
-                    gaussian_blur_aug_prob=0.3,
+                    sigma_gaussian_noise_dn=15,
+                    gaussian_noise_aug_prob=1.0,
+                    gaussian_blur_aug_prob=1.0,
+                    is_torch_layout=False,
+                    min_max_brightness_factor=(0.2, 1.2),
+                    min_max_contrast_factor=(0.2, 1.2),
+                    brightness_aug_prob=1.0,
+                    contrast_aug_prob=1.0,
                 )
     helper = ImageAugmentationsHelper(cfg)
 
-    # create a batch of 4 random images and simple point labels
-    batch_size = 4
-    imgs = np.zeros((batch_size, 1024, 1024, 3), dtype=np.uint8)
+    # create a batch of 4 random grayscale images and simple point labels
+    batch_size = 3
+    imgs = np.zeros((batch_size, 1024, 1024, 1), dtype=np.uint8)
     center = (512, 512)
     radius = 200
 
-    color = (255, 255, 255)  # White color
     for i in range(batch_size):
-        # Draw a white disk in the center of each image
+        color_gray = np.random.randint(low=0, high=256)  # Random grayscale color between 0 and 255
+        # Draw a white disk in the center of each grayscale image
         y, x = np.ogrid[:1024, :1024]
         mask = (x - center[0])**2 + (y - center[1])**2 <= radius**2
-        imgs[i][mask] = color
+        imgs[i, mask] = color_gray
 
     lbls = np.tile(np.array([[512, 512]]), (batch_size, 1))
-    out_imgs, out_lbls = helper(imgs, lbls)
+    out_imgs, out_lbls = helper(numpy_to_torch(imgs), lbls)
+    out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
 
     # plot inputs and outputs in a 2×batch_size grid
     fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
 
     for i in range(batch_size):
         # input
-        axs[0, i].imshow(imgs[i])
+        axs[0, i].imshow(imgs[i], cmap='gray')
         axs[0, i].scatter(lbls[i, 0], lbls[i, 1], c='r', s=20)
         axs[0, i].set_title(f"Input {i}")
         axs[0, i].axis('off')
@@ -490,10 +527,46 @@ if __name__ == "__main__":
         if not cfg.is_normalized:
             disp = (disp * 255).astype(np.uint8)
 
-        axs[1, i].imshow(disp)
+        axs[1, i].imshow(disp, cmap='gray')
         axs[1, i].scatter(out_lbls[i, 0], out_lbls[i, 1], c='r', s=20)
         axs[1, i].set_title(f"Output {i}")
         axs[1, i].axis('off')
 
     plt.tight_layout()
     plt.show()
+
+"""
+    # For later use: batch warping
+    def _translate_batch(self,
+                         images: torch.Tensor,
+                         labels: ArrayOrTensor
+                        ) -> Tuple[torch.Tensor, torch.Tensor]:
+        B,C,H,W = images.shape
+        # convert labels
+        lbl = torch.from_numpy(labels).float() if isinstance(labels, np.ndarray) else labels.float()
+        if lbl.dim()==2:
+            lbl = lbl.unsqueeze(0)
+        # prepare per-sample max shifts
+        if isinstance(self.cfg.max_shift, torch.Tensor):
+            ms = self.cfg.max_shift.to(images.device).long()
+        elif isinstance(self.cfg.max_shift, list):
+            ms = torch.tensor(self.cfg.max_shift, device=images.device).long()
+        else:
+            fx,fy = self.cfg.max_shift if isinstance(self.cfg.max_shift,tuple) else (self.cfg.max_shift,self.cfg.max_shift)
+            ms = torch.tensor([[int(fx),int(fy)]]*B, device=images.device)
+        # random shifts uniform integer in [-max, max]
+        dx = torch.randint(-ms[:,0], ms[:,0]+1, (B,), device=images.device)
+        dy = torch.randint(-ms[:,1], ms[:,1]+1, (B,), device=images.device)
+        # normalized translation for affine: tx = dx/(W/2), ty = dy/(H/2)
+        tx = dx.float()/(W/2)
+        ty = dy.float()/(H/2)
+        # build theta for each sample: [[1,0,tx],[0,1,ty]]
+        theta = torch.zeros((B,2,3), device=images.device, dtype=images.dtype)
+        theta[:,0,0] = 1; theta[:,1,1] = 1
+        theta[:,0,2] = tx; theta[:,1,2] = ty
+        # grid and sample
+        grid = F.affine_grid(theta, images.size(), align_corners=False)
+        shifted = F.grid_sample(images, grid, padding_mode='zeros', align_corners=False)
+        # shift labels in pixel space
+        lbl_t = lbl - torch.stack([dx,dy], dim=1).unsqueeze(1).float()
+"""
