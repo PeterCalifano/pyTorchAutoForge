@@ -177,10 +177,10 @@ def LoadModel(model: torch.nn.Module | None, model_filename: str, load_as_traced
         if model is not None:
             print('\033[38;5;208mload_as_traced is specified as true, but model has been provided. Model will be overwritten by checkpoint load.\033[0m')
 
-        model = torch.jit.load(model_filepath)
+        model: torch.nn.Module = torch.jit.load(model_filepath)
         print('Traced model correctly loaded.')
 
-        return model
+        return model.eval()
     
     else:
         print('Loading model, load_strict=', load_strict, ' from file: ', model_filepath)
@@ -193,8 +193,7 @@ def LoadModel(model: torch.nn.Module | None, model_filename: str, load_as_traced
         else:
             model = torch.load(model_filepath, 
                                map_location='cpu', 
-                               weights_only=False, 
-                               strict=False)
+                               weights_only=False)
             
         print('Model correctly loaded.')
         return model.eval()

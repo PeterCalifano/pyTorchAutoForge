@@ -4,17 +4,18 @@
 
 - [x] v0.1.3
 - [ ] v0.1.4
-  - [ ] Add prototype implementation of heads and backbones builders using registries
+  - [x] Add prototype implementation of heads and backbones builders using registries
+  - [ ] Add prototype implementation of dataset classes from RAM/disk
   - [ ] Fix all unit tests
   - [ ] Complete 1st version of model profiler
   - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods) and SHAP (basic explainer)
-  - [ ] Add abstract meta class for loss functions to enforce interface
-  - [ ] Add refactored version of kornia augmentation blocks
+  - [ ] Add refactored version of kornia augmentation blocks (AugmentationHelper)
   - [ ] Review NN and CNN template blocks for modularity
 - [ ] v0.1.5
   - [ ] Add configurable dataclasses from template yml files for training manager and extensible prototype (see pySR configuration in nav-frontend)
   - [ ] Add pySR conveniency module
   - [ ] Explore Hydra for configuration management from yml files
+  - [ ] Add abstract meta class for loss functions to enforce interface
 - [ ] v0.2.0
   - [ ] All those above
   - [ ] Add working argument parser for training scripts

@@ -189,6 +189,9 @@ class ImagesLabelsCachedDataset(TensorDataset):
                  images_path: str | None = None, 
                  labels_path: str | None = None) -> None:
         
+        if not isinstance(images_labels, ImagesLabelsContainer) and images_labels is not None:
+            raise TypeError("images_labels must be of type ImagesLabelsContainer or None.")
+
         # Store input and labels sources
         if images_labels is None and (images_path is None or labels_path is None):
             raise ValueError("Either images_labels container or both images_path and labels_path must be provided.")
@@ -205,13 +208,11 @@ class ImagesLabelsCachedDataset(TensorDataset):
         images_labels.images = numpy_to_torch(images_labels.images)
         images_labels.labels = numpy_to_torch(images_labels.labels)
 
-        # Normalize to [0,1] if max > 1 and based on dtype
-        if images_labels.images.max() > 1.0 and images_labels.images.dtype == torch.uint8:
-            images_labels.images = images_labels.images.float() / 255.0
-            
-        elif images_labels.images.max() > 1.0 and images_labels.images.dtype == torch.uint16:
-            images_labels.images = images_labels.images.float() / 65535.0
-
+        if img.max() > 1.0 and img.dtype == torch.uint8:
+            input_scale_factor = 255.0
+        elif img.max() > 1.0 and img.dtype == torch.uint16:
+            input_scale_factor = 65535.0
+    
         # Unsqueeze images to 4D [B, C, H, W] if 3D [B, H, W]
         if images_labels.images.dim() == 3:
             images_labels.images = images_labels.images.unsqueeze(1)
@@ -237,6 +238,9 @@ class ImagesLabelsCachedDataset(TensorDataset):
         def __getitem__(self, idx):
             # Apply transform to the image and label
             img, lbl = super().__getitem__(idx)
+
+            # Normalize to [0,1] if max > 1 and based on dtype
+            img = img.float() / input_scale_factor
 
             if self.transforms is not None:
                 return self.transforms(img), self.transforms(lbl)
