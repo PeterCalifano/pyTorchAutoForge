@@ -68,6 +68,7 @@
 # Loading methods only modify the parameters the user has specified
 
 #from warnings import deprecated
+import pprint
 from typing import Any, IO
 import torch
 import mlflow
@@ -674,7 +675,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         """
         print(formatted_output)
 
-        if self.kornia_transform is not None:
+        if self.kornia_transform is not None and isinstance(self.kornia_transform, torch.nn.Sequential):
             print("Kornia Augmentation Pipeline:")
             for idx, transform in enumerate(self.kornia_transform):
                 print(f"  ({idx}): {transform.__class__.__name__}")
@@ -683,6 +684,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 params = vars(transform)
                 for param, value in params.items():
                     print(f"      - {param}: {value}")
+        elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
+            print("Kornia Augmentation Pipeline:")
+            pprint.pprint(self.kornia_transform.augs_cfg)
         else:
             print("No Kornia augmentation pipeline defined.")
 
