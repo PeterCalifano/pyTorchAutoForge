@@ -179,10 +179,10 @@ class ImageAugmentationsHelper(torch.nn.Module):
                         imgs_array = imgs_array.unsqueeze(-1)  # Expand to (B,H,W,1)
                         imgs_array = imgs_array.permute(0, 3, 1, 2) # Permute to (B,C,H,W)
 
-                elif imgs_array.ndim == 4:
-                    if is_numpy_layout:   
-                        imgs_array = imgs_array.permute(0, 3, 1, 2)
-                    # else: If not numpy layout, there is nothing to do
+            elif imgs_array.ndim == 4:
+                if is_numpy_layout:   
+                    imgs_array = imgs_array.permute(0, 3, 1, 2)
+                # else: If not numpy layout, there is nothing to do
 
             # Apply normalization if needed
             if not self.augs_cfg.is_normalized:
@@ -191,11 +191,11 @@ class ImageAugmentationsHelper(torch.nn.Module):
                 else:
                     # Guess based on dtype
                     scale_factor = 1.0 
-                    if dtype == torch.uint8:
+                    if dtype == torch.uint8 or dtype == np.uint8:
                         scale_factor = 255.0
-                    elif dtype == torch.uint16:
+                    elif dtype == torch.uint16 or dtype == np.uint16:
                         scale_factor = 65535.0
-                    elif dtype == torch.uint32:
+                    elif dtype == torch.uint32 or dtype == np.uint32:
                         scale_factor = 4294967295.0
                 
                 imgs_array = imgs_array / scale_factor
@@ -266,8 +266,8 @@ class ImageAugmentationsHelper(torch.nn.Module):
             # Copy crop in new image
             shifted_imgs[i, :, dst_y1:dst_y2, dst_x1:dst_x2] = images[i, :, src_y1:src_y2, src_x1:src_x2]
 
-            # Shift labels in opposite direction 
-            lbl[i] = lbl[i] - torch.tensor([ox, oy], dtype=lbl.dtype, device=lbl.device)
+            # Shift points labels 
+            lbl[i] = lbl[i] + torch.tensor([ox, oy], dtype=lbl.dtype, device=lbl.device)
 
         return shifted_imgs, lbl
 
@@ -464,7 +464,7 @@ if __name__ == "__main__":
     imgs = np.zeros((batch_size, 1024, 1024, 3), dtype=np.uint8)
     center = (512, 512)
     radius = 200
-    
+
     color = (255, 255, 255)  # White color
     for i in range(batch_size):
         # Draw a white disk in the center of each image
@@ -481,7 +481,7 @@ if __name__ == "__main__":
     for i in range(batch_size):
         # input
         axs[0, i].imshow(imgs[i])
-        axs[0, i].scatter(lbls[i, :, 0], lbls[i, :, 1], c='r', s=20)
+        axs[0, i].scatter(lbls[i, 0], lbls[i, 1], c='r', s=20)
         axs[0, i].set_title(f"Input {i}")
         axs[0, i].axis('off')
         # output (rescale if needed)
@@ -491,7 +491,7 @@ if __name__ == "__main__":
             disp = (disp * 255).astype(np.uint8)
 
         axs[1, i].imshow(disp)
-        axs[1, i].scatter(out_lbls[i, :, 0], out_lbls[i, :, 1], c='r', s=20)
+        axs[1, i].scatter(out_lbls[i, 0], out_lbls[i, 1], c='r', s=20)
         axs[1, i].set_title(f"Output {i}")
         axs[1, i].axis('off')
 
