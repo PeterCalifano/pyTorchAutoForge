@@ -7,28 +7,45 @@ import torch
 from typing import Any
 
 # Interfaces between numpy and torch tensors
-def torch_to_numpy(tensor: Tensor | ndarray, dtype: type = np.float32) -> ndarray:
+
+
+def torch_to_numpy(tensor: Tensor | ndarray, dtype: type | str = "source") -> ndarray:
 
     if isinstance(tensor, Tensor):
+
         # Convert to torch tensor to numpy array
-        return (tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()).astype(dtype)
+        array = tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
+        
+        if dtype == "source":
+            # Return the numpy array with the same dtype as the source tensor
+            return array
+        
+        return array.astype(dtype)
 
     elif isinstance(tensor, ndarray):
-        # Return the array itself
-        return tensor
+
+        if dtype == "source":
+            # Return the numpy array with the same dtype as the source tensor
+            return tensor
+        return tensor.astype(dtype)
     else:
         raise ValueError("Input must be a torch.Tensor or np.ndarray")
 
 
-def numpy_to_torch(array: Tensor | ndarray, dtype: torch.dtype = torch.float32) -> Tensor:
+def numpy_to_torch(array: Tensor | ndarray, dtype: torch.dtype | str = "source") -> Tensor:
 
     if isinstance(array, ndarray):
         # Convert numpy array to torch tensor
-        return from_numpy(array).to(torch.float32)
-
+        tensor = from_numpy(array)
+        if dtype == "source":
+            return tensor
+        return tensor.to(dtype)
+    
     elif isinstance(array, Tensor):
         # Return the tensor itself
-        return array
+        if dtype == "source":
+            return array
+        return array.to(dtype)
     else:
         raise ValueError("Input must be a torch.Tensor or np.ndarray")
 
