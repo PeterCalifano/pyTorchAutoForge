@@ -518,6 +518,7 @@ if __name__ == "__main__":
 
     cfg = AugmentationConfig(
                     max_shift=(500, 500),
+                    shift_aug_prob=0.35,
                     is_normalized=False,
                     sigma_gaussian_noise_dn=15,
                     gaussian_noise_aug_prob=1.0,

@@ -80,7 +80,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from dataclasses import dataclass, asdict, fields, Field, MISSING
 
-from pyTorchAutoForge.datasets import DataloaderIndex
+from pyTorchAutoForge.datasets import DataloaderIndex, ImageAugmentationsHelper
 from pyTorchAutoForge.utils import GetDeviceMulti, AddZerosPadding, GetSamplesFromDataset, ComputeModelParamsStorageSize
 from pyTorchAutoForge.api.torch import SaveModel, LoadModel, AutoForgeModuleSaveMode
 from pyTorchAutoForge.optimization import CustomLossFcn
@@ -120,7 +120,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     batch_size: int
 
     # DIFFERENTIABLE DATA AUGMENTATION using kornia
-    kornia_transform: torch.nn.Sequential | None = None
+    kornia_transform: torch.nn.Sequential | ImageAugmentationsHelper | None = None
     kornia_augs_in_validation: bool = False
     
     # FIELDS with DEFAULTS
@@ -460,8 +460,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             X, Y = X.to(self.device), Y.to(self.device)
 
             # Perform data augmentation on batch using kornia modules
-            if self.kornia_transform is not None:
+            if self.kornia_transform is not None and not isinstance(self.kornia_transform, ImageAugmentationsHelper):
                 X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
+            elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
+                X = self.kornia_transform(X)
 
             # Perform FORWARD PASS to get predictions
             # Evaluate model at input, calls forward() method
