@@ -2,6 +2,8 @@ from .DataloaderIndex import DataloaderIndex
 from .DataAugmentation import EnumComputeBackend, EnumModelFidelity, BaseErrorModel, BaseAddErrorModel, BaseGainErrorModel
 from .DatasetClasses import NormalizationType, ImagesLabelsCachedDataset, NormalizeDataMatrix
 
+from .ImagesAugmentation import AugmentationConfig, ImageAugmentationsHelper, ImageNormalization, RandomGaussianNoiseVariableSigma
+
 __all__ = [
     'DataloaderIndex', 
     'EnumComputeBackend', 
@@ -12,4 +14,8 @@ __all__ = [
     'NormalizationType',
     'ImagesLabelsCachedDataset',
     'NormalizeDataMatrix',
+    'AugmentationConfig',
+    'ImageAugmentationsHelper',
+    'ImageNormalization',
+    'RandomGaussianNoiseVariableSigma',
     ]

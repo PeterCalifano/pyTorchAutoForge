@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
-import captum
 from sympy import pretty_print
 from torch import nn
 from torch import Tensor
@@ -22,12 +21,18 @@ class CaptumExplainMethods(Enum):
     Saliency = "Saliency" 
     GradientShap = "GradientShap"
 
+class ShapExplainMethods(Enum):
+    """
+    ShapExplainMethods Enumeration class listing all explainability methods supported by ModelExplainer helper class.
+    """
+    SHAP = "shap"
+
 class ModelExplainerHelper():
     def __init__(self, model: nn.Module | AutoForgeModule, 
                  task_type: TaskType, 
                  input_samples: Tensor | np.ndarray | pd.DataFrame, 
                  target_output_index: int, 
-                 explain_method : CaptumExplainMethods = CaptumExplainMethods.IntegratedGrad,
+                 explain_method : CaptumExplainMethods | ShapExplainMethods = CaptumExplainMethods.IntegratedGrad,
                  features_names: list[str] | None = None):
         
         # Store data
@@ -48,10 +53,20 @@ class ModelExplainerHelper():
         self.input_samples = input_samples
         self.target_output_index = target_output_index
 
-        # Build captum method object 
-        print('ModelExplainer loaded with captum explainability method object: ' + explain_method.value)
-        self.captum_explainer = getattr(captum.attr, explain_method.value)
-        self.captum_explainer = self.captum_explainer(self.model)
+        if isinstance(explain_method, CaptumExplainMethods):
+            # Build captum method object 
+            import captum
+            print('ModelExplainer loaded with captum explainability method object: ' + explain_method.value)
+            self.captum_explainer = getattr(captum.attr, explain_method.value)
+            self.captum_explainer = self.captum_explainer(self.model)
+
+        elif isinstance(explain_method, ShapExplainMethods):
+            self.shap_explainer = explain_method.value
+            import shap
+            print('ModelExplainer is using SHAP library...')
+            # Build SHAP explainer
+            self.shap_explainer = shap.Explainer(self.model)
+
 
     def explain_features(self):
         """
@@ -79,7 +94,6 @@ class ModelExplainerHelper():
     
         # Call visualization function
         self.visualize_feats_importances(self.features_names, stats["mean"], title="Feature Importances", errors_ranges=stats["std_dev"])
-
 
     def explain_layers(self):
         """
