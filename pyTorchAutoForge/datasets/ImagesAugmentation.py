@@ -23,6 +23,43 @@ from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
 ndArrayOrTensor = np.ndarray | torch.Tensor
 
 
+class RandomGaussianNoiseVariableSigma(nn.Module):
+    """
+    Applies per-sample Gaussian noise with variable sigma.
+    sigma_noise: scalar, (min,max) tuple, or per-sample (B,) or (B,2) array/tensor
+    gaussian_noise_aug_prob: probability to apply noise per sample
+    """
+
+    def __init__(self, sigma_noise: float | tuple[float, float],
+                 gaussian_noise_aug_prob: float = 0.5):
+        super().__init__()
+
+        self.sigma_gaussian_noise_dn = sigma_noise
+        self.gaussian_noise_aug_prob = gaussian_noise_aug_prob
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        B, C, H, W = x.shape
+        device = x.device
+        
+        # Determine sigma per sample
+        sigma = self.sigma_gaussian_noise_dn
+
+        if isinstance(sigma, tuple):
+            min_s, max_s = sigma
+            sigma_array = (max_s - min_s) * torch.rand(B, device=device) + min_s
+        else:
+            sigma_array = torch.full((B,), float(sigma), device=device)
+    
+        # apply probabilistically per sample
+        probability_mask = torch.rand(B, device=device) < self.gaussian_noise_aug_prob
+
+        sigma_array = sigma_array * probability_mask.float()
+        sigma_array = sigma_array.view(B, 1, 1, 1)
+        noise = torch.randn_like(x) * sigma_array
+
+        return x + noise
+
 @dataclass
 class AugmentationConfig:
     # Translation parameters (in pixels)
@@ -36,7 +73,7 @@ class AugmentationConfig:
     is_torch_layout: bool | None = None  
 
     # Gaussian noise
-    sigma_gaussian_noise_dn: float = 0.05
+    sigma_gaussian_noise_dn: float | tuple[float, float] = 0.05
     gaussian_noise_aug_prob: float = 0.0
 
     # Gaussian blur
@@ -86,10 +123,8 @@ class ImageAugmentationsHelper(torch.nn.Module):
 
         if augs_cfg.gaussian_noise_aug_prob > 0:
             # Random Gaussian noise
-            augs_ops.append(module=K.RandomGaussianNoise(mean=0.0,
-                                                         std=augs_cfg.sigma_gaussian_noise_dn,
-                                                         p=augs_cfg.gaussian_noise_aug_prob,
-                                                         keepdim=True))
+            augs_ops.append(module=RandomGaussianNoiseVariableSigma(sigma_noise=augs_cfg.sigma_gaussian_noise_dn, gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob))
+            
         # Stack into nn.Sequential module
         self.kornia_augs_module = nn.Sequential(*augs_ops)
 
