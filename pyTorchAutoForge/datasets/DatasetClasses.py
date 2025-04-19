@@ -208,9 +208,9 @@ class ImagesLabelsCachedDataset(TensorDataset):
         images_labels.images = numpy_to_torch(images_labels.images)
         images_labels.labels = numpy_to_torch(images_labels.labels)
 
-        if img.max() > 1.0 and img.dtype == torch.uint8:
+        if images_labels.images.max() > 1.0 and images_labels.images.dtype == torch.uint8:
             input_scale_factor = 255.0
-        elif img.max() > 1.0 and img.dtype == torch.uint16:
+        elif images_labels.images.max() > 1.0 and images_labels.images.dtype == torch.uint16:
             input_scale_factor = 65535.0
     
         # Unsqueeze images to 4D [B, C, H, W] if 3D [B, H, W]
