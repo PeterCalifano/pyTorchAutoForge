@@ -170,7 +170,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
 
     def preprocess_images_(self,
                     images: ndArrayOrTensor
-                    ) -> tuple[torch.Tensor, bool]:
+                    ) -> tuple[torch.Tensor, bool, float]:
         """
         Preprocess images for augmentation.
 
@@ -333,7 +333,8 @@ class ImageAugmentationsHelper(torch.nn.Module):
             shifted_imgs[i, :, dst_y1:dst_y2, dst_x1:dst_x2] = images[i, :, src_y1:src_y2, src_x1:src_x2]
 
             # Shift points labels 
-            lbl[i] = lbl[i] + torch.tensor([ox, oy], dtype=lbl.dtype, device=lbl.device)
+            lbl[i, 0:2] = lbl[i, 0:2] + \
+                torch.tensor([ox, oy], dtype=lbl.dtype, device=lbl.device)
 
         return shifted_imgs, lbl
 
