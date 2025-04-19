@@ -463,7 +463,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Perform data augmentation on batch using kornia modules
             if self.kornia_transform is not None and not isinstance(self.kornia_transform, ImageAugmentationsHelper):
                 X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
-                
+
             elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
                 X, Y = self.kornia_transform(X, Y)
 
@@ -558,9 +558,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform data augmentation on batch using kornia modules
-                    if self.kornia_transform is not None and self.kornia_augs_in_validation:
-                        # TODO remove hardcoding (max intensity value need to be set)
-                        X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
+                    if self.kornia_transform is not None and not isinstance(self.kornia_transform, ImageAugmentationsHelper):
+                        # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
+                        X = (self.kornia_transform(255 * X).clamp(0, 255))/255
+
+                    elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
+                        X, Y = self.kornia_transform(X, Y)
 
                     # Perform FORWARD PASS
                     predVal = self.model(X)  # Evaluate model at input
@@ -601,8 +604,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform data augmentation on batch using kornia modules
-                    if self.kornia_transform is not None:
-                        X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
+                    if self.kornia_transform is not None and not isinstance(self.kornia_transform, ImageAugmentationsHelper):
+                        # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
+                        X = (self.kornia_transform(255 * X).clamp(0, 255))/255
+
+                    elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
+                        X, Y = self.kornia_transform(X, Y)
 
                     # Perform FORWARD PASS
                     predVal = self.model(X)  # Evaluate model at input

@@ -137,34 +137,35 @@ class ImageAugmentationsHelper(torch.nn.Module):
             returns: shifted+augmented images & labels, same type as input
         """
 
-        # Detect type and convert to torch Tensor [B,C,H,W]
-        is_numpy = isinstance(images, np.ndarray)
-        img_tensor, to_numpy, scale_factor = self.preprocess_images_(images)
+        with torch.no_grad():
+            # Detect type and convert to torch Tensor [B,C,H,W]
+            is_numpy = isinstance(images, np.ndarray)
+            img_tensor, to_numpy, scale_factor = self.preprocess_images_(images)
 
-        # Apply translation
-        if self.augs_cfg.shift_aug_prob > 0:
-            img_shifted, lbl_shifted = self.translate_batch_(img_tensor, labels)
-        else:
-            img_shifted = img_tensor
-            lbl_shifted = numpy_to_torch(labels).float()
+            # Apply translation
+            if self.augs_cfg.shift_aug_prob > 0:
+                img_shifted, lbl_shifted = self.translate_batch_(img_tensor, labels)
+            else:
+                img_shifted = img_tensor
+                lbl_shifted = numpy_to_torch(labels).float()
 
-        # Apply kornia augmentations
-        if scale_factor is not None: # Perhaps just avoid scaling in the preprocess?
-            img_shifted = scale_factor * img_shifted
+            # Apply kornia augmentations
+            if scale_factor is not None: # Perhaps just avoid scaling in the preprocess?
+                img_shifted = scale_factor * img_shifted
 
-        aug_img = self.kornia_augs_module(img_shifted)
+            aug_img = self.kornia_augs_module(img_shifted)
 
-        # Apply inverse scaling if needed
-        if scale_factor is not None:
-            aug_img = aug_img / scale_factor
+            # Apply inverse scaling if needed
+            if scale_factor is not None:
+                aug_img = aug_img / scale_factor
 
-        # Apply clamping to [0,1]
-        aug_img = torch.clamp(aug_img, 0.0, 1.0)
+            # Apply clamping to [0,1]
+            aug_img = torch.clamp(aug_img, 0.0, 1.0)
 
-        # Convert back to numpy if was ndarray
-        if to_numpy is True:
-            aug_img = torch_to_numpy(aug_img.permute(0, 2, 3, 1))
-            lbl_shifted = torch_to_numpy(lbl_shifted)
+            # Convert back to numpy if was ndarray
+            if to_numpy is True:
+                aug_img = torch_to_numpy(aug_img.permute(0, 2, 3, 1))
+                lbl_shifted = torch_to_numpy(lbl_shifted)
 
         return aug_img, lbl_shifted
 
