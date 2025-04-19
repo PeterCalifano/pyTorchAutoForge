@@ -463,8 +463,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Perform data augmentation on batch using kornia modules
             if self.kornia_transform is not None and not isinstance(self.kornia_transform, ImageAugmentationsHelper):
                 X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
+                
             elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
-                X = self.kornia_transform(X)
+                X, Y = self.kornia_transform(X, Y)
 
             # Perform FORWARD PASS to get predictions
             # Evaluate model at input, calls forward() method
