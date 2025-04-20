@@ -90,6 +90,9 @@ class AugmentationConfig:
     # Batch‐mode flag
     batch_size: int | None = None  # inferred at runtime if None
 
+    # Scaling factors for labels 
+    label_scaling_factors: ndArrayOrTensor | None = None
+
 # %% Augmentation helper class
 
 class ImageAugmentationsHelper(torch.nn.Module):
@@ -166,6 +169,10 @@ class ImageAugmentationsHelper(torch.nn.Module):
             if to_numpy is True:
                 aug_img = torch_to_numpy(aug_img.permute(0, 2, 3, 1))
                 lbl_shifted = torch_to_numpy(lbl_shifted)
+
+            if self.augs_cfg.label_scaling_factors is not None:
+                # Apply inverse scaling to labels
+                lbl_shifted = lbl_shifted / numpy_to_torch(self.augs_cfg.label_scaling_factors).to(lbl_shifted.device)
 
         return aug_img, lbl_shifted
 

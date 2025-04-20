@@ -948,6 +948,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X = examplePair[0].to(self.device)
                     Y = examplePair[1].to(self.device)
 
+                    # TODO this is wrong, modify to make compliant with training and validation loops
+                    
                     # Perform FORWARD PASS
                     examplePredictions = self.model(
                         X)  # Evaluate model at input
