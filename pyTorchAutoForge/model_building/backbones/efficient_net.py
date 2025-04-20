@@ -21,8 +21,7 @@ class EfficientNetBackbone(nn.Module):
             self.feature_extractor = nn.ModuleList([nn.Sequential(*modules)])
 
         else:  # 'features'
-            # e.g. each block as its own layer to capture intermediate outputs
-            # assumes first child is the feature sequential, then splits
+            raise NotImplementedError('This branch is todo. Does not seem right')
             feat_seq = modules[0]
             self.feature_extractor = nn.ModuleList(list(feat_seq.children()))
 
