@@ -573,7 +573,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Perform BACKWARD PASS to update parameters
             train_loss_value.backward()     # Compute gradients
             
-            if (batch_idx + 1) % self.batch_accumulation_factor == 0 or last_batch:
+            if ((batch_idx + 1) % self.batch_accumulation_factor == 0) or is_last_batch:
                 # Make optimization step and reset gradients
                 self.optimizer.step()       # Apply gradients from the loss
                 self.optimizer.zero_grad()  # Reset gradients for next iteration
