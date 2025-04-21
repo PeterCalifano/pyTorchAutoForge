@@ -535,12 +535,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             raise TypeError('Optimizer is not defined. Cannot proceed with training.')
         
         self.optimizer.zero_grad()
+        current_loop_time : float = 0.0
+        start_time = time.perf_counter() # Start timer 
 
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
             
             loop_iter_number += 1
-            # Start timer for batch processing time
-            start_time = time.perf_counter()
 
             # Check if batch is the last one
             if batch_idx + 1 == self.trainingDataloaderSize:
@@ -567,15 +567,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 train_loss_dict, dict) else train_loss_dict
 
             if self.batch_accumulation_factor > 1:
-                train_loss_value = train_loss_value / self.batch_accumulation_factor
+                train_loss_value /= self.batch_accumulation_factor
 
             # TODO: here one may log intermediate metrics at each update
             # if self.mlflow_logging:
             #     mlflow.log_metrics()
 
             # Update running value of loss for status bar at current epoch
-            running_loss += train_loss_value.item()
-
+            running_loss += train_loss_value.detach().cpu().float()
+            
             # Perform BACKWARD PASS to update parameters
             train_loss_value.backward()     # Compute gradients
             
@@ -584,21 +584,26 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 self.optimizer.step()       # Apply gradients from the loss
                 self.optimizer.zero_grad()  # Reset gradients for next iteration
                 self.num_of_updates += 1
-
-                # Accumulate batch processing time
-                run_time_total += time.perf_counter() - start_time
             else:
-                # Accumulate batch processing time
-                run_time_total += time.perf_counter() - start_time
                 continue # Accumulate more batches before update
+            
+            # Synchronize CUDA stream once here
+            torch.cuda.synchronize()
+
+            # Update total loop time
+            current_loop_time = time.perf_counter() - start_time
+            run_time_total += current_loop_time
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.num_of_updates}, average loop time: {1000*run_time_total/loop_iter_number:4.4g} [ms], current lr: {self.current_lr:.06g}"
+            progress_info = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, avg. loss: {running_loss / current_batch:.4f}, num. of steps: {self.num_of_updates}, single loop time: {1000 * current_loop_time:4.4g} [ms], per-batch avg. time: {1000*run_time_total/loop_iter_number:4.4g} [ms], current lr: {self.current_lr:.06g}"
 
             # Print progress on the same line
-            sys.stdout.write('\r' + progress)
-            sys.stdout.flush()
+            print(progress_info, end="\r")
+
+            # Reset timer
+            start_time = time.perf_counter()
+
 
             # TODO: implement management of SWA model
             # if swa_model is not None and epochID >= swa_start_epoch:
@@ -677,11 +682,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, average loss: { validation_loss_value / current_batch:.4f}, average loop time: {1000*run_time_total/(current_batch):4.4g} [ms]"
+                    progress_info = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, avg. loss: { validation_loss_value / current_batch:.4f}, per-batch avg. time: {1000*run_time_total/(current_batch):4.4g} [ms]"
 
                     # Print progress on the same line
-                    sys.stdout.write('\r' + progress)
-                    sys.stdout.flush()
+                    print(progress_info, end="\r")
+
 
                 validation_loss_value /= num_of_batches  # Compute batch size normalized loss value
                 # Compute percentage of correct classifications over dataset size
@@ -795,8 +800,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 
                 # At epoch 0, set initial validation loss
                 if self.currentValidationLoss is None: 
-                    self.currentValidationLoss = tmp_valid_loss
-                    self.bestValidationLoss = tmp_valid_loss
+                    self.currentValidationLoss : float = tmp_valid_loss
+                    self.bestValidationLoss : float = tmp_valid_loss
 
                 # Optuna functionalities
                 # Report validation loss to Optuna pruner
@@ -962,7 +967,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         sys.exit("No input available, program stop.")
             
             # Exit from program gracefully
-            if EXIT_AFTER_PRUNING:
+            if self.EXIT_AFTER_PRUNING:
                 sys.exit(0)
 
         except optuna.TrialPruned:
