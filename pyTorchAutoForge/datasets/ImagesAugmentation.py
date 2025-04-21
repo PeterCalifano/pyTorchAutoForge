@@ -106,6 +106,8 @@ class ImageAugmentationsHelper(torch.nn.Module):
         # Define kornia augmentation pipeline
         augs_ops = nn.ModuleList()
 
+        # TODO: add rotation augmentation, for simple cases, it is sufficient to rotate the image and pad with zero. Do it before translation though.
+
         if augs_cfg.brightness_aug_prob > 0:
             # Random brightness scaling
             augs_ops.append(module=K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,

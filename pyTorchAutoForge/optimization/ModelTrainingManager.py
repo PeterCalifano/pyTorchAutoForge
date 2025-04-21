@@ -596,7 +596,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress_info = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, avg. loss: {running_loss / current_batch:.4f}, num. of steps: {self.num_of_updates}, single loop time: {1000 * current_loop_time:4.4g} [ms], per-batch avg. time: {1000*run_time_total/loop_iter_number:4.4g} [ms], current lr: {self.current_lr:.06g}"
+            progress_info = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, avg. loss: {running_loss / current_batch:4.5g}, num. of steps: {self.num_of_updates}, single loop time: {1000 * current_loop_time:4.4g} [ms], per-batch avg. time: {1000*run_time_total/loop_iter_number:4.4g} [ms], current lr: {self.current_lr:.06g}"
 
             # Print progress on the same line
             print(progress_info, end="\r")
@@ -682,7 +682,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress_info = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, avg. loss: { validation_loss_value / current_batch:.4f}, per-batch avg. time: {1000*run_time_total/(current_batch):4.4g} [ms]"
+                    progress_info = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, avg. loss: { validation_loss_value / current_batch:4.5g}, per-batch avg. time: {1000*run_time_total/(current_batch):4.4g} [ms]"
 
                     # Print progress on the same line
                     print(progress_info, end="\r")
@@ -723,14 +723,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, average loss: {validation_loss_value / current_batch:.4f}, average loop time: {1000 * run_time_total/(current_batch):4.2f} [ms]"
+                    progress = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, average loss: {validation_loss_value / current_batch:4.5g}, average loop time: {1000 * run_time_total/(current_batch):4.2f} [ms]"
                     
                     # Print progress on the same line
                     sys.stdout.write('\r' + progress)
                     sys.stdout.flush()
 
                 validation_loss_value /= num_of_batches  # Compute batch size normalized loss value
-                print(f"\n\t\tFinal score - avg. loss: {validation_loss_value:.4f}\n")
+                print(f"\n\t\tFinal score - avg. loss: {validation_loss_value:4.5g}\n")
 
                 return validation_loss_value
 
