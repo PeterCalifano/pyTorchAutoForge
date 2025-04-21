@@ -93,8 +93,11 @@ class AugmentationConfig:
     # Scaling factors for labels 
     label_scaling_factors: ndArrayOrTensor | None = None
 
-# %% Augmentation helper class
+    def __post_init__(self):
+        if self.label_scaling_factors is not None:
+            self.label_scaling_factors = numpy_to_torch(self.label_scaling_factors)
 
+# %% Augmentation helper class
 class ImageAugmentationsHelper(torch.nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
         super().__init__()
@@ -172,7 +175,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
 
             if self.augs_cfg.label_scaling_factors is not None:
                 # Apply inverse scaling to labels
-                lbl_shifted = lbl_shifted / numpy_to_torch(self.augs_cfg.label_scaling_factors).to(lbl_shifted.device)
+                lbl_shifted = lbl_shifted / self.augs_cfg.label_scaling_factors.to(lbl_shifted.device)
 
         return aug_img, lbl_shifted
 

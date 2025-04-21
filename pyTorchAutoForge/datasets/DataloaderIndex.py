@@ -37,7 +37,7 @@ class DataloaderIndex:
             # Just assign dataloaders
             self.TrainingDataLoader: DataLoader = trainLoader
             self.ValidationDataLoader: DataLoader = validLoader
-            self.testLoader: DataLoader | None = testLoader
+            self.testingDataLoader: DataLoader | None = testLoader
 
         else:
             # Perform random splitting of training data to get validation dataset
@@ -49,7 +49,7 @@ class DataloaderIndex:
             split_generator_ = Generator().manual_seed(split_seed)
             with_test_dataset = False
             testData = None
-            self.testLoader = None
+            self.testingDataLoader = None
 
             if isinstance(split_ratio, int | float):
 
@@ -96,7 +96,7 @@ class DataloaderIndex:
                                                    num_workers=trainLoader.num_workers, drop_last=False)
             
             if with_test_dataset and testData is not None:
-                self.testLoader = DataLoader(testData, batch_size=trainLoader.batch_size, shuffle=False,
+                self.testingDataLoader = DataLoader(testData, batch_size=trainLoader.batch_size, shuffle=False,
                                              num_workers=0, drop_last=False)
                 
 
