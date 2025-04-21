@@ -924,9 +924,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                 save_mode=AutoForgeModuleSaveMode.model_arch_state, 
                                 example_input=examplePair[0], 
                                 target_device=self.device)
-                    print(f"\t\033[38;5;208mBest model checkpoint saved correctly. {str(e)}.\033[0m")
-            except Exception as e: 
-                print(f"\t\033[31mAttempt to save best model checkpoint failed due to: {str(e)}\033[0m")
+                    print(f"\t\033[38;5;208mBest model checkpoint saved correctly.\033[0m")
+            except Exception as err: 
+                print(f"\t\033[31mAttempt to save best model checkpoint failed due to: {str(err)}\033[0m")
 
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED') # Mark run as killed
