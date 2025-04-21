@@ -131,6 +131,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     enable_early_pruning: bool = False  # Enable early pruning
     pruning_patience: int = 50  # Number of epochs to wait before pruning
     batch_accumulation_factor: int = 1  # Number of batches to accumulate gradients before updating weights
+    EXIT_AFTER_PRUNING: bool = True
 
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
@@ -526,6 +527,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         running_loss : float = 0.0
         run_time_total : float = 0.0
+        loop_iter_number : int = 0
         current_batch : int = 1
         is_last_batch : bool = False
 
@@ -536,6 +538,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
             
+            loop_iter_number += 1
             # Start timer for batch processing time
             start_time = time.perf_counter()
 
@@ -563,6 +566,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             train_loss_value = train_loss_dict.get('lossValue') if isinstance(
                 train_loss_dict, dict) else train_loss_dict
 
+            if self.batch_accumulation_factor > 1:
+                train_loss_value = train_loss_value / self.batch_accumulation_factor
+
             # TODO: here one may log intermediate metrics at each update
             # if self.mlflow_logging:
             #     mlflow.log_metrics()
@@ -588,7 +594,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.num_of_updates}, average loop time: {1000*run_time_total/current_batch:4.4g} [ms], current lr: {self.current_lr:.06g}"
+            progress = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, average loss: {running_loss / current_batch:.4f}, number of updates: {self.num_of_updates}, average loop time: {1000*run_time_total/loop_iter_number:4.4g} [ms], current lr: {self.current_lr:.06g}"
 
             # Print progress on the same line
             sys.stdout.write('\r' + progress)
@@ -956,7 +962,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         sys.exit("No input available, program stop.")
             
             # Exit from program gracefully
-            sys.exit(0)
+            if EXIT_AFTER_PRUNING:
+                sys.exit(0)
 
         except optuna.TrialPruned:
 
