@@ -131,7 +131,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     enable_early_pruning: bool = False  # Enable early pruning
     pruning_patience: int = 50  # Number of epochs to wait before pruning
     batch_accumulation_factor: int = 1  # Number of batches to accumulate gradients before updating weights
-    EXIT_AFTER_PRUNING: bool = True
+    EXIT_ON_PRUNING: bool = True
 
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
@@ -967,7 +967,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         sys.exit("No input available, program stop.")
             
             # Exit from program gracefully
-            if self.EXIT_AFTER_PRUNING:
+            if self.EXIT_ON_PRUNING:
                 sys.exit(0)
 
         except optuna.TrialPruned:
