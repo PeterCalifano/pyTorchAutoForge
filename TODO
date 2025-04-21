@@ -3,19 +3,23 @@
 ## Planned changelog for next releases
 
 - [x] v0.1.3
+
 - [ ] v0.1.4
   - [x] Add prototype implementation of heads and backbones builders using registries
   - [ ] Add prototype implementation of dataset classes from RAM/disk
   - [ ] Fix all unit tests
   - [ ] Complete 1st version of model profiler
   - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods) and SHAP (basic explainer)
-  - [ ] Add refactored version of kornia augmentation blocks (AugmentationHelper)
-  - [ ] Review NN and CNN template blocks for modularity
+  - [x] Add refactored version of augmentation pipeline (ImagesAugmentationHelper)
+  - [x] Refactor and improve ModelTrainingManager updating augmentation pipeline and adding batch accumulation
+
 - [ ] v0.1.5
+  - [ ] Review NN and  template blocks for modularity
   - [ ] Add configurable dataclasses from template yml files for training manager and extensible prototype (see pySR configuration in nav-frontend)
   - [ ] Add pySR conveniency module
   - [ ] Explore Hydra for configuration management from yml files
   - [ ] Add abstract meta class for loss functions to enforce interface
+
 - [ ] v0.2.0
   - [ ] All those above
   - [ ] Add working argument parser for training scripts

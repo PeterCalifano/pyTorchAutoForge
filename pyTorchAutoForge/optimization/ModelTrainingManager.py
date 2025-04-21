@@ -121,8 +121,8 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     batch_size: int
 
     # DIFFERENTIABLE DATA AUGMENTATION using kornia
-    kornia_transform: torch.nn.Sequential | ImageAugmentationsHelper | None = None
-    kornia_augs_in_validation: bool = False
+    data_augmentation_module: torch.nn.Sequential | ImageAugmentationsHelper | None = None
+    augment_validation_data: bool = False
     
     # FIELDS with DEFAULTS
     # Optimization strategy
@@ -130,7 +130,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     keep_best: bool = True  # Keep best model during training
     enable_early_pruning: bool = False  # Enable early pruning
     pruning_patience: int = 50  # Number of epochs to wait before pruning
-    enable_batch_accumulation: bool = False  # Enable batch accumulation
+    batch_accumulation_factor: int = 1  # Number of batches to accumulate gradients before updating weights
 
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
@@ -299,7 +299,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.checkpoint_to_load is not None:
             # Load model checkpoint
             try:
-                self.model = LoadModel(model, self.checkpoint_to_load, False, load_strict=self.load_strict)
+                model = LoadModel(model, self.checkpoint_to_load, False, load_strict=self.load_strict)
 
             except Exception as errMsg:
                 # DEVNOTE: here there should be a timer to automatically stop if no input is given for TBD seconds. Need a second thread though.
@@ -308,35 +308,41 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if user_input != 'y':
                     raise ValueError("Got stop command. Termination signal...")
                 
+        if model is None:
+            raise ValueError('Model is not defined. Cannot proceed with training.')
 
-        self.model : torch.nn.Module | None = (model).to(self.device)
-        self.bestModel = None
-        self.lossFcn = lossFcn
-        self.trainingDataloader = None
-        self.validationDataloader = None
-        self.trainingDataloaderSize = 0
-        self.currentEpoch = 0
-        self.num_of_updates = 0
+        self.model: torch.nn.Module = (model).to(self.device)
+        self.bestModel : torch.nn.Module | None = None
+        self.loss_fcn : torch.nn.Module = lossFcn
+        
+        self.trainingDataloader : Dataloader | None = None
+        self.validationDataloader : Dataloader | None = None
+        self.testingDataloader : Dataloader | None = None # For additional evaluation phase if set provided. Validation loader is used if not.
 
-        self.currentTrainingLoss = None
-        self.currentValidationLoss = None
+        self.trainingDataloaderSize : int = 0
+        self.current_epoch : int = 0
+        self.num_of_updates : int = 0
+
+        self.currentTrainingLoss : float = None
+        self.currentValidationLoss : float = None
         self.currentMlflowRun = mlflow.active_run()  # Returns None if no active run
 
-        self.current_lr = self.initial_lr
+        self.current_lr : float = self.initial_lr
 
         self.paramsToLogDict = None
         if paramsToLogDict is not None:
             self.paramsToLogDict = paramsToLogDict
 
         # OPTUNA parameters
+        self.optuna_custom_score = None # DEVNOTE a Function or Callable object may be placed here. Define abstract class for this
         if self.optuna_trial is not None:
             self.OPTUNA_MODE = True
         else:
             self.OPTUNA_MODE = False
 
         # Set kornia transform device
-        if self.kornia_transform is not None:
-            self.kornia_transform = self.kornia_transform.to(self.device)
+        if self.data_augmentation_module is not None:
+            self.data_augmentation_module = self.data_augmentation_module.to(self.device)
 
         # Initialize dataloaders if provided
         if dataLoaderIndex is not None:
@@ -360,6 +366,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             else:
                 raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
 
+        # Additional initializations
+        if not (os.path.isdir(self.checkpoint_dir)):
+            os.mkdir(self.checkpoint_dir)
 
     def define_optimizer_(self, optimizer: optim.Optimizer | enumOptimizerType) -> None:
         """
@@ -423,10 +432,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             dataloaderIndex (DataloaderIndex): An instance of DataloaderIndex that provides
                                                the training and validation dataloaders.
         """
+        if not isinstance(dataloaderIndex, DataloaderIndex):
+            raise TypeError(f'{colorama.Fore.RED}Expected dataloaderIndex to be of type DataloaderIndex, but found {type(dataloaderIndex)} instead.')
+
         self.trainingDataloader : DataLoader = dataloaderIndex.TrainingDataLoader
         self.validationDataloader : DataLoader = dataloaderIndex.ValidationDataLoader
-        self.trainingDataloaderSize = len(self.trainingDataloader)
-        self.validationDataloaderSize = len(self.validationDataloader)
+
+        self.trainingDataloaderSize : int = len(self.trainingDataloader)
+        self.validationDataloaderSize : int = len(self.validationDataloader)
+
+        if dataloaderIndex.testingDataLoader is not None:
+            self.testingDataloader : DataLoader = dataloaderIndex.testingDataLoader
 
         print(f"Training DataLoader size: {self.trainingDataloaderSize}, Validation DataLoader size: {self.validationDataloaderSize}")
 
@@ -434,65 +450,141 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
     def getTracedModel(self):
         raise NotImplementedError('Method not implemented yet.')
 
+    def printSessionInfo(self):
+        """
+        Prints the session information and configuration settings for the model training.
+
+        This method provides a detailed overview of the current training session, including:
+        - Task type
+        - Model name
+        - Device being used
+        - Checkpoint directory and file
+        - MLflow logging status
+        - Number of epochs
+        - Trainer mode (OPTUNA or NORMAL)
+        - Initial learning rate
+        - Optimizer and scheduler details
+        - Batch size
+        - Keep-best strategy status
+        - Validation augmentation status
+
+        If an augmentation pipeline is defined, it also prints the details of each transform in the pipeline,
+        including the class name and parameters.
+
+        Returns:
+            None
+        """
+
+        # Print out session information to check config
+        formatted_output = f"""
+        SESSION INFO
+
+        - Task Type:                  {self.tasktype}
+        - Model Name:                 {self.modelName}
+        - Device:                     {self.device}
+        - Checkpoint Directory:       {self.checkpoint_dir}
+        - Mlflow Logging:             {self.mlflow_logging}
+        - Checkpoint file:            {self.checkpoint_to_load}
+
+        SETTINGS
+
+        - Number of Epochs:           {self.num_of_epochs}
+        - Trainer Mode:               {'OPTUNA' if self.OPTUNA_MODE else 'NORMAL'}
+        - Initial Learning Rate:      {self.initial_lr:0.8g}
+        - Optimizer:                  {self.optimizer.__class__.__name__}
+        - Scheduler:                  {self.lr_scheduler.__class__.__name__ if self.lr_scheduler is not None else 'None'}
+        - Default batch size:         {self.batch_size}
+        - Keep-best strategy:         {self.keep_best}
+        - Augment validation:         {self.augment_validation_data}
+        - Batch accumulation factor:  {self.batch_accumulation_factor}
+        """
+        print(formatted_output)
+
+        if self.data_augmentation_module is not None and isinstance(self.data_augmentation_module, torch.nn.Sequential):
+            print("\033[35mKornia nn.Sequential augmentation pipeline:\033[0m")
+            for idx, transform in enumerate(self.data_augmentation_module):
+                print(f"  ({idx}): {transform.__class__.__name__}")
+
+                # Print each parameter for the transform
+                params = vars(transform)
+                for param, value in params.items():
+                    print(f"      - {param}: {value}")
+
+        elif isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
+            print(
+                "\033[35mImage Augmentation helper pipeline configuration:\033[0m")
+            pprint.pprint(object=self.data_augmentation_module.augs_cfg, indent=2)
+        else:
+            print("No Kornia augmentation pipeline defined.")
+
+
     def trainModelOneEpoch_(self):
         '''Method to train the model using the specified datasets and loss function. Not intended to be called as standalone.'''
-
-        if self.trainingDataloader is None:
-            raise ValueError('No training dataloader provided.')
-
-        if self.model is None:
-            raise ValueError('No model provided.')
 
         # Set model instance in training mode ("informing" backend that the training is going to start)
         self.model.train()
 
-        running_loss = 0.0
-        run_time_total = 0.0
-        current_batch = 1
-        # prev_model = copy.deepcopy(self.model)
+        running_loss : float = 0.0
+        run_time_total : float = 0.0
+        current_batch : int = 1
+        is_last_batch : bool = False
+
+        if self.optimizer is None:
+            raise TypeError('Optimizer is not defined. Cannot proceed with training.')
+        
+        self.optimizer.zero_grad()
+
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
             
             # Start timer for batch processing time
             start_time = time.perf_counter()
+
+            # Check if batch is the last one
+            if batch_idx + 1 == self.trainingDataloaderSize:
+                is_last_batch = True
 
             # Get input and labels and move to target device memory
             # Define input, label pairs for target device
             # DEVNOTE: TBD if this goes here or if to move dataloader to device
             X, Y = X.to(self.device), Y.to(self.device)
 
-            # Perform data augmentation on batch using kornia modules
-            if self.kornia_transform is not None and not isinstance(self.kornia_transform, ImageAugmentationsHelper):
-                X = (self.kornia_transform(255 * X).clamp(0, 255))/255 # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
-
-            elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
-                X, Y = self.kornia_transform(X, Y)
+            # Perform data augmentation on batch
+            if self.data_augmentation_module is not None:
+                X, Y = self.augment_data_batch(X, Y)
 
             # Perform FORWARD PASS to get predictions
             # Evaluate model at input, calls forward() method
-            predVal = self.model(X)
+            predicted_values = self.model(X)
 
             # Evaluate loss function to get loss value dictionary
-            trainLossDict = self.lossFcn(predVal, Y)
+            train_loss_dict = self.loss_fcn(predicted_values, Y)
 
             # Get loss value from dictionary
-            trainLossVal = trainLossDict.get('lossValue') if isinstance(
-                trainLossDict, dict) else trainLossDict
+            train_loss_value = train_loss_dict.get('lossValue') if isinstance(
+                train_loss_dict, dict) else train_loss_dict
 
             # TODO: here one may log intermediate metrics at each update
             # if self.mlflow_logging:
             #     mlflow.log_metrics()
 
             # Update running value of loss for status bar at current epoch
-            running_loss += trainLossVal.item()
+            running_loss += train_loss_value.item()
 
             # Perform BACKWARD PASS to update parameters
-            self.optimizer.zero_grad()  # Reset gradients for next iteration
-            trainLossVal.backward()     # Compute gradients
-            self.optimizer.step()       # Apply gradients from the loss
-            self.num_of_updates += 1
+            train_loss_value.backward()     # Compute gradients
+            
+            if (batch_idx + 1) % self.batch_accumulation_factor == 0 or last_batch:
+                # Make optimization step and reset gradients
+                self.optimizer.step()       # Apply gradients from the loss
+                self.optimizer.zero_grad()  # Reset gradients for next iteration
+                self.num_of_updates += 1
 
-            # Accumulate batch processing time
-            run_time_total += time.perf_counter() - start_time
+                # Accumulate batch processing time
+                run_time_total += time.perf_counter() - start_time
+            else:
+                # Accumulate batch processing time
+                run_time_total += time.perf_counter() - start_time
+                continue # Accumulate more batches before update
 
             # Calculate progress
             current_batch = batch_idx + 1
@@ -515,8 +607,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.model is None:
             raise ValueError('No model provided.')
         
+        # TODO improve this method, no real need to have two separate cycles for classification and regression. Just move different code to submethods. Moreover, need to adapt for other applications
+
         self.model.eval()
-        validationLossVal = 0.0  # Accumulation variables
+        validation_loss_value = 0.0  # Accumulation variables
         # batchMaxLoss = 0
         # validationData = {}  # Dictionary to store validation data
 
@@ -524,7 +618,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         original_dataloader = self.validationDataloader
 
         # Temporarily initialize a new dataloader for validation
-        newBathSizeTmp = 2 * self.validationDataloader.batch_size  # TBC how to set this value
+        newBathSizeTmp = 2 * self.validationDataloader.batch_size  # TODO replace this heuristics with something more grounded and memory aware!
 
         tmpdataloader = DataLoader(
             original_dataloader.dataset,
@@ -535,7 +629,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             num_workers=0
         )
 
-        numberOfBatches = len(tmpdataloader)
+        num_of_batches = len(tmpdataloader)
         dataset_size = len(tmpdataloader.dataset)
 
         with torch.no_grad():
@@ -543,11 +637,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             if self.tasktype == TaskType.CLASSIFICATION:
 
-                if not (isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
+                if not (isinstance(self.loss_fcn, torch.nn.CrossEntropyLoss)):
                     raise NotImplementedError(
                         'Current classification validation function only supports nn.CrossEntropyLoss.')
 
-                correctPredictions = 0
+                correct_predictions = 0
 
                 for batch_idx, (X, Y) in enumerate(tmpdataloader):
 
@@ -557,41 +651,37 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
 
-                    # Perform data augmentation on batch using kornia modules
-                    if self.kornia_transform is not None and not isinstance(self.kornia_transform, ImageAugmentationsHelper):
-                        # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
-                        X = (self.kornia_transform(255 * X).clamp(0, 255))/255
-
-                    elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
-                        X, Y = self.kornia_transform(X, Y)
+                    # Run data agmentations
+                    if self.data_augmentation_module is not None:
+                        X, Y = self.augment_data_batch(X, Y)
 
                     # Perform FORWARD PASS
-                    predVal = self.model(X)  # Evaluate model at input
+                    predicted_val = self.model(X)  # Evaluate model at input
 
                     # Evaluate loss function to get loss value dictionary
-                    validationLossDict = self.lossFcn(predVal, Y)
-                    validationLossVal += validationLossDict.get('lossValue') if isinstance(
-                        validationLossDict, dict) else validationLossDict.item()
+                    valid_loss_dict = self.loss_fcn(predicted_val, Y)
+                    validation_loss_value += valid_loss_dict.get('lossValue') if isinstance(
+                        valid_loss_dict, dict) else valid_loss_dict.item()
 
                     # Evaluate how many correct predictions (assuming CrossEntropyLoss)
-                    correctPredictions += (predVal.argmax(1) == Y).type(torch.float).sum().item()
+                    correct_predictions += (predicted_val.argmax(1) == Y).type(torch.float).sum().item()
 
                     # Accumulate batch processing time
                     run_time_total += time.perf_counter() - start_time
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: { validationLossVal / current_batch:.4f}, average loop time: {1000*run_time_total/(current_batch):4.4g} [ms]"
+                    progress = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, average loss: { validation_loss_value / current_batch:.4f}, average loop time: {1000*run_time_total/(current_batch):4.4g} [ms]"
 
                     # Print progress on the same line
                     sys.stdout.write('\r' + progress)
                     sys.stdout.flush()
 
-                validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
+                validation_loss_value /= num_of_batches  # Compute batch size normalized loss value
                 # Compute percentage of correct classifications over dataset size
-                correctPredictions /= dataset_size
-                print(f"\n\t\tFinal score - accuracy: {(100*correctPredictions):0.2f}%, average loss: {validationLossVal:.4f}\n")
-                return validationLossVal, correctPredictions
+                correct_predictions /= dataset_size
+                print(f"\n\t\tFinal score - accuracy: {(100*correct_predictions):0.2f}%, average loss: {validation_loss_value:.4f}\n")
+                return validation_loss_value, correct_predictions
 
             elif self.tasktype == TaskType.REGRESSION:
 
@@ -603,110 +693,65 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Get input and labels and move to target device memory
                     X, Y = X.to(self.device), Y.to(self.device)
 
-                    # Perform data augmentation on batch using kornia modules
-                    if self.kornia_transform is not None and not isinstance(self.kornia_transform, ImageAugmentationsHelper):
-                        # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
-                        X = (self.kornia_transform(255 * X).clamp(0, 255))/255
-
-                    elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
-                        X, Y = self.kornia_transform(X, Y)
+                    # Perform data augmentation on batch
+                    if self.data_augmentation_module is not None:
+                        X, Y = self.augment_data_batch(X, Y)
 
                     # Perform FORWARD PASS
-                    predVal = self.model(X)  # Evaluate model at input
+                    predicted_val = self.model(X)  # Evaluate model at input
 
                     # Evaluate loss function to get loss value dictionary
-                    validationLossDict = self.lossFcn(predVal, Y)
+                    valid_loss_dict = self.loss_fcn(predicted_val, Y)
 
                     # Get loss value from dictionary
-                    validationLossVal += validationLossDict.get('lossValue') if isinstance(
-                        validationLossDict, dict) else validationLossDict.item()
+                    validation_loss_value += valid_loss_dict.get('lossValue') if isinstance(
+                        valid_loss_dict, dict) else valid_loss_dict.item()
 
                     # Accumulate batch processing time
                     run_time_total += time.perf_counter() - start_time
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress = f"\tValidation: Batch {batch_idx+1}/{numberOfBatches}, average loss: {validationLossVal / current_batch:.4f}, average loop time: {1000 * run_time_total/(current_batch):4.2f} [ms]"
+                    progress = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, average loss: {validation_loss_value / current_batch:.4f}, average loop time: {1000 * run_time_total/(current_batch):4.2f} [ms]"
                     
                     # Print progress on the same line
                     sys.stdout.write('\r' + progress)
                     sys.stdout.flush()
 
-                validationLossVal /= numberOfBatches  # Compute batch size normalized loss value
-                print(f"\n\t\tFinal score - avg. loss: {validationLossVal:.4f}\n")
+                validation_loss_value /= num_of_batches  # Compute batch size normalized loss value
+                print(f"\n\t\tFinal score - avg. loss: {validation_loss_value:.4f}\n")
 
-                return validationLossVal
+                return validation_loss_value
 
             else:
                 raise NotImplementedError(
                     'Custom task type not implemented yet.')
 
-
-    def printSessionInfo(self):
-        """  
-        _summary_   
-        Prints the session information and configuration settings for the model training.
-        The output includes:
-        - Task type
-        - Model name
-        - Device being used
-        - Number of epochs
-        - Trainer mode (OPTUNA or NORMAL)
-        - Initial learning rate
-        If a Kornia augmentation pipeline is defined, it also prints the details of each transform in the pipeline,
-        including the class name and parameters.
-        Returns:
-            None
-        """
-    
-        # Print out session information to check config
-        formatted_output = f"""
-        SESSION INFO
-
-        - Task Type:                  {self.tasktype}
-        - Model Name:                 {self.modelName}
-        - Device:                     {self.device}
-        - Checkpoint Directory:       {self.checkpoint_dir}
-        - Mlflow Logging:             {self.mlflow_logging}
-        - Checkpoint file:            {self.checkpoint_to_load}
-
-        SETTINGS
-
-        - Number of Epochs:           {self.num_of_epochs}
-        - Trainer Mode:               {'OPTUNA' if self.OPTUNA_MODE else 'NORMAL'}
-        - Initial Learning Rate:      {self.initial_lr:0.8g}
-        - Optimizer:                  {self.optimizer.__class__.__name__}
-        - Scheduler:                  {self.lr_scheduler.__class__.__name__ if self.lr_scheduler is not None else 'None'}
-        - Default batch size:         {self.batch_size}
-        - Keep-best strategy:         {self.keep_best}
-        - Kornia augs in validation:  {self.kornia_augs_in_validation}
-        """
-        print(formatted_output)
-
-        if self.kornia_transform is not None and isinstance(self.kornia_transform, torch.nn.Sequential):
-            print("Kornia Augmentation Pipeline:")
-            for idx, transform in enumerate(self.kornia_transform):
-                print(f"  ({idx}): {transform.__class__.__name__}")
-
-                # Print each parameter for the transform
-                params = vars(transform)
-                for param, value in params.items():
-                    print(f"      - {param}: {value}")
-        elif isinstance(self.kornia_transform, ImageAugmentationsHelper):
-            print("Kornia Augmentation Pipeline:")
-            pprint.pprint(self.kornia_transform.augs_cfg)
-        else:
-            print("No Kornia augmentation pipeline defined.")
-
     def trainAndValidate(self):
-        """_summary_
-
-        Raises:
-            optuna.TrialPruned: _description_
         """
+        trainAndValidate _summary_
+
+        _extended_summary_
+
+        :raises optuna.TrialPruned: _description_
+        :raises optuna.TrialPruned: _description_
+        :raises optuna.TrialPruned: _description_
+        :raises optuna.TrialPruned: _description_
+        :return: _description_
+        :rtype: _type_
+        """        
         colorama.init(autoreset=True)
 
+        if self.trainingDataloader is None:
+            raise ValueError(f'{colorama.Fore.RED}No training dataloader provided. Cannot proceed.')
+        
+        if self.validationDataloader is None:
+            raise ValueError(f'{colorama.Fore.RED}No validation dataloader provided or split from training. Cannot proceed.')
+
+
+        # Spin mlflow pipeline if required
         self.startMlflowRun()  # DEVNOTE: TODO split into more subfunctions
+
         print(f'\n\n{colorama.Style.BRIGHT}{colorama.Fore.BLUE}-------------------------- Training and validation session start --------------------------\n')
         self.printSessionInfo()
 
@@ -727,27 +772,35 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # Update current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
+                # Log basic data
                 if self.mlflow_logging:
                     mlflow.log_metric('lr', self.current_lr,
-                                      step=self.currentEpoch)
-                    
-                if self.mlflow_logging and self.OPTUNA_MODE:
-                    mlflow.log_param('optuna_trial_ID', self.optuna_trial.number)    
-                    
+                                      step=self.current_epoch)
+                       
                 # Perform training for one epoch
-                tmpTrainLoss = self.trainModelOneEpoch_()
+                tmp_train_loss = self.trainModelOneEpoch_()
 
                 # Perform validation at current epoch
-                tmpValidLoss = self.validateModel_()
+                tmp_valid_loss = self.validateModel_()
 
-                if isinstance(tmpValidLoss, tuple):
-                    tmpValidLoss = tmpValidLoss[0]
+                # TODO clarify intent of this, remove if not really necessary
+                if isinstance(tmp_valid_loss, tuple):
+                    tmp_valid_loss = tmp_valid_loss[0] 
+                
+                # At epoch 0, set initial validation loss
+                if self.currentValidationLoss is None: 
+                    self.currentValidationLoss = tmp_valid_loss
+                    self.bestValidationLoss = tmp_valid_loss
 
                 # Optuna functionalities
                 # Report validation loss to Optuna pruner
                 if self.OPTUNA_MODE == True:
                     # Compute average between training and validation loss // TODO: verify feasibility of using the same obj function as sampler
-                    optuna_loss = (tmpTrainLoss + tmpValidLoss) / 2
+                    if self.optuna_custom_score is not None:
+                        #optuna_loss = self.optuna_custom_score()
+                        raise NotImplementedError('Branch of code still in development.')
+                    else:
+                        optuna_loss = (tmp_train_loss + tmp_valid_loss) / 2
                     self.optuna_trial.report(optuna_loss, step=epoch_num)
 
                     if self.optuna_trial.should_prune():
@@ -756,14 +809,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Execute post-epoch operations
                     self.evalExample()        # Evaluate example if enabled
 
-                if self.currentValidationLoss is None:  # At epoch 0, set initial validation loss
-                    self.currentValidationLoss = tmpValidLoss
-                    self.bestValidationLoss = tmpValidLoss
-
                 # Update stats if new best model found (independently of keep_best flag)
-                if tmpValidLoss <= self.bestValidationLoss:
+                if tmp_valid_loss <= self.bestValidationLoss:
                     self.bestEpoch = epoch_num
-                    self.bestValidationLoss = tmpValidLoss
+                    self.bestValidationLoss = tmp_valid_loss
                     no_new_best_counter = 0
                 else:
                     no_new_best_counter += 1
@@ -771,7 +820,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # "Keep best" strategy implementation (trainer will output the best overall model at cycle end)
                 # DEVNOTE: this could go into a separate method
                 if self.keep_best:
-                    if tmpValidLoss <= self.bestValidationLoss:
+                    if tmp_valid_loss <= self.bestValidationLoss:
                         
                         # Transfer best model to CPU to avoid additional memory allocation on GPU
                         self.bestModel: torch.nn.Module | None = copy.deepcopy(self.model).to('cpu') 
@@ -798,18 +847,18 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                     target_device='cpu')
 
                 # Update current training and validation loss values
-                self.currentTrainingLoss: float = tmpTrainLoss
-                self.currentValidationLoss: float = tmpValidLoss
+                self.currentTrainingLoss: float = tmp_train_loss
+                self.currentValidationLoss: float = tmp_valid_loss
 
                 if self.mlflow_logging and self.currentMlflowRun is not None:
                     if self.currentTrainingLoss is not None:
-                        mlflow.log_metric( 'train_loss', self.currentTrainingLoss, step=self.currentEpoch)
+                        mlflow.log_metric( 'train_loss', self.currentTrainingLoss, step=self.current_epoch)
 
                     if self.currentValidationLoss is not None:
-                        mlflow.log_metric( 'validation_loss', self.currentValidationLoss, step=self.currentEpoch)
+                        mlflow.log_metric( 'validation_loss', self.currentValidationLoss, step=self.current_epoch)
 
-                    mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss, step=self.currentEpoch)
-                    mlflow.log_metric( 'num_of_updates', self.num_of_updates, step=self.currentEpoch)
+                    mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss, step=self.current_epoch)
+                    mlflow.log_metric( 'num_of_updates', self.num_of_updates, step=self.current_epoch)
 
                 print('\tCurrent best at epoch {best_epoch}, with validation loss: {best_loss:.06g}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
@@ -821,12 +870,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         break
                 elif self.OPTUNA_MODE == True:
                     # Safety exit for model divergence
-                    if tmpTrainLoss >= 1E8 or tmpValidLoss >= 1E8:
+                    if tmp_train_loss >= 1E8 or tmp_valid_loss >= 1E8:
                         raise optuna.TrialPruned()
 
                 # Post epoch operations
-                self.updateLerningRate()  # Update learning rate if scheduler is provided
-                self.currentEpoch += 1
+                self.updateLearningRate_()  # Update learning rate if scheduler is provided
+                self.current_epoch += 1
             ### END OF TRAINING-VALIDATION LOOP
 
             # Model saving code
@@ -835,11 +884,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     os.remove(model_save_name) 
             
             if self.keep_best:
-                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(
-                    best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
-
-            if not (os.path.isdir(self.checkpoint_dir)):
-                os.mkdir(self.checkpoint_dir)
+                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
 
             with torch.no_grad():
                 examplePair = next(iter(self.validationDataloader))
@@ -867,6 +912,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         except KeyboardInterrupt:
             print('\n\033[38;5;208mModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.\033[0m')
             
+            # Save best model up to current epoch if not None
+            try:
+                if self.bestModel is not None:
+                    examplePair = next(iter(self.validationDataloader))
+                    model_save_name = os.path.join(
+                        self.checkpoint_dir, self.modelName + f"_epoch_{self.bestEpoch}")
+
+                    if self.bestModel is not None:
+                        SaveModel(model=self.bestModel, model_filename=model_save_name,
+                                save_mode=AutoForgeModuleSaveMode.model_arch_state, 
+                                example_input=examplePair[0], 
+                                target_device=self.device)
+                    print(f"\t\033[38;5;208mBest model checkpoint saved correctly. {str(e)}.\033[0m")
+            except Exception as e: 
+                print(f"\t\033[31mAttempt to save best model checkpoint failed due to: {str(e)}\033[0m")
+
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED') # Mark run as killed
 
@@ -921,9 +982,30 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Exit from program gracefully
             sys.exit(0)
 
+    def augment_data_batch(self, X, Y):
+        if self.data_augmentation_module is None:
+            print(f"{colorama.Fore.LIGHTRED_EX}Warning: augment_data_batch was called, but data_augmentation_module is None. No transformation was applied.")
+            return X, Y
+
+        # Perform data augmentation on batch using kornia modules
+        if not isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
+            # DEVNOTE: legacy branch, should be removed in later releases, assumes specific input conditions, not configurable
+
+            # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
+            X = (self.data_augmentation_module(255 * X).clamp(0, 255))/255
+
+        elif isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
+            # Apply ImageAugmentationsHelper forward method
+            X, Y = self.data_augmentation_module(X, Y)
+
+        return X, Y
 
     def evalExample(self, num_samples: int = 128) -> None:
         # TODO Extend method distinguishing between regression and classification tasks
+
+        if self.model is None:
+            raise ValueError(f'{colorama.Fore.RED}No model provided. Cannot proceed with inference!')
+
         self.model.eval()
         if self.eval_example:
             # exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
@@ -939,91 +1021,126 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 average_prediction_err = None
                 worst_prediction_err = None
                 prediction_errors = None
-                correctPredictions = 0
+                correct_predictions = 0
 
+                # Define temporary dataloader
+                if self.testingDataloader is not None:
+                    tmp_loader = self.testingDataloader
+                else:
+                    tmp_loader = self.validationDataloader
+
+                eval_dataloader = DataLoader(
+                                            dataset=tmp_loader.dataset,
+                                            batch_size=tmp_loader.batch_size,
+                                            shuffle=False,
+                                            drop_last=False,
+                                            pin_memory=False,
+                                            num_workers=0
+                                            )
+                    
+                if eval_dataloader is None:
+                    print(f'{colorama.Fore.RED}Evaluation dataloader is None. Cannot proceed in testing the model. Manager will continue with training and validation.')
+                    return
+
+                label_scaling_factors = 1.0
                 while samples_counter < num_samples:
                     # Note that this returns a batch of size given by the dataloader
-                    examplePair = next(iter(self.validationDataloader))
+                    examplePair = next(iter(eval_dataloader))
 
                     X = examplePair[0].to(self.device)
                     Y = examplePair[1].to(self.device)
 
-                    # TODO this is wrong, modify to make compliant with training and validation loops
-                    
-                    # Perform FORWARD PASS
-                    examplePredictions = self.model(
-                        X)  # Evaluate model at input
+                    if self.data_augmentation_module is not None:
+                        X, Y = self.augment_data_batch(X, Y)
 
-                    if examplePredictions.shape != Y.shape:
-                        # Attempt to match shapes
-                        Y = Y[:, 0:examplePredictions.size(1)]
+                        # Assign labels scaling factors from helper if provided
+                        if isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
+                            if self.data_augmentation_module.augs_cfg.label_scaling_factors is not None:
+                                label_scaling_factors = self.data_augmentation_module.augs_cfg.label_scaling_factors.to(Y.device)
+
+                    # Perform FORWARD PASS
+                    example_predictions = self.model(X)  # Evaluate model at input
+
+                    try:
+                        if example_predictions.shape != Y.shape:
+                            # Attempt to match shapes
+                            Y = Y[:, 0:example_predictions.size(1)]
+                    except:
+                        print(f'{colorama.Fore.RED}Predicted value shape {example_predictions.shape} did not match labels shape {Y.shape} and automatic matching attempt failed. Evaluation stopped.')
+                        return
 
                     # Task specific code
+                    if not self.tasktype == TaskType.REGRESSION and not self.tasktype == TaskType.CLASSIFICATION: 
+                        print(f'{colorama.Fore.RED}Invalid Task type. Cannot proceed in evaluation. Continuing execution...')
+                        return
+                    
                     if self.tasktype == TaskType.REGRESSION:
                         if prediction_errors is None:
-                            prediction_errors = examplePredictions - Y
+                            # Initialize predictions errors tensor
+                            prediction_errors = example_predictions - Y
                         else:
+                            # Concatenate if existing, for later stats computation
                             prediction_errors = torch.cat(
-                                [prediction_errors, examplePredictions - Y], dim=0)
+                                [prediction_errors, example_predictions - Y], dim=0)
 
                         # Compute loss for each input separately
-                        outLossVar = self.lossFcn(examplePredictions, Y)
+                        output_loss = self.loss_fcn(example_predictions, Y) # DEVNOTE must return a Tensor!
 
                         # Compute running average of loss
-                        average_loss += outLossVar.item()
+                        average_loss += output_loss.item()
 
                     elif self.tasktype == TaskType.CLASSIFICATION:
 
-                        if not (isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
+                        if not (isinstance(self.loss_fcn, torch.nn.CrossEntropyLoss)):
                             raise NotImplementedError(
                                 'Current classification validation function only supports nn.CrossEntropyLoss.')
 
-                        validationLossDict = self.lossFcn(
-                            examplePredictions, Y)
+                        example_loss_output = self.loss_fcn(example_predictions, Y)
 
-                        average_loss += validationLossDict.get('lossValue') if isinstance(
-                            validationLossDict, dict) else validationLossDict.item()  # This assumes a standard format of the output dictionary from custom loss
+                        average_loss += example_loss_output.get('lossValue') if isinstance(
+                            example_loss_output, dict) else example_loss_output.item()  # This assumes a standard format of the output dictionary from custom loss
 
                         # Evaluate how many correct predictions (assuming CrossEntropyLoss)
-                        correctPredictions += (examplePredictions.argmax(1)
+                        correct_predictions += (example_predictions.argmax(1)
                                                == Y).type(torch.float).sum().item()
-
-                    else:
-                        raise TypeError('Invalid Task type.')
 
                     # Count samples and batches
                     samples_counter += X.size(0)
                     num_of_batches += 1
 
+                # Post evaluation stats computation
                 if self.tasktype == TaskType.REGRESSION:
 
                     # Compute average prediction over all samples
-                    average_prediction_err = torch.mean(torch.abs(prediction_errors), dim=0)
+                    average_prediction_err = label_scaling_factors * torch.mean(torch.abs(prediction_errors), dim=0)
                     average_loss /= num_of_batches
 
                     # Get worst prediction error over all samples
                     worst_prediction_err, _ = torch.max(torch.abs(prediction_errors), dim=0)
+                    worst_prediction_err *= label_scaling_factors 
 
                     # Get median prediction error over all samples
                     median_prediction_err, _ = torch.median(torch.abs(prediction_errors), dim=0)
+                    median_prediction_err *= label_scaling_factors 
 
                     # TODO (TBC): log example in mlflow?
                     # if self.mlflow_logging:
                     #    print('TBC')
 
-                    print(f"\tAverage prediction errors with {samples_counter} samples: \n",
+                    print(f"\tAverage prediction (scaled) errors with {samples_counter} samples: \n",
                           "\t\t", average_prediction_err, "\n\tCorresponding average loss: ", average_loss)
-                    print(f"\n\n\tWorst prediction errors per component: \n\t\t", worst_prediction_err)
-                    print(f"\n\tMedian prediction errors per component: \n\t\t", median_prediction_err)
+                    print(f"\n\tWorst prediction (scaled) errors per component: \n\t\t", worst_prediction_err)
+                    print(f"\n\tMedian prediction (scaled) errors per component: \n\t\t", median_prediction_err)
+                    print("\n")
 
                 elif self.tasktype == TaskType.CLASSIFICATION:
 
                     average_loss /= num_of_batches  # Compute batch size normalized loss value
 
                     # Compute percentage of correct classifications over dataset size
-                    correctPredictions /= samples_counter
+                    correct_predictions /= samples_counter
                     print(f"\n\tExample prediction with {samples_counter} samples: Classification accuracy:",
-                          f"{(100*correctPredictions):>0.2f} % , average loss: {average_loss:>4f}\n")
+                          f"{(100*correct_predictions):>0.2f} % , average loss: {average_loss:>4f}\n")
 
                 else:
                     raise TypeError('Invalid Task type.')
@@ -1031,6 +1148,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
     def evalBestAccuracy(self):
         self.bestModel.to(self.device)
         self.bestModel.eval()
+
+        # TODO rework this method. It overlaps with ModelEvaluator. Perhaps add extended functionality to Trainer if user passes a ModelEvaluator to Trainer?
+
+        raise NotImplementedError('Current code is deprecated. Extended rework is TODO.')
 
         # Backup the original batch size (TODO: TBC if it is useful)
         original_dataloader = self.validationDataloader
@@ -1069,7 +1190,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     predVal = self.bestModel(X)  # Evaluate model at input
 
                     # Evaluate loss function to get loss value dictionary
-                    if self.lossFcn is None:
+                    if self.loss_fcn is None:
                         raise ValueError(
                             'Loss function not provided for regression task.')
 
@@ -1115,7 +1236,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             elif self.tasktype == TaskType.CLASSIFICATION:
 
-                if not (isinstance(self.lossFcn, torch.nn.CrossEntropyLoss)):
+                if not (isinstance(self.loss_fcn, torch.nn.CrossEntropyLoss)):
                     raise NotImplementedError(
                         'Current classification validation function only supports nn.CrossEntropyLoss.')
 
@@ -1126,7 +1247,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Perform FORWARD PASS
                     predVal = self.model(X)  # Evaluate model at input
                     # Evaluate loss function to get loss value dictionary
-                    validationLossDict = self.lossFcn(predVal, Y)
+                    validationLossDict = self.loss_fcn(predVal, Y)
                     average_loss += validationLossDict.get('lossValue') if isinstance(
                         validationLossDict, dict) else validationLossDict.item()
 
@@ -1149,8 +1270,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             else:
                 raise NotImplementedError('Task type not implemented yet.')
 
-    def updateLerningRate(self):
-        if self.lr_scheduler is not None:
+    def updateLearningRate_(self):
+        if self.lr_scheduler is not None and self.optimizer is not None:
             # Perform step of learning rate scheduler if provided
             self.optimizer.zero_grad()  # Reset gradients for safety
             self.lr_scheduler.step()
@@ -1201,10 +1322,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         Prints:
             Messages indicating the status of the MLflow runs.
         """
-        if self.model is None:
-            raise ValueError('No model provided for MLflow logging.')
-
         if self.mlflow_logging:
+            if self.model is None:
+                raise ValueError('No model provided for MLflow logging.')
+
             if self.currentMlflowRun is not None:
                 mlflow.end_run()
                 print(('\033[38;5;208m\nActive mlflow run {active_run} ended before creating new one.\033[0m').format(active_run=self.currentMlflowRun.info.run_name))
@@ -1229,8 +1350,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             mlflow.log_param('num_total_parameters', sum(p.numel() for p in self.model.parameters()))
 
             size_mb = ComputeModelParamsStorageSize(self.model)
-            mlflow.log_param(key='model_storage_MB', value=round(size_mb, 6))
-
+            mlflow.log_param(key='model_storage_MB', value=round(size_mb, 4))
 
             # Log additional parameters if provided
             if self.paramsToLogDict is not None:
@@ -1746,13 +1866,13 @@ def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
                 labelSample = Y[id, :].reshape(1, -1)
 
                 # Evaluate loss function
-                outLossVar = lossFcn(examplePredictionList[id].to(
+                output_loss = lossFcn(examplePredictionList[id].to(
                     device), labelSample.to(device))
 
-                if isinstance(outLossVar, dict):
-                    exampleLosses[id] = outLossVar.get('lossValue').item()
+                if isinstance(output_loss, dict):
+                    exampleLosses[id] = output_loss.get('lossValue').item()
                 else:
-                    exampleLosses[id] = outLossVar.item()
+                    exampleLosses[id] = output_loss.item()
 
         elif inputSample is not None and labelsSample is not None:
             # Perform FORWARD PASS # NOTE: NOT TESTED
@@ -1772,13 +1892,13 @@ def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
                 labelSample = Y[id, :].reshape(1, -1)
 
                 # Evaluate loss function
-                outLossVar = lossFcn(examplePredictionList[id].to(
+                output_loss = lossFcn(examplePredictionList[id].to(
                     device), labelSample.to(device))
 
-                if isinstance(outLossVar, dict):
-                    exampleLosses[id] = outLossVar.get('lossValue').item()
+                if isinstance(output_loss, dict):
+                    exampleLosses[id] = output_loss.get('lossValue').item()
                 else:
-                    exampleLosses[id] = outLossVar.item()
+                    exampleLosses[id] = output_loss.item()
         else:
             raise ValueError(
                 'Either both inputSample and labelsSample must be provided or neither!')
