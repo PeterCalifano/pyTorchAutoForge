@@ -208,10 +208,13 @@ class ImagesLabelsCachedDataset(TensorDataset):
         images_labels.images = numpy_to_torch(images_labels.images)
         images_labels.labels = numpy_to_torch(images_labels.labels)
 
+        # Determine automatic input_scale_factor based on type. 
+        # Default is one if cannot be inferred based on type
+        self.input_scale_factor = 1.0
         if images_labels.images.max() > 1.0 and images_labels.images.dtype == torch.uint8:
-            input_scale_factor = 255.0
+            self.input_scale_factor = 255.0
         elif images_labels.images.max() > 1.0 and images_labels.images.dtype == torch.uint16:
-            input_scale_factor = 65535.0
+            self.input_scale_factor = 65535.0
     
         # Unsqueeze images to 4D [B, C, H, W] if 3D [B, H, W]
         if images_labels.images.dim() == 3:
@@ -235,17 +238,17 @@ class ImagesLabelsCachedDataset(TensorDataset):
         # Initialize transform objects
         self.transforms = transforms
 
-        def __getitem__(self, idx):
-            # Apply transform to the image and label
-            img, lbl = super().__getitem__(idx)
+    def __getitem__(self, idx):
+        # Apply transform to the image and label
+        img, lbl = super().__getitem__(idx)
 
-            # Normalize to [0,1] if max > 1 and based on dtype
-            img = img.float() / input_scale_factor
+        # Normalize to [0,1] if max > 1 and based on dtype
+        img = img.float() / self.input_scale_factor
 
-            if self.transforms is not None:
-                return self.transforms(img), self.transforms(lbl)
-            
-            return img, lbl
+        if self.transforms is not None:
+            return self.transforms(img), self.transforms(lbl)
+        
+        return img, lbl
     
     # Batch fetching
     #def __getitem__(self, index):
