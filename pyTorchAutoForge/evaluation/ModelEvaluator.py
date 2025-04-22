@@ -124,10 +124,9 @@ class ModelEvaluator():
                     residuals = torch.cat((residuals, error_per_component), dim=0)
 
                 # Print progress
-                progress = f"\033[93mEvaluating: Batch {batch_idx+1}/{num_batches}\033[0m"
+                progress_info = f"\033[93mEvaluating: Batch {batch_idx+1}/{num_batches}\033[0m"
                 # Print progress on the same line
-                sys.stdout.write('\r' + progress)
-                sys.stdout.flush()
+                print(progress_info, end='\r')
 
             print('\n')
             if self.loss_fcn is not None:

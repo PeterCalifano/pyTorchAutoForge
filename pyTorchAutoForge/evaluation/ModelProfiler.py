@@ -1,6 +1,7 @@
 import threading
 from click import pause
 from numpy import ndarray
+from numpy.typing import NDArray
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 import os
@@ -36,24 +37,31 @@ class ModelProfilerHelper():
     run_prof(activities=None, record_shapes=False, input_sample=None):
         Runs the profiler on the model with the given input sample.
     """
-    def __init__(self, model, input_shape_or_sample : list | tuple | ndarray | torch.Tensor, device : str = 'cpu', activities : list | None = None, record_shapes : bool = False, output_prof_filename : str | None = None, with_stack : bool = False):
+
+    def __init__(self, model: torch.nn.Module, 
+                 input_shape_or_sample: tuple[int, ...] | NDArray | torch.Tensor,
+                 device: str = 'cpu', 
+                 activities: ProfilerActivity | tuple[ProfilerActivity, ...] = ProfilerActivity.CPU,
+                 record_shapes: bool = False, 
+                 output_prof_filename: str | None = None, 
+                 with_stack: bool = False):
         # Store data
         self.model = model
         self.device = device
         self.last_prof = None 
         self.output_prof_filename = output_prof_filename
-        self.with_stack = False
+        self.with_stack = with_stack
         self.input_sample = None 
 
         # Default values
-        self.activities = activities if activities is not None else [ProfilerActivity.CPU]
+        self.activities = activities
         self.record_shapes = record_shapes
 
-        if isinstance(input_shape_or_sample, (list, tuple)):
+        if isinstance(input_shape_or_sample, (tuple)):
             # If input is a list or tuple indicating shape, generate random
             self.input_sample = torch.randn(*input_shape_or_sample)
         else:
-            if isinstance(input_shape_or_sample, ndarray):
+            if isinstance(input_shape_or_sample, NDArray):
                 self.input_sample = torch.from_numpy(input_shape_or_sample)
             elif isinstance(input_shape_or_sample, torch.Tensor):
                 # Input is a sample of torch tensor, store it
@@ -67,7 +75,9 @@ class ModelProfilerHelper():
         if self.input_sample is not None:
             self.input_sample = self.input_sample.to(self.device)
 
-    def run_prof(self, activities: list | None = None, record_shapes : bool = False, input_sample : torch.Tensor | None = None):
+    def run_prof(self, activities: ProfilerActivity | tuple[ProfilerActivity, ...] | None = None,
+                 record_shapes: bool = False, 
+                 input_sample: torch.Tensor | None = None):
 
         if input_sample is not None:
             # Store input sample
