@@ -6,16 +6,20 @@ from numpy.typing import NDArray
 import torch
 
 from typing import Any, Literal
+
+# Types
 dtype_ = type | Literal["source"]
+numpy_types = np.floating | np.integer | np.bool_
+
 # Interfaces between numpy and torch tensors
 
 
-def torch_to_numpy(tensor: Tensor | NDArray[np.generic], dtype : dtype_="source") -> NDArray[np.generic]:
+def torch_to_numpy(tensor: Tensor | NDArray[numpy_types], dtype: dtype_ = "source") -> NDArray[numpy_types]:
 
     if isinstance(tensor, Tensor):
 
         # Convert to torch tensor to numpy array
-        array = tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
+        array : ndarray = tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
         
         if dtype == "source":
             # Return the numpy array with the same dtype as the source tensor
@@ -33,9 +37,9 @@ def torch_to_numpy(tensor: Tensor | NDArray[np.generic], dtype : dtype_="source"
         raise ValueError("Input must be a torch.Tensor or np.ndarray")
 
 
-def numpy_to_torch(array: Tensor | NDArray[np.generic], dtype: torch.dtype | str = "source") -> Tensor:
+def numpy_to_torch(array: Tensor | NDArray[numpy_types], dtype: dtype_ = "source") -> Tensor:
 
-    if isinstance(array, NDArray[np.generic]):
+    if isinstance(array, np.ndarray):
         # Convert numpy array to torch tensor
         tensor = from_numpy(array)
         if dtype == "source":
