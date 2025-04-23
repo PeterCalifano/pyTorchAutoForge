@@ -2,6 +2,7 @@ import threading
 from click import pause
 from numpy import ndarray
 from numpy.typing import NDArray
+import numpy as np
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 import os
@@ -39,9 +40,9 @@ class ModelProfilerHelper():
     """
 
     def __init__(self, model: torch.nn.Module, 
-                 input_shape_or_sample: tuple[int, ...] | NDArray | torch.Tensor,
+                 input_shape_or_sample: tuple[int, ...] | NDArray[np.floating | np.integer] | torch.Tensor,
                  device: str = 'cpu', 
-                 activities: ProfilerActivity | tuple[ProfilerActivity, ...] = ProfilerActivity.CPU,
+                 activities: tuple[ProfilerActivity, ...] = (ProfilerActivity.CPU,),
                  record_shapes: bool = False, 
                  output_prof_filename: str | None = None, 
                  with_stack: bool = False):
@@ -53,7 +54,9 @@ class ModelProfilerHelper():
         self.with_stack = with_stack
         self.input_sample = None 
 
-        # Default values
+        if not isinstance(activities, tuple) and isinstance(activities, ProfilerActivity):
+            activities = (activities,) # Convert to tuple
+
         self.activities = activities
         self.record_shapes = record_shapes
 
@@ -61,7 +64,7 @@ class ModelProfilerHelper():
             # If input is a list or tuple indicating shape, generate random
             self.input_sample = torch.randn(*input_shape_or_sample)
         else:
-            if isinstance(input_shape_or_sample, NDArray):
+            if isinstance(input_shape_or_sample, NDArray[np.floating] | NDArray[np.integer]):
                 self.input_sample = torch.from_numpy(input_shape_or_sample)
             elif isinstance(input_shape_or_sample, torch.Tensor):
                 # Input is a sample of torch tensor, store it
@@ -75,7 +78,7 @@ class ModelProfilerHelper():
         if self.input_sample is not None:
             self.input_sample = self.input_sample.to(self.device)
 
-    def run_prof(self, activities: ProfilerActivity | tuple[ProfilerActivity, ...] | None = None,
+    def run_prof(self, activities: tuple[ProfilerActivity, ...] | None = None,
                  record_shapes: bool = False, 
                  input_sample: torch.Tensor | None = None):
 
