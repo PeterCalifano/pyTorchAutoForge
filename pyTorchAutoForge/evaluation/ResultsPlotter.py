@@ -15,7 +15,7 @@ class backend_module(Enum):
 @dataclass
 class ResultsPlotterConfig():
     save_figs: bool = False
-    unit_scalings: dict = field(default_factory=dict)
+    unit_scalings: dict | None = None
     num_of_bins: int = 100
     colours: list = field(default_factory=list)
     units: tuple | None = None
