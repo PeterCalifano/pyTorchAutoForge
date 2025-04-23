@@ -2,7 +2,7 @@ from kornia.augmentation import AugmentationSequential
 import kornia.augmentation as K
 import kornia.geometry as KG
 import albumentations
-from typing import Literal
+from typing import Literal, TypeAlias
 import torch
 from kornia import augmentation as kornia_aug
 from torch import nn
@@ -19,7 +19,7 @@ from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_tor
 from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
 
 # %% Configuration dataclasses
-ndArrayOrTensor = np.ndarray | torch.Tensor
+ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
 
 class PoissonShotNoise(nn.Module):
     """
@@ -119,7 +119,7 @@ class AugmentationConfig:
     # Whether image is normalized (0–1) or raw (0–255)
     is_normalized: bool = True
     # Optional scaling factor. If None, inference attempt based on dtype
-    normalization_factor: float | None = None
+    input_normalization_factor: float | None = None
     # Optional flag to specify if image is already in the torch layout (overrides guess)
     is_torch_layout: bool | None = None
 
@@ -223,10 +223,10 @@ class ImageAugmentationsHelper(torch.nn.Module):
             labels: Tensor[B, num_points, 2] or np.ndarray matching batch
             returns: shifted+augmented images & labels, same type as input
         """
-        if not isinstance(images, tuple) and self.input_is_tuple:
+        if not isinstance(images, tuple) and self.augs_cfg.input_is_tuple:
             raise TypeError(
                 "Input is not tuple, but input_is_tuple is set to True.")
-        if isinstance(images, tuple) and not self.input_is_tuple:
+        if isinstance(images, tuple) and not self.augs_cfg.input_is_tuple:
             raise TypeError(
                 "Input is tuple, but input_is_tuple is set to False.")
 
@@ -277,14 +277,14 @@ class ImageAugmentationsHelper(torch.nn.Module):
             # Apply clamping to [0,1]
             aug_img = torch.clamp(aug_img, 0.0, 1.0)
 
+            if self.augs_cfg.label_scaling_factors is not None:
+                # Apply inverse scaling to labels
+                lbl_shifted = lbl_shifted / self.augs_cfg.label_scaling_factors
+
             # Convert back to numpy if was ndarray
             if to_numpy is True:
                 aug_img = torch_to_numpy(aug_img.permute(0, 2, 3, 1))
                 lbl_shifted = torch_to_numpy(lbl_shifted)
-
-            if self.augs_cfg.label_scaling_factors is not None:
-                # Apply inverse scaling to labels
-                lbl_shifted = lbl_shifted / self.augs_cfg.label_scaling_factors
 
         if isinstance(images, tuple):
             # Pack all input data in a tuple again
@@ -292,7 +292,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
         else:
             aug_img_ = aug_img
 
-        return aug_img_, lbl_shifted # FIXME, why type error?
+        return aug_img_, lbl_shifted 
 
     def preprocess_images_(self,
                            images: ndArrayOrTensor
@@ -316,9 +316,14 @@ class ImageAugmentationsHelper(torch.nn.Module):
             and a boolean indicating whether the input was originally a numpy array.
         """
 
+        scale_factor = 1.0
         if isinstance(images, np.ndarray):
 
             imgs_array = images.copy()
+
+            # Determine scale factor
+            if self.augs_cfg.is_normalized:
+                scale_factor = self.determine_scale_factor_(images)
 
             if imgs_array.ndim < 2 or imgs_array.ndim > 4:
                 raise ValueError(
@@ -362,20 +367,13 @@ class ImageAugmentationsHelper(torch.nn.Module):
                     imgs_array = imgs_array.permute(0, 3, 1, 2)
                 # else: If not numpy layout, there is nothing to do
 
-            # Apply normalization if needed
-            scale_factor = 1.0
-            if not self.augs_cfg.is_normalized:
-                scale_factor = self.determine_scale_factor_(imgs_array)
-
             return imgs_array, True, scale_factor
 
-        elif torch.is_tensor(images):
-
+        elif isinstance(images, torch.Tensor):
             imgs_array = images
-            scale_factor = 1.0
 
-            if not self.augs_cfg.is_normalized:
-                scale_factor = self.determine_scale_factor_(imgs_array)
+            if self.augs_cfg.is_normalized:
+                scale_factor = self.determine_scale_factor_(images)
 
             if imgs_array.dim() == 3:
                 imgs_array = imgs_array.unsqueeze(0)
@@ -388,13 +386,15 @@ class ImageAugmentationsHelper(torch.nn.Module):
             return imgs_array, False, scale_factor
 
         else:
-            raise TypeError("Unsupported image array type.")
+            raise TypeError(f"Unsupported image array type. Expected np.ndarray or torch.Tensor, but found {type(images)}")
 
     def determine_scale_factor_(self, imgs_array: ndArrayOrTensor) -> float:
         
         dtype = imgs_array.dtype
-        if self.augs_cfg.normalization_factor is not None:
-            scale_factor = self.augs_cfg.normalization_factor
+        scale_factor = 1.0
+
+        if self.augs_cfg.input_normalization_factor is not None:
+            scale_factor = self.augs_cfg.input_normalization_factor
         else:
             # Guess based on dtype
             if dtype == torch.uint8 or dtype == np.uint8:
@@ -403,6 +403,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
                 scale_factor = 65535.0
             elif dtype == torch.uint32 or dtype == np.uint32:
                 scale_factor = 4294967295.0
+            
         return scale_factor
 
     def translate_batch_(self,
