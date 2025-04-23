@@ -202,6 +202,10 @@ class ImageAugmentationsHelper(torch.nn.Module):
             if torch.is_tensor(labels) and is_numpy:
                 labels = torch_to_numpy(labels)
 
+            # DEVNOTE this may be avoided by scaling intensity-related augmentations instead of the image.
+            if scale_factor is not None: # Unapply scaling factor to add augs
+                img_tensor = img_tensor * scale_factor
+
             # Apply torchvision augmentation module
             if self.torchvision_augs_module is not None:
                 # TODO any way to modify the rotation centre at runtime? --> No way, need to switch to kornia custom with warp_affine
@@ -215,13 +219,16 @@ class ImageAugmentationsHelper(torch.nn.Module):
             else:
                 img_shifted = img_tensor
                 lbl_shifted = numpy_to_torch(labels).float()
-
+            
             # Apply augmentations module (DEVNOTE assumes input is unnormalized)
             aug_img = self.kornia_augs_module(img_shifted)
 
             # Apply inverse scaling if needed
             if scale_factor is not None:
                 aug_img = aug_img / scale_factor
+
+            if aug_img.max() > 10:
+                print('\033[93mWarning, image before clamping to [0,1] has values much greater than 1, that are unlikely to result from augmentations.\033[0m')
 
             # Apply clamping to [0,1]
             aug_img = torch.clamp(aug_img, 0.0, 1.0)
