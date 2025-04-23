@@ -21,6 +21,46 @@ from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
 # %% Configuration dataclasses
 ndArrayOrTensor = np.ndarray | torch.Tensor
 
+class PoissonShotNoise(nn.Module):
+    """
+    Applies Poisson shot noise to a batch of images.
+
+    This module simulates photon shot noise, where the variance of the noise 
+    is proportional to the pixel intensity. The noise is applied to a random 
+    subset of the batch based on the specified probability.
+
+    Args:
+        nn (torch.nn.Module): Base class for all neural network modules.
+
+    Attributes:
+        probability (float): Probability of applying Poisson noise to each 
+            image in the batch.
+
+    Methods:
+        forward(imgs_array: torch.Tensor) -> torch.Tensor:
+            Applies Poisson shot noise to the input batch of images.
+
+    Example:
+        >>> noise = PoissonShotNoise(probability=0.5)
+        >>> noisy_images = noise(images)
+    """
+    def __init__(self, probability: float = 0.0):
+        super().__init__()
+        self.probability = probability
+
+    def forward(self, imgs_array):
+        # Randomly sample a boolean mask to index batch size
+        B = imgs_array.shape[0]
+        apply_mask = torch.rand(B) < self.probability
+
+        # Pixel value is the variance of the Photon Shot Noise (higher where brighter). 
+        # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel. 
+        photon_shot_noise = torch.poisson(imgs_array[apply_mask]) 
+
+        # Sum noise to the original images according to mask
+        imgs_array[apply_mask] += photon_shot_noise
+
+        return imgs_array
 
 class RandomGaussianNoiseVariableSigma(nn.Module):
     """
@@ -61,7 +101,6 @@ class RandomGaussianNoiseVariableSigma(nn.Module):
 
         return x + noise
 
-
 @dataclass
 class AugmentationConfig:
     # Rotation augmentation (torchvision)
@@ -84,8 +123,11 @@ class AugmentationConfig:
     # Optional flag to specify if image is already in the torch layout (overrides guess)
     is_torch_layout: bool | None = None
 
+    # Poisson shot noise
+    poisson_shot_noise_aug_prob: float = 0.0
+
     # Gaussian noise
-    sigma_gaussian_noise_dn: float | tuple[float, float] = 0.05
+    sigma_gaussian_noise_dn: float | tuple[float, float] = 1.0
     gaussian_noise_aug_prob: float = 0.0
 
     # Gaussian blur
@@ -115,8 +157,6 @@ class AugmentationConfig:
                 self.label_scaling_factors)
 
 # %% Augmentation helper class
-
-
 class ImageAugmentationsHelper(torch.nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
         super().__init__()
@@ -159,6 +199,10 @@ class ImageAugmentationsHelper(torch.nn.Module):
                                                         sigma=augs_cfg.sigma_gaussian_blur,
                                                         p=augs_cfg.gaussian_blur_aug_prob,
                                                         keepdim=True))
+
+        if augs_cfg.poisson_shot_noise_aug_prob > 0:
+            augs_ops.append(module=PoissonShotNoise(p=augs_cfg.poisson_shot_noise_aug_prob))
+
 
         if augs_cfg.gaussian_noise_aug_prob > 0:
             # Random Gaussian noise
@@ -203,7 +247,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
                 labels = torch_to_numpy(labels)
 
             # DEVNOTE this may be avoided by scaling intensity-related augmentations instead of the image.
-            if scale_factor is not None: # Unapply scaling factor to add augs
+            if scale_factor is not None: # Unapply scaling factor before adding augs
                 img_tensor = img_tensor * scale_factor
 
             # Apply torchvision augmentation module
