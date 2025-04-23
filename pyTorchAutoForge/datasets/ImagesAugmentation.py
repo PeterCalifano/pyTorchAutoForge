@@ -279,7 +279,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
 
             if self.augs_cfg.label_scaling_factors is not None:
                 # Apply inverse scaling to labels
-                lbl_shifted = lbl_shifted / self.augs_cfg.label_scaling_factors
+                lbl_shifted = lbl_shifted / self.augs_cfg.label_scaling_factors.to(lbl_shifted.device)
 
             # Convert back to numpy if was ndarray
             if to_numpy is True:
