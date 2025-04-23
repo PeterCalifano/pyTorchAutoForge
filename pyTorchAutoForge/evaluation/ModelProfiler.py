@@ -54,17 +54,17 @@ class ModelProfilerHelper():
         self.with_stack = with_stack
         self.input_sample = None 
 
-        if not isinstance(activities, tuple) and isinstance(activities, ProfilerActivity):
+        if isinstance(activities, ProfilerActivity):
             activities = (activities,) # Convert to tuple
 
-        self.activities = activities
+        self.activities = list(activities)
         self.record_shapes = record_shapes
 
-        if isinstance(input_shape_or_sample, (tuple)):
+        if isinstance(input_shape_or_sample, tuple):
             # If input is a list or tuple indicating shape, generate random
-            self.input_sample = torch.randn(*input_shape_or_sample)
+            self.input_sample = torch.randn((1, *input_shape_or_sample[1:]))
         else:
-            if isinstance(input_shape_or_sample, NDArray[np.floating] | NDArray[np.integer]):
+            if isinstance(input_shape_or_sample, NDArray[np.floating | np.integer | np.bool_]):
                 self.input_sample = torch.from_numpy(input_shape_or_sample)
             elif isinstance(input_shape_or_sample, torch.Tensor):
                 # Input is a sample of torch tensor, store it
@@ -91,7 +91,7 @@ class ModelProfilerHelper():
 
         # Get default values from init, if not provided
         if activities is not None:
-            self.activities = activities
+            self.activities = list(activities)
 
         if record_shapes is not None:
             self.record_shapes = record_shapes
