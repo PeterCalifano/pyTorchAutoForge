@@ -1003,8 +1003,18 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if not isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
             # DEVNOTE: legacy branch, should be removed in later releases, assumes specific input conditions, not configurable
 
+            other_data = None
+            if isinstance(X, tuple):
+                # If X is a tuple, assume it contains (image, other_data)
+                other_data = X[1:] if len(X) > 1 else None
+                X = X[0]
+
             # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
             X = (self.data_augmentation_module(255 * X).clamp(0, 255))/255
+
+            # Pack tuple again
+            if other_data is not None:
+                X = (X, *other_data)
 
         elif isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
             # Apply ImageAugmentationsHelper forward method
