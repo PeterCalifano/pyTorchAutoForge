@@ -201,7 +201,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
                                                         keepdim=True))
 
         if augs_cfg.poisson_shot_noise_aug_prob > 0:
-            augs_ops.append(module=PoissonShotNoise(p=augs_cfg.poisson_shot_noise_aug_prob))
+            augs_ops.append(module=PoissonShotNoise(probability=augs_cfg.poisson_shot_noise_aug_prob))
 
 
         if augs_cfg.gaussian_noise_aug_prob > 0:
@@ -210,9 +210,9 @@ class ImageAugmentationsHelper(torch.nn.Module):
                 sigma_noise=augs_cfg.sigma_gaussian_noise_dn, gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob))
 
         # Stack into nn.Sequential module
-        # TODO reolace with AugmentationSequential
+        # TODO replace with AugmentationSequential
         self.kornia_augs_module = nn.Sequential(*augs_ops)
-        self.torchvision_augs_module = torch_vision_ops if len(torch_vision_ops) > 0 else None
+        self.torchvision_augs_module = nn.Sequential(*torch_vision_ops) if len(torch_vision_ops) > 0 else None
 
     def forward(self,
                 images: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
