@@ -2,14 +2,15 @@ import h5py, yaml, sys, os, json
 from torch import Tensor, from_numpy
 import numpy as np
 from numpy import ndarray
+from numpy.typing import NDArray
 import torch
 
-from typing import Any
-
+from typing import Any, Literal
+dtype_ = type | Literal["source"]
 # Interfaces between numpy and torch tensors
 
 
-def torch_to_numpy(tensor: Tensor | ndarray, dtype: type | str = "source") -> ndarray:
+def torch_to_numpy(tensor: Tensor | NDArray[np.generic], dtype : dtype_="source") -> NDArray[np.generic]:
 
     if isinstance(tensor, Tensor):
 
@@ -32,9 +33,9 @@ def torch_to_numpy(tensor: Tensor | ndarray, dtype: type | str = "source") -> nd
         raise ValueError("Input must be a torch.Tensor or np.ndarray")
 
 
-def numpy_to_torch(array: Tensor | ndarray, dtype: torch.dtype | str = "source") -> Tensor:
+def numpy_to_torch(array: Tensor | NDArray[np.generic], dtype: torch.dtype | str = "source") -> Tensor:
 
-    if isinstance(array, ndarray):
+    if isinstance(array, NDArray[np.generic]):
         # Convert numpy array to torch tensor
         tensor = from_numpy(array)
         if dtype == "source":
@@ -91,7 +92,7 @@ def load_json_yml(filepath : str) -> Any:
     """
     # Check file exists
     if not os.path.isfile(filepath):
-        raise FileNotFoundError(f"Input file {input_filepath} not found.")
+        raise FileNotFoundError(f"Input file {filepath} not found.")
 
     ext = os.path.splitext(filepath)[1].lower()
 
@@ -150,7 +151,7 @@ def hdf5_to_json_yml(input_hdf5_filepath: str, output_filepath: str):
             "Output file must have a .json, .yaml, or .yml extension.")
 
 
-def merge_json_yml_to_hdf5(input_filepaths: list[str], output_hdf5_filepath : str):
+def merge_json_yml_to_hdf5(input_filepaths: tuple[str, ...], output_hdf5_filepath : str):
     """
     Merge multiple JSON or YAML configuration files into a single HDF5 file.
     For each key found in any input file, the HDF5 file will include a dataset
