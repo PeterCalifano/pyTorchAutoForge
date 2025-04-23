@@ -151,9 +151,43 @@ class ModelExplainerHelper():
             corr_clusters = shap.utils.hclust(torch_to_numpy(self.input_samples), 
                                       model_predictions, linkage="average")
 
-            # Plot clustered absolute mean SHAP values
-            shap.plots.bar(shap_values, clustering=corr_clusters, clustering_cutoff=1.0)
 
+            # Plot clustered absolute mean SHAP values
+            fig1 = plt.figure(figsize=(10, 6))
+            shap.plots.bar(
+                shap_values,
+                clustering=corr_clusters,
+                clustering_cutoff=1.0,
+                show=False           
+            )
+
+            plt.title("Clustered Absolute Mean SHAP Values")
+            fig1.savefig("shap_bar_plot.png", dpi=350, bbox_inches="tight")
+
+            # Plot SHAP Violin layered plot
+            fig2 = plt.figure(figsize=(10, 6))
+
+            shap.plots.violin(
+                shap_values, 
+                features=self.input_samples, 
+                feature_names=self.features_names, 
+                plot_type="layered_violin",
+                show=False, 
+                )
+            
+            plt.title("SHAP Layered Violing Plot")
+            fig2.savefig("shap_violin_plot.png", dpi=350, bbox_inches="tight")
+
+            # Plot SHAP heatmap plot
+            fig3 = plt.figure(figsize=(12, 6))
+            shap.plots.heatmap(
+                shap_values,
+                show=False        # defer display so we can save
+            )
+
+            plt.title("SHAP Values Heatmap (clustered for similarity)")
+            fig3.savefig("shap_heatmap.png", dpi=400, bbox_inches="tight")
+            plt.close(fig3)
 
     def explain_layers(self):
         """
