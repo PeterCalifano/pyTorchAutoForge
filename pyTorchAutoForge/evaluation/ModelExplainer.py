@@ -1,3 +1,4 @@
+from typing import Literal
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sympy import pretty_print
@@ -9,9 +10,10 @@ import numpy as np
 from scipy import stats
 import pandas as pd
 from enum import Enum
-
+import shap, torch
+from functools import partial
 from pyTorchAutoForge.utils.conversion_utils import numpy_to_torch, torch_to_numpy
-
+import colorama
 
 class CaptumExplainMethods(Enum):
     """
@@ -33,13 +35,23 @@ class ModelExplainerHelper():
                  input_samples: Tensor | np.ndarray | pd.DataFrame, 
                  target_output_index: int, 
                  explain_method : CaptumExplainMethods | ShapExplainMethods = CaptumExplainMethods.IntegratedGrad,
-                 features_names: list[str] | None = None):
+                 features_names: tuple[str, ...] | tuple[Literal[str],...] | None = None,
+                 output_names: tuple[str, ...] | tuple[Literal[str],...] | None = None,
+                 device: str | torch.device = "cpu"):
         
         # Store data
         self.model = model
         self.task_type = task_type
         self.explain_method = explain_method
         self.features_names = features_names
+        self.output_names = output_names
+        self.device = device
+
+        # Move data and model to device
+        self.model.to(device)
+        if isinstance(input_samples, Tensor):
+            # Move input samples to device
+            input_samples = input_samples.to(device)
 
         # Handle conversion of inputs
         if isinstance(input_samples, pd.DataFrame):
@@ -56,17 +68,44 @@ class ModelExplainerHelper():
         if isinstance(explain_method, CaptumExplainMethods):
             # Build captum method object 
             import captum
-            print('ModelExplainer loaded with captum explainability method object: ' + explain_method.value)
             self.captum_explainer = getattr(captum.attr, explain_method.value)
             self.captum_explainer = self.captum_explainer(self.model)
+            print('ModelExplainer loaded with captum explainability method object: ' +
+                  explain_method.value)
 
         elif isinstance(explain_method, ShapExplainMethods):
-            self.shap_explainer = explain_method.value
-            import shap
             print('ModelExplainer is using SHAP library...')
-            # Build SHAP explainer
-            self.shap_explainer = shap.Explainer(self.model)
 
+            # Build SHAP masker (defines how missing features are treated)
+            num_of_samples = np.ceil(0.2 * self.input_samples.shape[0]).astype(int)
+            background_dataset = shap.sample(torch_to_numpy(
+                self.input_samples[:num_of_samples]),
+                                             random_state=42)
+            
+            # Define model forward wrapper function for SHAP
+            def forward_wrapper(X, device):
+                
+                # Convert numpy array to torch tensor
+                X_tensor = numpy_to_torch(X, dtype=torch.float32).to(device)
+                
+                # Run model inference
+                with torch.no_grad():
+                    output = self.model(X_tensor)
+                
+                # Convert output to numpy array
+                return torch_to_numpy(output, dtype=np.float64)
+
+            # Wrap forward_wrapper as a partial function to specify the device
+            forward_partial = partial(forward_wrapper, device=self.device)
+            
+
+            # Build SHAP explainer
+            self.shap_explainer = shap.Explainer(model=forward_partial,
+                                                 masker=background_dataset,
+                                                 feature_names=self.features_names,
+                                                 output_names=self.output_names)
+            
+            print('ModelExplainer loaded with SHAP explainability method object: ' + explain_method.value)
 
     def explain_features(self):
         """
@@ -74,26 +113,47 @@ class ModelExplainerHelper():
 
         _extended_summary_
         """
+        
+        if isinstance(self.explain_method, CaptumExplainMethods): 
 
-        # Call the captum attribute method
-        # TODO this is for integrated gradients, need to generalize
-        attributions, converge_deltas = self.captum_explainer.attribute(self.input_samples, self.target_output_index, return_convergence_delta=True)
+            print(f"{colorama.Style.BRIGHT}{colorama.Fore.LIGHTRED_EX}Running explainability analysis using Captum module...")
+            # Call the captum attribute method
+            # TODO this is for integrated gradients, need to generalize
+            attributions, converge_deltas = self.captum_explainer.attribute(self.input_samples, self.target_output_index, return_convergence_delta=True)
 
-        # Convert to numpy
-        attributions = torch_to_numpy(attributions)
-        converge_deltas = torch_to_numpy(converge_deltas)
+            # Convert to numpy
+            attributions = torch_to_numpy(attributions)
+            converge_deltas = torch_to_numpy(converge_deltas)
 
-        # Compute importance stats
-        stats = self.compute_importance_stats_(attributions)
+            # Compute importance stats
+            stats = self.compute_importance_stats_(attributions)
 
-        print("Attribution statistics: \n")
-        pretty_print(stats)
+            print("Attribution statistics: \n")
+            pretty_print(stats)
 
-        if self.features_names is None:
-            self.features_names = [f"Feature {i}" for i in range(attributions.shape[1])]
-    
-        # Call visualization function
-        self.visualize_feats_importances(self.features_names, stats["mean"], title="Feature Importances", errors_ranges=stats["std_dev"])
+            if self.features_names is None:
+                self.features_names = [f"Feature {i}" for i in range(attributions.shape[1])]
+        
+            # Call visualization function
+            self.visualize_feats_importances(self.features_names, stats["mean"], title="Feature Importances", errors_ranges=stats["std_dev"])
+
+        elif isinstance(self.explain_method, ShapExplainMethods):
+            print(
+                f"{colorama.Style.BRIGHT}{colorama.Fore.MAGENTA}Running explainability analysis using SHAP module...")
+            # Call the SHAP explainer
+            shap_values = self.shap_explainer(torch_to_numpy(self.input_samples))
+          
+            # Run model inference to get model predictions
+            model_predictions = torch_to_numpy( 
+                self.model( numpy_to_torch(self.input_samples).to(self.device) ) )
+
+            # Run clustering algorithm to capture correlations
+            corr_clusters = shap.utils.hclust(torch_to_numpy(self.input_samples), 
+                                      model_predictions, linkage="average")
+
+            # Plot clustered absolute mean SHAP values
+            shap.plots.bar(shap_values, clustering=corr_clusters, clustering_cutoff=1.0)
+
 
     def explain_layers(self):
         """
