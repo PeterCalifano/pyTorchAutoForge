@@ -8,10 +8,11 @@
   - [x] Add prototype implementation of heads and backbones builders using registries
   - [ ] Add prototype implementation of dataset classes from RAM/disk
   - [ ] Fix all unit tests
-  - [ ] Complete 1st version of model profiler
+  - [x] Complete 1st version of model profiler
   - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods) and SHAP (basic explainer)
   - [x] Add refactored version of augmentation pipeline (ImagesAugmentationHelper)
   - [x] Refactor and improve ModelTrainingManager updating augmentation pipeline and adding batch accumulation
+  - [x] Improve and fix model evaluator
 
 - [ ] v0.1.5
   - [ ] Review NN and  template blocks for modularity

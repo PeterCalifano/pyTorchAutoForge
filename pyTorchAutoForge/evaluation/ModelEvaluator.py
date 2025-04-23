@@ -1,5 +1,5 @@
 import torch
-import sys
+import sys, os
 from torch import nn
 import numpy as np
 from dataclasses import dataclass
@@ -13,6 +13,9 @@ from pyTorchAutoForge.optimization import CustomLossFcn
 from collections.abc import Callable
 from pyTorchAutoForge.evaluation import ResultsPlotterHelper
 from numpy.typing import NDArray
+import pandas as pd
+import matplotlib.pyplot as plt
+import math
 
 @dataclass
 class ModelEvaluatorConfig():
@@ -64,6 +67,12 @@ class ModelEvaluator():
         self.model = model.to(self.device)
         self.stats : dict = {}
         self.plotter = plotter
+
+        if plotter is not None and self.output_scale_factors is not None:
+            if plotter.unit_scalings is not None:
+                print('\033[93mWarning: Overriding unit scalings in plotter with output scale factors as they would result in double application when plotting. Please adjust inputs.\033[0m')
+                # Override plotter.unit_scalings to 1.0
+                plotter.unit_scalings = {k: 1.0 for k in plotter.unit_scalings.keys()}
 
     def evaluateRegressor(self) -> dict:
         self.model.eval()
@@ -173,6 +182,7 @@ class ModelEvaluator():
         avg_abs_residual = torch_to_numpy(avg_abs_residual)
         median_abs_residual = torch_to_numpy(median_abs_residual)
         max_abs_residual = torch_to_numpy(max_abs_residual)
+        std_residual = torch_to_numpy(std_residual)
 
         quantile95_residual = np.percentile(residuals, 0.95, axis=0)
 
@@ -189,19 +199,51 @@ class ModelEvaluator():
         self.stats['quantile95_prediction_err']  = quantile95_residual 
         self.stats['num_samples']                = dataset_size
 
+        error_labels = [f"Output {i}" for i in range(residuals.shape[1])]
+        if self.plotter is not None:
+            if self.plotter.entriesNames is not None: 
+                error_labels = self.plotter.entriesNames
+            if self.plotter.units is not None:
+                error_labels = [f"{label} ({unit})" for label, unit in zip(error_labels, self.plotter.units)]
+
+        # TODO (PC) come back here when changed plotter. Some fields are assigned dynamically and mypy fails to detect those
+        self.stats["error_labels"] = tuple(error_labels)
+
         if self.loss_fcn is not None:
             self.stats['avg_loss'] = avg_loss
 
         # Print statistics
-        print('\033[95mModel evaluation statistics:\033[0m')
-        print(' Mean of prediction errors: ', mean_residual)
-        print(' Median of prediction errors: ', median_residual)
-        print(' Std of prediction errors: ', std_residual)
-        print(' Quantile 95 of prediction errors', quantile95_residual)
-        print(' Median of abs prediction errors: ', median_abs_residual)
-        print(' Max of abs prediction errors: ', max_abs_residual)
+        #print('\033[95mModel evaluation statistics:\033[0m')
+        #print(' Mean of prediction errors: ', mean_residual)
+        #print(' Median of prediction errors: ', median_residual)
+        #print(' Std of prediction errors: ', std_residual)
+        #print(' Quantile 95 of prediction errors', quantile95_residual)
+        #print(' Median of abs prediction errors: ', median_abs_residual)
+        #print(' Max of abs prediction errors: ', max_abs_residual)
+        self.printAndSaveStats(self.stats, 
+            output_folder=self.plotter.output_folder)
 
         return self.stats
+    
+    def printAndSaveStats(self, stats: dict, output_folder: str = "."):
+            
+            num_entries = len(stats["error_labels"])
+            vector_stats = {k: v for k, v in stats.items()
+                            if hasattr(v, "__len__") and len(v) == num_entries}
+
+            # Build DataFrame: rows=vector_stats keys, cols=labels
+            df = pd.DataFrame.from_dict(
+                vector_stats, orient="index", columns=stats["error_labels"])
+
+            # Print Markdown table (rounded)
+            print("\n")
+            print(df.round(2).to_markdown(tablefmt="github"))
+            print("\n")
+            # Save CSV / JSON / Excel
+            #df.to_csv(f"{out_prefix}.csv", index=False)
+            df.to_json(os.path.join(output_folder, "eval_stats.json"), orient="index", indent=2)
+            #df.to_excel(f"{out_prefix}.xlsx", index=False)
+            #print(f"\n CSV, JSON, XLSX saved as '{out_prefix}.*'")
 
     def plotResults(self, entriesNames: list | None = None, 
                     units: list | None = None, 
@@ -221,8 +263,6 @@ class ModelEvaluator():
 
         # Predictions vs targets scatter plot
         if self.make_plot_predict_vs_target:
-            import matplotlib.pyplot as plt
-            import math
 
             # Make plot of predicted values vs target values
             n_samples, n_outputs = self.predicted_values.shape
@@ -252,7 +292,7 @@ class ModelEvaluator():
                 # Draw perfect mean prediction line
                 mn = min(targets[:, id_output].min(), preds[:, id_output].min())
                 mx = max(targets[:, id_output].max(), preds[:, id_output].max())
-                ax.plot([mn, mx], [mn, mx], linestyle='--')
+                ax.plot([mn, mx], [mn, mx], linestyle='--', color='red', linewidth=2)
 
                 ax.set_xlabel('Target')
                 ax.set_ylabel('Predicted')
@@ -266,10 +306,10 @@ class ModelEvaluator():
 
             plt.tight_layout()
 
+            if self.plotter.save_figs or not sys.stdout.isatty():
+                # Save to file
+                plt.savefig(os.path.join(self.plotter.output_folder, 'predictions_vs_targets.png'), dpi=300, bbox_inches='tight')
+        
             # Show if not tmux
             if sys.stdout.isatty():
                 plt.show()
-            else:
-                # Save to file
-                plt.savefig('predictions_vs_targets.png', dpi=300, bbox_inches='tight')
-                print('Saved predictions vs targets plot to "predictions_vs_targets.png"')
