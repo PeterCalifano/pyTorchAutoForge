@@ -138,8 +138,7 @@ class ModelExplainerHelper():
             self.visualize_feats_importances(self.features_names, stats["mean"], title="Feature Importances", errors_ranges=stats["std_dev"])
 
         elif isinstance(self.explain_method, ShapExplainMethods):
-            print(
-                f"{colorama.Style.BRIGHT}{colorama.Fore.MAGENTA}Running explainability analysis using SHAP module...")
+            print(f"{colorama.Style.BRIGHT}{colorama.Fore.MAGENTA}Running explainability analysis using SHAP module...")
             # Call the SHAP explainer
             shap_values = self.shap_explainer(torch_to_numpy(self.input_samples))
           
@@ -149,15 +148,16 @@ class ModelExplainerHelper():
                                            dtype=torch.float32).to(self.device) ) )
 
             # Run clustering algorithm to capture correlations
-            corr_clusters = shap.utils.hclust(torch_to_numpy(self.input_samples), 
-                                      model_predictions, linkage="average")
+            # FIXME, this is not working unfortunately...
+            #corr_clusters = shap.utils.hclust(torch_to_numpy(self.#input_samples), 
+            #                          model_predictions, linkage="average")
 
 
             # Plot clustered absolute mean SHAP values
             fig1 = plt.figure(figsize=(10, 6))
             shap.plots.bar(
                 shap_values,
-                clustering=corr_clusters,
+                clustering=None,
                 clustering_cutoff=1.0,
                 show=False           
             )
