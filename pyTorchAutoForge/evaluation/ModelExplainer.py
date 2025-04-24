@@ -145,7 +145,8 @@ class ModelExplainerHelper():
           
             # Run model inference to get model predictions
             model_predictions = torch_to_numpy( 
-                self.model( numpy_to_torch(self.input_samples).to(self.device) ) )
+                self.model( numpy_to_torch(self.input_samples, 
+                                           dtype=torch.float32).to(self.device) ) )
 
             # Run clustering algorithm to capture correlations
             corr_clusters = shap.utils.hclust(torch_to_numpy(self.input_samples), 
