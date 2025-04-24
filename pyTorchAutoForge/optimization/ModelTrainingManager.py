@@ -1069,7 +1069,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Note that this returns a batch of size given by the dataloader
                     examplePair = next(iter(eval_dataloader))
 
-                    X = examplePair[0].to(self.device)
+                    X = examplePair[0].to(self.device) # TODO modify for tuple input support
                     Y = examplePair[1].to(self.device)
 
                     if self.data_augmentation_module is not None:
