@@ -124,7 +124,7 @@ class ModelExplainerHelper():
         """
 
         if isinstance(self.explain_method, CaptumExplainMethods):
-
+            ## CAPTUM MODE
             print(
                 f"{colorama.Style.BRIGHT}{colorama.Fore.LIGHTRED_EX}Running explainability analysis using Captum module...")
             # Call the captum attribute method
@@ -137,22 +137,25 @@ class ModelExplainerHelper():
             converge_deltas = torch_to_numpy(converge_deltas)
 
             # Compute importance stats
-            stats = self.compute_importance_stats_(attributions)
+            stats = self.captum_compute_importance_stats_(attributions)
 
             print("Attribution statistics: \n")
             pretty_print(stats)
 
             if self.features_names is None:
-                self.features_names = [
-                    f"Feature {i}" for i in range(attributions.shape[1])]
+                self.features_names = tuple([f"Feature_{i}" for i in range(attributions.shape[1])])
 
             # Call visualization function
-            self.visualize_feats_importances(
-                self.features_names, stats["mean"], title="Feature Importances", errors_ranges=stats["std_dev"])
+            self.captum_visualize_feats_importances(features_names=self.features_names, 
+                                                    importances=stats["mean"], 
+                                                    title="Feature Importances", 
+                                                    errors_ranges=stats["std_dev"])
 
+            return {"captum_stats": stats, "captum_attributions": attributions} # TODO replace with dedicated container objects
+        
         elif isinstance(self.explain_method, ShapExplainMethods):
-            print(
-                f"{colorama.Style.BRIGHT}{colorama.Fore.MAGENTA}Running explainability analysis using SHAP module...")
+            ## SHAP MODE
+            print(f"{colorama.Style.BRIGHT}{colorama.Fore.MAGENTA}Running explainability analysis using SHAP module...")
 
             input_samples_ = torch_to_numpy(self.input_samples)
 
@@ -163,7 +166,7 @@ class ModelExplainerHelper():
             print(f"{colorama.Style.RESET_ALL}")
 
             if self.save_explainer_output:
-                self.shap_save_to_disk(shap_values, 
+                self.save_shap_to_disk(shap_values, 
                                         output_h5_filename="shap_values_artifact",
                                         output_folder=self.output_folder)
 
@@ -174,12 +177,14 @@ class ModelExplainerHelper():
 
             if self.auto_plot:
                 # Call the SHAP plot function
-                self.plot_shap_values(shap_values, 
+                figs_handles = self.plot_shap_values(shap_values,
                                       input_samples_,
                                       output_folder=self.output_folder,
                                       cluster_features=self.cluster_features)
 
-    def shap_save_to_disk(self, 
+            return {"shap_explanation": shap_values, "figs_handles": figs_handles}
+        
+    def save_shap_to_disk(self, 
                           shap_values:shap.Explanation, 
                           output_h5_filename: str = "shap_values_artifact",
                           output_folder: str | pathlib.Path = "."):
@@ -341,7 +346,7 @@ class ModelExplainerHelper():
 
         return output_figs
 
-    def explain_layers(self):
+    def captum_explain_layers(self):
         """
         _summary_
 
@@ -351,7 +356,11 @@ class ModelExplainerHelper():
         raise NotImplementedError(
             "Layer-wise attribution is not implemented yet.")
 
-    def visualize_feats_importances(self, features_names: list[str] | tuple[str], importances: np.ndarray, title: str = "Average Feature Importances", errors_ranges: np.ndarray | None = None):
+    def captum_visualize_feats_importances(self, 
+                                           features_names: tuple[str, ...], 
+                                           importances: np.ndarray, 
+                                           title: str = "Average Feature Importances", 
+                                           errors_ranges: np.ndarray | None = None):
         """Visualize feature importances with optional error bars.
 
         This function prints each feature alongside its calculated importance and then
@@ -399,7 +408,9 @@ class ModelExplainerHelper():
         plt.tight_layout()
         plt.show()
 
-    def compute_importance_stats_(self, attributions, quantiles=(0.25, 0.5, 0.75)) -> dict[str, np.ndarray]:
+    def captum_compute_importance_stats_(self, 
+                                         attributions, 
+                                         quantiles=(0.25, 0.5, 0.75)) -> dict[str, np.ndarray]:
         """Compute mean importance and error measure from the attribution matrix.
 
         Args:
