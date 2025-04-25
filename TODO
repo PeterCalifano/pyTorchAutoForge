@@ -25,6 +25,7 @@
 
 - [ ] v0.1.6
   - [ ] Improve docstrings in src code
+  - [ ] Extend ModelEvaluator to evaluate sklearn and xgb models
 
 - [ ] v0.2.0
   - [ ] All those above
