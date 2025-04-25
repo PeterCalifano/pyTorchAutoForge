@@ -296,6 +296,9 @@ class ModelExplainerHelper():
             cluster = clusters[idx] if cluster_features else None # type: ignore
             output_figs = [] 
 
+            # Remove spaces from output name
+            out_name = out_name.replace(" ", "_")
+
             if cluster is not None:
                 # Bar plot
                 fig = plt.figure(figsize=(12, 8))
@@ -406,7 +409,8 @@ class ModelExplainerHelper():
         ax.set_ylabel("Feature")
 
         plt.tight_layout()
-        plt.show()
+        plt.pause(2)
+        plt.close()
 
     def captum_compute_importance_stats_(self, 
                                          attributions, 
