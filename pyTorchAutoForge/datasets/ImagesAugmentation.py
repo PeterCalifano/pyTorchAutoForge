@@ -1,19 +1,18 @@
+from logging import warning
+from warnings import warn
 from kornia.augmentation import AugmentationSequential
 import kornia.augmentation as K
 import kornia.geometry as KG
-import albumentations
 from typing import Literal, TypeAlias
 import torch
 from kornia import augmentation as kornia_aug
 from torch import nn
 from abc import ABC, abstractmethod
-import pytest  # For unit tests
 from dataclasses import dataclass
-# , cupy # cupy for general GPU acceleration use (without torch) to test
 import numpy as np
 from numpy.typing import NDArray
 from enum import Enum
-
+import colorama
 from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
 from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
@@ -116,10 +115,6 @@ class AugmentationConfig:
     max_shift: float | tuple[float, float] = (20.0, 20.0)
     shift_aug_prob: float = 0.5
 
-    # Whether image is normalized (0–1) or raw (0–255)
-    is_normalized: bool = True
-    # Optional scaling factor. If None, inference attempt based on dtype
-    input_normalization_factor: float | None = None
     # Optional flag to specify if image is already in the torch layout (overrides guess)
     is_torch_layout: bool | None = None
 
@@ -151,11 +146,23 @@ class AugmentationConfig:
     # If True, input is a tuple of (image, other_data)
     input_is_tuple: bool = False
 
+    # Whether image is normalized (0–1) or raw (0–255)
+    is_normalized: bool = True
+    # Optional scaling factor. If None, inference attempt based on dtype
+    input_normalization_factor: float | None = None
+    enable_auto_input_normalization: bool = False
+
+
     def __post_init__(self):
         if self.label_scaling_factors is not None and self.is_torch_layout:
             self.label_scaling_factors = numpy_to_torch(
                 self.label_scaling_factors)
 
+        # Ensure interpolation mode is enum type
+        if isinstance(self.rotation_interp_mode, str) and \
+            self.rotation_interp_mode.upper() in ['BILINEAR', 'NEAREST']:
+            self.rotation_interp_mode = transforms.InterpolationMode[self.rotation_interp_mode.upper()]
+        
 # %% Augmentation helper class
 class ImageAugmentationsHelper(torch.nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
@@ -223,6 +230,8 @@ class ImageAugmentationsHelper(torch.nn.Module):
             labels: Tensor[B, num_points, 2] or np.ndarray matching batch
             returns: shifted+augmented images & labels, same type as input
         """
+        # DEVNOTE scaling and rescaling image may be avoided by modifying intensity-related augmentations instead.
+
         if not isinstance(images, tuple) and self.augs_cfg.input_is_tuple:
             raise TypeError(
                 "Input is not tuple, but input_is_tuple is set to True.")
@@ -236,9 +245,9 @@ class ImageAugmentationsHelper(torch.nn.Module):
         else:
             images_ = images
 
-        # Processing
+        # Processing batches
         with torch.no_grad():
-            # Detect type and convert to torch Tensor [B,C,H,W]
+            # Detect type, convert to torch Tensor [B,C,H,W], determine scaling factor
             is_numpy = isinstance(images_, np.ndarray)
             img_tensor, to_numpy, scale_factor = self.preprocess_images_(
                 images_)
@@ -246,14 +255,14 @@ class ImageAugmentationsHelper(torch.nn.Module):
             if torch.is_tensor(labels) and is_numpy:
                 labels = torch_to_numpy(labels)
 
-            # DEVNOTE this may be avoided by scaling intensity-related augmentations instead of the image.
-            if scale_factor is not None: # Unapply scaling factor before adding augs
+            # Undo scaling before adding augs if is_normalized
+            if scale_factor is not None and self.augs_cfg.is_normalized: 
                 img_tensor = img_tensor * scale_factor
 
             # Apply torchvision augmentation module
             if self.torchvision_augs_module is not None:
                 # TODO any way to modify the rotation centre at runtime? --> No way, need to switch to kornia custom with warp_affine
-                # TODO labels update?
+                # TODO how to do labels update in torchvision?
                 img_tensor = self.torchvision_augs_module(img_tensor)
 
             # Apply translation
@@ -264,15 +273,15 @@ class ImageAugmentationsHelper(torch.nn.Module):
                 img_shifted = img_tensor
                 lbl_shifted = numpy_to_torch(labels).float()
             
-            # Apply augmentations module (DEVNOTE assumes input is unnormalized)
+            # Apply augmentations module
             aug_img = self.kornia_augs_module(img_shifted)
 
             # Apply inverse scaling if needed
-            if scale_factor is not None:
+            if scale_factor is not None and (self.augs_cfg.is_normalized or self.augs_cfg.enable_auto_input_normalization):
                 aug_img = aug_img / scale_factor
 
             if aug_img.max() > 10:
-                print('\033[93mWarning, image before clamping to [0,1] has values much greater than 1, that are unlikely to result from augmentations.\033[0m')
+                warn(f'\033[93mWARNING: image before clamping to [0,1] has values much greater than 1, that are unlikely to result from augmentations. Check flags: is_normalized: {self.augs_cfg.is_normalized}, enable_auto_input_normalization: {self.augs_cfg.enable_auto_input_normalization}.\033[0m')
 
             # Apply clamping to [0,1]
             aug_img = torch.clamp(aug_img, 0.0, 1.0)
@@ -322,8 +331,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
             imgs_array = images.copy()
 
             # Determine scale factor
-            if self.augs_cfg.is_normalized:
-                scale_factor = self.determine_scale_factor_(images)
+            scale_factor = self.determine_scale_factor_(images)
 
             if imgs_array.ndim < 2 or imgs_array.ndim > 4:
                 raise ValueError(
@@ -370,10 +378,8 @@ class ImageAugmentationsHelper(torch.nn.Module):
             return imgs_array, True, scale_factor
 
         elif isinstance(images, torch.Tensor):
-            imgs_array = images
-
-            if self.augs_cfg.is_normalized:
-                scale_factor = self.determine_scale_factor_(images)
+            imgs_array = images.to(torch.float32)
+            scale_factor = self.determine_scale_factor_(images)
 
             if imgs_array.dim() == 3:
                 imgs_array = imgs_array.unsqueeze(0)
@@ -393,8 +399,13 @@ class ImageAugmentationsHelper(torch.nn.Module):
         dtype = imgs_array.dtype
         scale_factor = 1.0
 
+        if self.augs_cfg.enable_auto_input_normalization == True and \
+                self.augs_cfg.input_normalization_factor is None and \
+                self.augs_cfg.is_normalized == False:
+            Warning(f"{colorama.Fore.LIGHTRED_EX}WARNING: auto input normalization functionality is enabled but input dtype is {dtype} and no coefficient was provided. Cannot infer image scaling automatically.{colorama.Style.RESET_ALL}")  
+
         if self.augs_cfg.input_normalization_factor is not None:
-            scale_factor = self.augs_cfg.input_normalization_factor
+            scale_factor = float(self.augs_cfg.input_normalization_factor)
         else:
             # Guess based on dtype
             if dtype == torch.uint8 or dtype == np.uint8:
@@ -403,7 +414,8 @@ class ImageAugmentationsHelper(torch.nn.Module):
                 scale_factor = 65535.0
             elif dtype == torch.uint32 or dtype == np.uint32:
                 scale_factor = 4294967295.0
-            
+            #else: keep 1.0
+           
         return scale_factor
 
     def translate_batch_(self,
@@ -466,8 +478,6 @@ class ImageAugmentationsHelper(torch.nn.Module):
         return shifted_imgs, lbl
 
 # %% Prototypes TODO
-
-
 class ImageNormalizationCoeff(Enum):
     """Enum for image normalization types."""
     SOURCE = -1.0
@@ -475,7 +485,6 @@ class ImageNormalizationCoeff(Enum):
     UINT8 = 255.0
     UINT16 = 65535.0
     UINT32 = 4294967295.0
-
 
 class ImageNormalization():
     """ImageNormalization class.
@@ -643,65 +652,9 @@ def TranslateObjectImgAndPoints(image: torch.Tensor,
     return shiftedImage, shiftedLabel
 
 
-# Quick visual check for pipeline
+# %% DEVELOPMENT CODE
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-
-    cfg = AugmentationConfig(
-        max_shift=(500, 500),
-        shift_aug_prob=0.35,
-        is_normalized=False,
-        sigma_gaussian_noise_dn=15,
-        gaussian_noise_aug_prob=1.0,
-        gaussian_blur_aug_prob=1.0,
-        is_torch_layout=False,
-        min_max_brightness_factor=(0.2, 1.2),
-        min_max_contrast_factor=(0.2, 1.2),
-        brightness_aug_prob=1.0,
-        contrast_aug_prob=1.0,
-    )
-    helper = ImageAugmentationsHelper(cfg)
-
-    # create a batch of 4 random grayscale images and simple point labels
-    batch_size = 3
-    imgs = np.zeros((batch_size, 1024, 1024, 1), dtype=np.uint8)
-    center = (512, 512)
-    radius = 200
-
-    for i in range(batch_size):
-        # Random grayscale color between 0 and 255
-        color_gray = np.random.randint(low=0, high=256)
-        # Draw a white disk in the center of each grayscale image
-        y, x = np.ogrid[:1024, :1024]
-        mask = (x - center[0])**2 + (y - center[1])**2 <= radius**2
-        imgs[i, mask] = color_gray
-
-    lbls = np.tile(np.array([[512, 512]]), (batch_size, 1))
-    out_imgs, out_lbls = helper(numpy_to_torch(imgs), lbls)
-    out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
-
-    # plot inputs and outputs in a 2×batch_size grid
-    fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
-
-    for i in range(batch_size):
-        # input
-        axs[0, i].imshow(imgs[i], cmap='gray')
-        axs[0, i].scatter(lbls[i, 0], lbls[i, 1], c='r', s=20)
-        axs[0, i].set_title(f"Input {i}")
-        axs[0, i].axis('off')
-        # output (rescale if needed)
-        disp = out_imgs[i]
-
-        if not cfg.is_normalized:
-            disp = (disp * 255).astype(np.uint8)
-
-        axs[1, i].imshow(disp, cmap='gray')
-        axs[1, i].scatter(out_lbls[i, 0], out_lbls[i, 1], c='r', s=20)
-        axs[1, i].set_title(f"Output {i}")
-        axs[1, i].axis('off')
-
-    plt.tight_layout()
-    plt.show()
+    pass
 
 """
     # For later use: batch warping
