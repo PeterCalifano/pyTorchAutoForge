@@ -381,13 +381,21 @@ class ImageAugmentationsHelper(torch.nn.Module):
             imgs_array = images.to(torch.float32)
             scale_factor = self.determine_scale_factor_(images)
 
-            if imgs_array.dim() == 3:
-                imgs_array = imgs_array.unsqueeze(0)
-
-            # Detect [B,H,W,C] vs [B,C,H,W]
-            if imgs_array.shape[-1] in (1, 3) and imgs_array.dim() == 4:
+            if imgs_array.dim() == 4 and imgs_array.shape[-1] in (1, 3): 
+                # Detect [B,H,W,C] vs [B,C,H,W]
                 # Detected numpy layout, permute
                 imgs_array = imgs_array.permute(0, 3, 1, 2)
+
+            elif imgs_array.dim() == 3 and imgs_array.shape[-1] in (1, 3):
+                # Detect [H,W,C] vs [C,H,W]
+                # Detected numpy layout, permute
+                imgs_array = imgs_array.permute(2, 0, 1)
+
+            if imgs_array.dim() == 3 and imgs_array.shape[0] in (1, 3):
+                imgs_array = imgs_array.unsqueeze(0) # Unsqueeze batch dimension
+                
+            elif imgs_array.dim() == 3:
+                imgs_array = imgs_array.unsqueeze(1) # Unsqueze channels dimension
 
             return imgs_array, False, scale_factor
 
@@ -436,8 +444,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
 
         # Convert labels to tensor [B,N,2]
         lbl = numpy_to_torch(labels).float()
-        assert (
-            lbl.shape[0] == B), f"Label batch size {lbl.shape[0]} does not match image batch size {B}."
+        assert (lbl.shape[0] == B), f"Label batch size {lbl.shape[0]} does not match image batch size {B}."
 
         # Sample shifts for each batch: dx ∈ [-max_x, max_x], same for dy
         if isinstance(self.augs_cfg.max_shift, (tuple, list)):
