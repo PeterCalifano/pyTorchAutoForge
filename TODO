@@ -25,6 +25,7 @@
 
 - [ ] v0.1.6
   - [ ] Improve docstrings in src code
+  - [ ] Implement prototype of K-fold cross-validation for training runs
 
 - [ ] v0.2.0
   - [ ] All those above
