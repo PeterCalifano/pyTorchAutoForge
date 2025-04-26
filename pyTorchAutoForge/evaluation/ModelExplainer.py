@@ -337,15 +337,16 @@ class ModelExplainerHelper():
             output_figs.append(fig)
 
             # Heatmap plot
-            fig = plt.figure(figsize=(12, 8))
-            shap.plots.heatmap(
-                expl_i,
-                show=False
-            )
-            plt.title(f"SHAP Values Heatmap (is_clustered: {cluster_features})")
-            fig.savefig(os.path.join(output_folder, f"shap_heatmap_{out_name}.png"),
-                        dpi=400, bbox_inches="tight")
-            output_figs.append(fig)
+            # TODO Verify why this causes session to crash. Replace or add decision plot
+            #fig = plt.figure(figsize=(12, 8))
+            #shap.plots.heatmap(
+            #    expl_i,
+            #    show=False
+            #)
+            #plt.title(f"SHAP Values Heatmap (is_clustered: {cluster_features})")
+            #fig.savefig(os.path.join(output_folder, f"shap_heatmap_{out_name}.png"),
+            #            dpi=400, bbox_inches="tight")
+            #output_figs.append(fig)
 
         return output_figs
 
