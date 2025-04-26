@@ -58,7 +58,6 @@ class ModelEvaluator():
         self.trainingDataloaderSize : int = len(self.validationDataloader)
         self.eval_function = evalFunction
         self.device = device
-        self.output_scale_factors = numpy_to_torch(output_scale_factors).to(self.device) if output_scale_factors is not None else None
 
         self.make_plot_predict_vs_target = make_plot_predict_vs_target
         self.predicted_values : np.ndarray | None = None
@@ -68,9 +67,25 @@ class ModelEvaluator():
         self.stats : dict = {}
         self.plotter = plotter
 
-        if plotter is not None and self.output_scale_factors is not None:
+        # Determine scale factors
+        self.output_scale_factors: NDArray[np.generic] | torch.Tensor | None = None
+
+        if output_scale_factors is not None:
+            print("Using provided output scale factors for stats computation...")
+            self.output_scale_factors = numpy_to_torch(
+                output_scale_factors).to(self.device)
+
+        elif self.plotter is not None:
+            if self.plotter.unit_scalings is not None:
+                print("Using output scale factors in plotter object for stats computation...")
+                self.output_scale_factors = numpy_to_torch(
+                    self.plotter.unit_scalings).to(self.device)
+        else:
+            print("No output scale factors provided. Using default scale factors of 1.0.")
+
+        if plotter is not None and output_scale_factors is not None:
             if plotter.unit_scalings is not None:
-                print('\033[93mWarning: Overriding unit scalings in plotter with output scale factors as they would result in double application when plotting. Please adjust inputs.\033[0m')
+                print('\033[93mWarning: Overriding unit scalings in plotter with output scale factors as they would result in double application when plotting. Modify input settings to remove this warning.\033[0m')
                 # Override plotter.unit_scalings to 1.0
                 plotter.unit_scalings = {k: 1.0 for k in plotter.unit_scalings.keys()}
 
@@ -184,20 +199,20 @@ class ModelEvaluator():
         max_abs_residual = torch_to_numpy(max_abs_residual)
         std_residual = torch_to_numpy(std_residual)
 
-        quantile95_residual = np.percentile(residuals, 0.95, axis=0)
+        quantile95_residual = np.percentile(np.abs(residuals), 0.95, axis=0)
 
         # Pack data into dict
         # TODO replace with dedicated object!
         self.stats = {}
-        self.stats['prediction_err']             = residuals
-        self.stats['average_abs_prediction_err'] = avg_abs_residual
-        self.stats['median_abs_prediction_err']  = median_abs_residual
-        self.stats['max_abs_prediction_err']     = max_abs_residual
-        self.stats['mean_prediction_err']        = mean_residual 
-        self.stats['median_prediction_err']      = median_residual 
-        self.stats['std_prediction_err']         = std_residual
-        self.stats['quantile95_prediction_err']  = quantile95_residual 
-        self.stats['num_samples']                = dataset_size
+        self.stats['prediction_err']              = residuals
+        self.stats['average_abs_prediction_err']  = avg_abs_residual
+        self.stats['median_abs_prediction_err']   = median_abs_residual
+        self.stats['max_abs_prediction_err']      = max_abs_residual
+        self.stats['mean_prediction_err']         = mean_residual 
+        self.stats['median_prediction_err']       = median_residual 
+        self.stats['std_prediction_err']          = std_residual
+        self.stats['quant95_abs_prediction_err']  = quantile95_residual 
+        self.stats['num_samples']                 = dataset_size
 
         error_labels = [f"Output {i}" for i in range(residuals.shape[1])]
         if self.plotter is not None:
