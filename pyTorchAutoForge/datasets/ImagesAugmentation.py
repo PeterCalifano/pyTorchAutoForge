@@ -237,6 +237,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
             returns: shifted+augmented images & labels, same type as input
         """
         # DEVNOTE scaling and rescaling image may be avoided by modifying intensity-related augmentations instead.
+        # TODO add check on size of scale factors. If mismatch wrt labels throw informative error!
 
         if not isinstance(images, tuple) and self.augs_cfg.input_is_tuple:
             raise TypeError(
