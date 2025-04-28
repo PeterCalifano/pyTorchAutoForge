@@ -77,9 +77,12 @@ class ModelEvaluator():
 
         elif self.plotter is not None:
             if self.plotter.unit_scalings is not None:
+                
+                scalings_ = np.asarray([self.plotter.unit_scalings[key] for key in self.plotter.unit_scalings])
+                
                 print("Using output scale factors in plotter object for stats computation...")
                 self.output_scale_factors = numpy_to_torch(
-                    self.plotter.unit_scalings).to(self.device)
+                    scalings_).to(self.device)
         else:
             print("No output scale factors provided. Using default scale factors of 1.0.")
 
