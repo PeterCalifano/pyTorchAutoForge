@@ -1,12 +1,11 @@
 import enum
-from re import L
 from torch.utils.data import Dataset
 import numpy as np
 import torch
 from dataclasses import dataclass
 
 from torch.utils.data.dataset import TensorDataset
-from zipp import Path
+from pathlib import Path
 from pyTorchAutoForge.utils import numpy_to_torch, Align_batch_dim, torch_to_numpy
 from torchvision.transforms import Compose
 
@@ -14,6 +13,10 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from abc import abstractmethod
 from abc import ABCMeta
+
+
+# %% Experimental code
+# DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
 
 class NormalizationType(enum.Enum):
     NONE = "None"
@@ -41,9 +44,6 @@ class DatasetScope(enum.Enum):
         if isinstance(other, DatasetScope):
             return self.value == other.value
 
-
-# %% Experimental code
-# DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
 
 class ptaf_dtype(enum.Enum):
     INT8 = "int8"
@@ -124,12 +124,6 @@ def NormalizeDataMatrix(data_matrix: np.ndarray | torch.Tensor,
         return data_matrix_, None
 
 
-        
-
-def DeNormalizeDataMatrix(data_matrix: np.ndarray, scaler: StandardScaler | MinMaxScaler):
-    pass # TODO
-    return 0
-
 
 @dataclass
 class DatasetLoaderConfig():
@@ -163,6 +157,7 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
     image_dtype: type | torch.dtype = np.uint8 
 
 
+# %% Relatively stable code 
 @dataclass
 class ImagesLabelsContainer:
     """
@@ -173,8 +168,53 @@ class ImagesLabelsContainer:
     images : np.ndarray | torch.Tensor
     labels : np.ndarray | torch.Tensor
     
+@dataclass
+class TupledImagesLabelsContainer:
+    """
+     _summary_
+
+    _extended_summary_
+    """
+    input_tuple : tuple[np.ndarray | torch.Tensor]
+    labels : np.ndarray | torch.Tensor
+
+    def __iter__(self, idx):
+        pass 
+
+    def __getitem__(self, idx):
+        pass
+
+    def images(self):
+        """
+        Return the images from the input tuple.
+        """
+        return self.input_tuple[0] if len(self.input_tuple) > 0 else None
+
     
-class ImagesLabelsCachedDataset(TensorDataset):
+class ImagesLabelsDatasetBase(Dataset):
+    def __init__(self):
+        super().__init__()
+    
+    @abstractmethod
+    def __getitem__(self, idx):
+        raise NotImplementedError("Subclasses should implement this method.")
+    
+    def load_all_from_paths(self, 
+                            images_path: str | Path, 
+                            labels_path: str | Path, 
+                            input_vector_data: str | Path | None = None):
+        """
+        Load all images and labels from the specified paths. Optionally, additional input vector data can be loaded, in which case the method returns a tuple of ((images, input_vector_data), labels).
+        """
+        # Implement loading logic for images and labels
+        raise NotImplementedError("Loading from paths is not implemented yet.")
+
+
+    def load_indexed_from_path(self):
+        # TODO method to load a single (image, labels) pair from disk
+        pass
+
+class ImagesLabelsCachedDataset(TensorDataset, ImagesLabelsDatasetBase):
     """
     ImagesLabelsCachedDataset _summary_
 
@@ -260,11 +300,70 @@ class ImagesLabelsCachedDataset(TensorDataset):
     #    return image, label
     
 
-    #def load_from_paths(self, images_path:str, labels_path:str) -> ImagesLabelsContainer:
-    # DEVNOTE this should be implemented in a base class since in common!
-    #    images, labels = [], [] # TODO: Implement loading logic for images and labels
-    #    return ImagesLabelsContainer(images, labels)
+class TupledImagesLabelsCachedDataset(ImagesLabelsDatasetBase):
+    def __init__(self, tupled_images_labels: TupledImagesLabelsContainer):
+        """
+        Initialize the TupledImagesLabelsCachedDataset with the given images and labels.
 
+        Args:
+            images_labels (TupledImagesLabelsContainer | None): Container for images and labels.
+        """
+        if not isinstance(tupled_images_labels, TupledImagesLabelsContainer):
+            raise TypeError("tupled_images_labels must be of type TupledImagesLabelsContainer.")
+
+        # Initialize X and Y
+        self.input_tuple = tupled_images_labels.input_tuple
+        self.labels = tupled_images_labels.labels
+
+        # Verify that the input tuple and labels have the same batch size
+        if len(self.input_tuple) < 1:
+            raise ValueError("Input tuple must contain at least one element.")
+        
+        if self.input_tuple[0].shape[0] != self.labels.shape[0]:
+            raise ValueError("Batch size mismatch between input tuple and labels.")
+
+        if len(self.input_tuple) > 1:
+            # Verify all elements in the input tuple have the same batch size
+            for i in range(1, len(self.input_tuple)):
+                if self.input_tuple[i].shape[0] != self.labels.shape[0]:
+                    raise ValueError(f"Batch size mismatch between input tuple element {i} and labels.")
+
+
+    def __getitem__(self, index):
+        return self.input_tuple[index], self.labels[index]
+
+    def __len__(self):
+        """
+        Return the number of samples in the dataset.
+
+        Returns:
+            int: Number of samples in the dataset.
+        """
+        return len(self.labels)
+    
+                 
+
+class ImagesLabelsDataset():
+    def __init__(self, dataset_config: DatasetLoaderConfig):
+        """
+        Initialize the ImagesLabelsDataset with the given configuration.
+
+        Args:
+            dataset_config (DatasetLoaderConfig): Configuration for the dataset.
+        """
+        self.dataset_config = dataset_config
+
+    def __len__(self):
+        """
+        Return the number of samples in the dataset.
+
+        Returns:
+            int: Number of samples in the dataset.
+        """
+        return self.dataset_config.num_samples
+    
+    def __getitem__(self, index):
+        pass
 
 # TODO function to rework as method of ImagesLabelsDataset
 def LoadDataset(datasetID: int | list[int], datasetsRootFolder: str, hostname: str, limit: int = 0):

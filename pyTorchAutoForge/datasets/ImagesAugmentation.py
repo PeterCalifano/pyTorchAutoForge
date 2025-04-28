@@ -164,6 +164,8 @@ class AugmentationConfig:
             self.rotation_interp_mode = transforms.InterpolationMode[self.rotation_interp_mode.upper()]
         
 # %% Augmentation helper class
+# TODO add capability to support custom augmentation module by appending it in the user-specified location ("append_custom_module_after = (module, <literal>)" that maps to a specified entry in the augs_ops list. The given module is then inserted into the list at the specified position)
+  
 class ImageAugmentationsHelper(torch.nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
         super().__init__()
@@ -216,6 +218,10 @@ class ImageAugmentationsHelper(torch.nn.Module):
             augs_ops.append(module=RandomGaussianNoiseVariableSigma(
                 sigma_noise=augs_cfg.sigma_gaussian_noise_dn, gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob))
 
+        #if augs_cfg.append_custom_module_after_ is not None:
+        #    pass
+
+
         # Stack into nn.Sequential module
         # TODO replace with AugmentationSequential
         self.kornia_augs_module = nn.Sequential(*augs_ops)
@@ -231,6 +237,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
             returns: shifted+augmented images & labels, same type as input
         """
         # DEVNOTE scaling and rescaling image may be avoided by modifying intensity-related augmentations instead.
+        # TODO add check on size of scale factors. If mismatch wrt labels throw informative error!
 
         if not isinstance(images, tuple) and self.augs_cfg.input_is_tuple:
             raise TypeError(
@@ -393,7 +400,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
 
             if imgs_array.dim() == 3 and imgs_array.shape[0] in (1, 3):
                 imgs_array = imgs_array.unsqueeze(0) # Unsqueeze batch dimension
-                
+
             elif imgs_array.dim() == 3:
                 imgs_array = imgs_array.unsqueeze(1) # Unsqueze channels dimension
 

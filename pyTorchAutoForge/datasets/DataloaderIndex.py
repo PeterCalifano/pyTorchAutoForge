@@ -1,9 +1,9 @@
 from numpy import isscalar
 from torch.utils.data import DataLoader, random_split
 from math import floor 
-# Removed Optional as it is deprecated in Python 3.10; using "| None" instead
 
 # %%  Data loader indexer class - PeterC - 23-07-2024
+# TODO add support for RepeatedKfolder sampler from sklearn
 class DataloaderIndex:
     """
     DataloaderIndex class to index dataloaders for training and validation datasets. 
