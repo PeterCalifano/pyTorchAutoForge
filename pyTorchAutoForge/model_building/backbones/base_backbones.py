@@ -1,3 +1,4 @@
+from pickle import FALSE
 from typing import Literal
 from pyTorchAutoForge.utils import GetDeviceMulti
 from pyTorchAutoForge.setup import BaseConfigClass
@@ -20,7 +21,7 @@ class FeatureExtractorConfig(BaseConfigClass):
     """
     adapter_config : BaseAdapterConfig | None = None
     input_resolution: tuple[int, int] = (512, 512)
-    pretrained: bool = True
+    pretrained: bool = False
     # Dimension of the final linear layer (if you want to add a linear layer)
     output_size: int | None = None
     remove_classifier: bool = True

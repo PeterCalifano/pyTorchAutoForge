@@ -201,8 +201,8 @@ class ModelEvaluator():
         median_abs_residual = torch_to_numpy(median_abs_residual)
         max_abs_residual = torch_to_numpy(max_abs_residual)
         std_residual = torch_to_numpy(std_residual)
-
-        quantile95_residual = np.percentile(np.abs(residuals), 0.95, axis=0)
+        
+        quantile95_residual = np.quantile(np.abs(residuals), 0.95, axis=0)
 
         # Pack data into dict
         # TODO replace with dedicated object!

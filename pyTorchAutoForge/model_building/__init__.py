@@ -1,7 +1,7 @@
 from .ModelAutoBuilder import ModelAutoBuilder
 from .modelBuildingBlocks import AutoForgeModule, ConvolutionalBlock, TemplateConvNet, TemplateDeepNet, TemplateDeepNet_experimental, MultiHeadRegressor
 from .ModelAssembler import ModelAssembler
-from .ModelMutator import ModelMutator
+from .ModelMutator import ModelMutator, EnumMutations
 
 # Backbones
 from .backbones.base_backbones import FeatureExtractorConfig, FeatureExtractorFactory, BackboneConfig, BackboneFactory
@@ -17,6 +17,7 @@ __all__ = [
     'TemplateDeepNet_experimental', 
     'ModelAssembler', 
     'ModelMutator', 
+    'EnumMutations',
     'MultiHeadRegressor',
     'FeatureExtractorConfig',
     'FeatureExtractorFactory',
