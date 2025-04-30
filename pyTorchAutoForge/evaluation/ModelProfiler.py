@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 import os
+import colorama 
 
 class ModelProfilerHelper():
     """
@@ -64,7 +65,7 @@ class ModelProfilerHelper():
             # If input is a list or tuple indicating shape, generate random
             self.input_sample = torch.randn((1, *input_shape_or_sample[1:]))
         else:
-            if isinstance(input_shape_or_sample, NDArray[np.floating | np.integer | np.bool_]):
+            if isinstance(input_shape_or_sample, np.ndarray):
                 self.input_sample = torch.from_numpy(input_shape_or_sample)
             elif isinstance(input_shape_or_sample, torch.Tensor):
                 # Input is a sample of torch tensor, store it
@@ -137,12 +138,12 @@ class ModelProfilerHelper():
         (model_path_root, model_ext) = os.path.splitext(model_path)
 
         if model_ext == '.pth':
-            raise ValueError("PyTorch model dict cannot be used with Netron. Please generate a .onnx model or a traced/scripted PyTorch model (.pt).")
+            raise ValueError(f"{colorama.Fore.RED}PyTorch model checkpoint (.pth) cannot be used with Netron. Please convert the model to .onnx or a traced/scripted PyTorch model (.pt) format. This version does not support automatic conversion.{colorama.Style.RESET_ALL}")
 
         if model_ext not in ['.onnx', '.pt']:
-            raise ValueError("Model path must have extension '.onnx' or '.pt'.")
-
-        # Start netron server on a new thread in deamon mode (kill when main thread exits)
+            raise ValueError(f"{colorama.Fore.RED}Model path must have extension '.onnx' or '.pt'.{colorama.Style.RESET_ALL}")
+        
+        # Start netron server on a new thread in daemon mode (kill when main thread exits)
         sys_thread = threading.Thread(
             target=netron.start, 
             args=(model_path, ('localhost', 65511), True),

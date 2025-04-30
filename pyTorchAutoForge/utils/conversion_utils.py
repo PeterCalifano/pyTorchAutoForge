@@ -5,11 +5,11 @@ from numpy import ndarray
 from numpy.typing import NDArray
 import torch
 
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 # Types
-dtype_ = type | Literal["source"]
-numpy_types = np.floating | np.integer | np.bool_
+dtype_: TypeAlias = np.dtype | torch.dtype | Literal["source"]
+numpy_types : TypeAlias = np.floating | np.integer | np.bool_
 
 # Interfaces between numpy and torch tensors
 
