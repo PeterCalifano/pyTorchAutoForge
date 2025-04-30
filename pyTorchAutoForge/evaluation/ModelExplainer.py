@@ -84,11 +84,15 @@ class ModelExplainerHelper():
         elif isinstance(explain_method, ShapExplainMethods):
             print('ModelExplainer is using SHAP library...')
 
-            # Build SHAP masker (defines how missing features are treated)
+            # Build SHAP masker (determines how missing features are treated and computes base values for Expectation computation)
             num_of_samples = np.ceil(
                 0.2 * self.input_samples.shape[0]).astype(int)
+            
+            # Get random indices from input samples
+            random_indices = np.random.choice(self.input_samples.shape[0], num_of_samples, replace=False)
+
             background_dataset = shap.sample(torch_to_numpy(
-                self.input_samples[:num_of_samples]),
+                self.input_samples[random_indices]),
                 random_state=42)
 
             # Define model forward wrapper function for SHAP
