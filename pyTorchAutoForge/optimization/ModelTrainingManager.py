@@ -1040,7 +1040,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 num_of_batches = 0
                 samples_counter = 0
 
-                average_prediction_err = None
+                average_prediction = None
                 worst_prediction_err = None
                 prediction_errors = None
                 correct_predictions = 0
@@ -1134,7 +1134,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if self.tasktype == TaskType.REGRESSION:
 
                     # Compute average prediction over all samples
-                    average_prediction_err = label_scaling_factors * torch.mean(torch.abs(prediction_errors), dim=0)
+                    average_prediction = label_scaling_factors * torch.mean(prediction_errors, dim=0)
                     average_loss /= num_of_batches
 
                     # Get worst prediction error over all samples
@@ -1145,13 +1145,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     median_prediction_err, _ = torch.median(torch.abs(prediction_errors), dim=0)
                     median_prediction_err *= label_scaling_factors 
 
+                    quantile95_prediction_err = torch.quantile(torch.abs(prediction_errors), 0.95)
+                    quantile95_prediction_err *= label_scaling_factors
+                    
                     # TODO (TBC): log example in mlflow?
                     # if self.mlflow_logging:
                     #    print('TBC')
 
-                    print(f"\tAverage prediction (scaled) errors with {samples_counter} samples: \n",
-                          "\t\t", average_prediction_err, "\n\tCorresponding average loss: ", average_loss)
+                    print(f"\tAverage prediction (scaled) with {samples_counter} samples: \n",
+                          "\t\t", average_prediction, "\n\tCorresponding average loss: ", average_loss)
                     print(f"\n\tWorst prediction (scaled) errors per component: \n\t\t", worst_prediction_err)
+                    print(f"\n\tQuantile95 prediction (scaled) errors per component: \n\t\t", quantile95_prediction_err)
                     print(f"\n\tMedian prediction (scaled) errors per component: \n\t\t", median_prediction_err)
                     print("\n")
 
