@@ -1145,7 +1145,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     median_prediction_err, _ = torch.median(torch.abs(prediction_errors), dim=0)
                     median_prediction_err *= label_scaling_factors 
 
-                    quantile95_prediction_err = torch.quantile(torch.abs(prediction_errors), 0.95)
+                    quantile95_prediction_err = torch.quantile(torch.abs(prediction_errors), 0.95, 0)
                     quantile95_prediction_err *= label_scaling_factors
                     
                     # TODO (TBC): log example in mlflow?
