@@ -332,7 +332,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if self.mlflow_experiment_name is not None:
             # Update checkpointing directory to split in subfolders
             self.checkpoint_dir = os.path.join(self.checkpoint_dir, self.mlflow_experiment_name)
-            os.makedirs(self.checkpoint_dir, exists_ok=True)
+            os.makedirs(self.checkpoint_dir, exist_ok=True)
 
         self.current_lr : float = self.initial_lr
 
