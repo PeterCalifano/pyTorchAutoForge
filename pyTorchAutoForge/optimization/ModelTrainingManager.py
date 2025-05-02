@@ -1099,7 +1099,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         elif self.example_labels_scaling_factors is not None:
                             label_scaling_factors = self.example_labels_scaling_factors.to(Y.device)
 
+                    elif self.example_labels_scaling_factors is not None:
+                        label_scaling_factors = self.example_labels_scaling_factors.to(Y.device)
 
+                
                     # Perform FORWARD PASS
                     example_predictions = self.model(X)  # Evaluate model at input
 
