@@ -114,22 +114,25 @@ def SaveModel(model: torch.nn.Module,
     saving_dir = os.path.dirname(model_filename)
     os.makedirs(saving_dir, exist_ok=True)
 
+    model.eval()
     if traced_or_scripted == True and example_input is not None:
         
         if save_mode == AutoForgeModuleSaveMode.TRACED_DINAMO:
+            from torch.export import export, save
+            exported_program = export(model.to(target_device), (example_input.to(target_device),))
+            save(exported_program, model_filename)
 
-            traced_model = torch._dynamo.export(model.to(target_device), example_input.to(target_device))
             print("Saving traced_dynamo torch model as file:", model_filename)
 
         elif save_mode == AutoForgeModuleSaveMode.SCRIPTED_TORCHSCRIPT:
             
             traced_model = torch.jit.trace(model.to(target_device), example_input.to(target_device))
+            torch.jit.save(traced_model, model_filename)
             print("Saving scripted_torchscript torch model as file:", model_filename)
 
         else:
             raise ValueError('Invalid save mode for traced model. Valid options: traced_dynamo, scripted_torchscript')
         
-        torch.jit.save(traced_model, model_filename) 
         return
     
     elif traced_or_scripted == False:

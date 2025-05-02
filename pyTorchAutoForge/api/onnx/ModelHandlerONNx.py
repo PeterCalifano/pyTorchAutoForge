@@ -14,7 +14,13 @@ class ModelHandlerONNx:
     """
     # CONSTRUCTOR
 
-    def __init__(self, model: torch.nn.Module | AutoForgeModule | onnx.ModelProto, dummy_input_sample: torch.Tensor | numpy.ndarray, onnx_export_path: str = '.', opset_version: int = 13, run_export_validation: bool = True, generate_report: bool = False) -> None:
+    def __init__(self, 
+                 model: torch.nn.Module | AutoForgeModule | onnx.ModelProto, 
+                 dummy_input_sample: torch.Tensor | numpy.ndarray, 
+                 onnx_export_path: str = '.', 
+                 opset_version: int = 13, 
+                 run_export_validation: bool = True,
+                 generate_report: bool = False) -> None:
         
         # Store shallow copy of model
         if isinstance(model, torch.nn.Module):
@@ -42,7 +48,12 @@ class ModelHandlerONNx:
 
     # METHODS
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def torch_export(self, input_tensor: torch.Tensor | None = None, onnx_model_name: str | None = None, dynamic_axes: dict = None, IO_names: dict = None, verbose: bool = True) -> None:
+    def torch_export(self, 
+                     input_tensor: torch.Tensor | None = None, 
+                     onnx_model_name: str | None = None, 
+                     dynamic_axes: dict = None, 
+                     IO_names: dict = None,
+                     verbose: bool = True) -> None:
         """Export the model to ONNx format using TorchScript backend."""
 
         # TODO (PC) move all this preliminary code to a dedicated method
@@ -56,13 +67,12 @@ class ModelHandlerONNx:
             print('No name provided for the ONNx model. Assign default value.')
             onnx_model_name = 'onnx_export'
         
-        if not os.path.exists(self.onnx_export_path):
-            os.makedirs(self.onnx_export_path)
+        os.makedirs(os.path.dirname(self.onnx_export_path), exist_ok=True)
 
         # Check if any model is already exported in the export path and append ID to the filename if any
         nameID = 0
         onnx_model_name_tmp = onnx_model_name
-        while os.path.isfile(os.path.join(self.onnx_export_path, onnx_model_name_tmp + ".onnx")):
+        while os.path.isfile(os.path.join(os.path.dirname(self.onnx_export_path), onnx_model_name_tmp + ".onnx")):
             onnx_model_name_tmp = onnx_model_name + str(nameID)
             nameID += 1
         onnx_model_name = onnx_model_name_tmp
@@ -91,7 +101,7 @@ class ModelHandlerONNx:
         # 8) Model output name
 
         self.onnx_filepath = os.path.join(
-            self.onnx_export_path, onnx_model_name + ".onnx")
+            self.onnx_export_path + ".onnx")
 
         torch.onnx.export(self.torch_model,               
                         input_tensor,                      
@@ -109,7 +119,7 @@ class ModelHandlerONNx:
         if self.run_export_validation:
             # Reload the model from disk
             self.onnx_model = self.onnx_load(os.path.join(
-                self.onnx_export_path, onnx_model_name + ".onnx"))
+                os.path.dirname(self.onnx_export_path), onnx_model_name + ".onnx"))
             self.onnx_validate(self.onnx_model)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -119,7 +129,7 @@ class ModelHandlerONNx:
         # Check if any model is already exported in the export path and append ID to the filename if any
         nameID = 0
         onnx_model_name_tmp = onnx_model_name
-        while os.path.isfile(os.path.join(self.onnx_export_path, onnx_model_name_tmp + ".onnx")):
+        while os.path.isfile(os.path.join(os.path.dirname(self.onnx_export_path), onnx_model_name_tmp + ".onnx")):
             onnx_model_name_tmp = onnx_model_name + str(nameID)
             nameID += 1
         onnx_model_name = onnx_model_name_tmp
@@ -160,7 +170,7 @@ class ModelHandlerONNx:
         onnx_program.optimize()
 
         # Save optimized model (serialized ONNx model)
-        onnx_file_path = os.path.join(self.onnx_export_path, onnx_model_name + ".onnx")
+        onnx_file_path = os.path.join(os.path.dirname(self.onnx_export_path), onnx_model_name + ".onnx")
         onnx_program.save(onnx_file_path)
 
         print(f"Model exported to ONNx format using TorchDynamo: {os.path.join(self.onnx_export_path, onnx_model_name + '.onnx')}")
@@ -168,7 +178,7 @@ class ModelHandlerONNx:
         if self.run_export_validation:
             # Reload the model from disk
             self.onnx_model = self.onnx_load(os.path.join(
-                self.onnx_export_path, onnx_model_name + ".onnx"))
+                os.path.dirname(self.onnx_export_path), onnx_model_name + ".onnx"))
             self.onnx_validate(self.onnx_model)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
