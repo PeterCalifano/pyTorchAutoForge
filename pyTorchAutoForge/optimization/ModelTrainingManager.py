@@ -135,6 +135,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
 
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
+    mlflow_experiment_name : str | None = None
     eval_example: bool = False  # Evaluate example input during training
     checkpoint_dir: str = "./checkpoints"  # Directory to save model checkpoints
     modelName: str = "trained_model"      # Name of the model to be saved
@@ -316,17 +317,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.bestModel : torch.nn.Module | None = None
         self.loss_fcn : torch.nn.Module = lossFcn
         
-        self.trainingDataloader : Dataloader | None = None
-        self.validationDataloader : Dataloader | None = None
-        self.testingDataloader : Dataloader | None = None # For additional evaluation phase if set provided. Validation loader is used if not.
+        self.trainingDataloader : torch.utils.data.Dataloader | None = None
+        self.validationDataloader : torch.utils.data.Dataloader | None = None
+        self.testingDataloader : torch.utils.data.Dataloader | None = None # For additional evaluation phase if set provided. Validation loader is used if not.
 
         self.trainingDataloaderSize : int = 0
         self.current_epoch : int = 0
         self.num_of_updates : int = 0
 
-        self.currentTrainingLoss : float = None
-        self.currentValidationLoss : float = None
+        self.currentTrainingLoss : float | None = None
+        self.currentValidationLoss : float | None = None
         self.currentMlflowRun = mlflow.active_run()  # Returns None if no active run
+
+        if self.mlflow_experiment_name is not None:
+            # Update checkpointing directory to split in subfolders
+            self.checkpoint_dir = os.path.join(self.checkpoint_dir, self.mlflow_experiment_name)
+            os.makedirs(self.checkpoint_dir, exists_ok=True)
 
         self.current_lr : float = self.initial_lr
 
@@ -1565,23 +1571,6 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
 
     # Restore the original batch size
     dataloader = original_dataloader
-
-    # EXPERIMENTAL: Try to perform one single forward pass for the entire dataset (MEMORY BOUND)
-    # with torch.no_grad():
-    #    TENSOR_VALIDATION_EVAL = False
-    #    if TENSOR_VALIDATION_EVAL:
-    #        dataX = []
-    #        dataY = []
-    #    # NOTE: the memory issue is in transforming the list into a torch tensor on the GPU. For some reasons
-    #    # the tensor would require 81 GBits of memory.
-    #        for X, Y in dataloader:
-    #            dataX.append(X)
-    #            dataY.append(Y)
-    #        # Concatenate all data in a single tensor
-    #        dataX = torch.cat(dataX, dim=0).to(device)
-    #        dataY = torch.cat(dataY, dim=0).to(device)
-    #        predVal_dataset = model(dataX) # Evaluate model at input
-    #        validationLoss_dataset = lossFcn(predVal_dataset, dataY).item() # Evaluate loss function and accumulate
 
     if taskType.lower() == 'classification':
         validationLoss /= numberOfBatches  # Compute batch size normalized loss value
