@@ -26,15 +26,15 @@ class AutoForgeModuleSaveMode(Enum):
         model_state_dict (str): Save the module's state dictionary.
         model_arch_state (str): Save the model's architecture state.
     """
-    traced_dynamo = "traced_dynamo"
-    scripted_torchscript = "scripted_torchscript"
-    model_state_dict = "model_state_dict"
-    model_arch_state = "model_arch_state"
+    TRACED_DINAMO = "traced_dynamo"
+    SCRIPTED_TORCHSCRIPT = "scripted_torchscript"
+    MODEL_STATE_DICT = "model_state_dict"
+    MODEL_ARCH_STATE = "model_arch_state"
 
 
 def SaveModel(model: torch.nn.Module, 
               model_filename: str | pathlib.Path, 
-              save_mode : AutoForgeModuleSaveMode | str = AutoForgeModuleSaveMode.model_arch_state, 
+              save_mode : AutoForgeModuleSaveMode | str = AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
               example_input: torch.Tensor | None = None, 
               target_device: str = 'cpu', 
               model_base_name : str | None = None) -> None:
@@ -80,15 +80,15 @@ def SaveModel(model: torch.nn.Module,
         example_input = example_input.detach()
         example_input.requires_grad = False
 
-    elif save_mode == AutoForgeModuleSaveMode.traced_dynamo or save_mode == AutoForgeModuleSaveMode.scripted_torchscript:
+    elif save_mode == AutoForgeModuleSaveMode.TRACED_DINAMO or save_mode == AutoForgeModuleSaveMode.SCRIPTED_TORCHSCRIPT:
         print('Warning: tracing/scripting requested, but no sample input was provided. Defaulting to save model without.')
 
-    if save_mode == AutoForgeModuleSaveMode.traced_dynamo or save_mode == AutoForgeModuleSaveMode.scripted_torchscript and example_input is not None:
+    if save_mode == AutoForgeModuleSaveMode.TRACED_DINAMO or save_mode == AutoForgeModuleSaveMode.SCRIPTED_TORCHSCRIPT and example_input is not None:
 
         extension = '.pt'
         traced_or_scripted = True
 
-    elif save_mode == AutoForgeModuleSaveMode.model_state_dict:
+    elif save_mode == AutoForgeModuleSaveMode.MODEL_STATE_DICT:
         extension = '_statedict.pth'
 
     else: 
@@ -100,7 +100,7 @@ def SaveModel(model: torch.nn.Module,
 
     # Form filename for saving
     # Check if device is in model name and remove it
-    if save_mode == AutoForgeModuleSaveMode.traced_dynamo or save_mode == AutoForgeModuleSaveMode.scripted_torchscript:
+    if save_mode == AutoForgeModuleSaveMode.TRACED_DINAMO or save_mode == AutoForgeModuleSaveMode.SCRIPTED_TORCHSCRIPT:
 
         # Append device for which the traced model was saved on
         if ("_" + target_device_name) in str(model_filename):
@@ -116,12 +116,12 @@ def SaveModel(model: torch.nn.Module,
 
     if traced_or_scripted == True and example_input is not None:
         
-        if save_mode == AutoForgeModuleSaveMode.traced_dynamo:
+        if save_mode == AutoForgeModuleSaveMode.TRACED_DINAMO:
 
             traced_model = torch._dynamo.export(model.to(target_device), example_input.to(target_device))
             print("Saving traced_dynamo torch model as file:", model_filename)
 
-        elif save_mode == AutoForgeModuleSaveMode.scripted_torchscript:
+        elif save_mode == AutoForgeModuleSaveMode.SCRIPTED_TORCHSCRIPT:
             
             traced_model = torch.jit.trace(model.to(target_device), example_input.to(target_device))
             print("Saving scripted_torchscript torch model as file:", model_filename)
@@ -134,7 +134,7 @@ def SaveModel(model: torch.nn.Module,
     
     elif traced_or_scripted == False:
         
-        if save_mode == AutoForgeModuleSaveMode.model_state_dict:
+        if save_mode == AutoForgeModuleSaveMode.MODEL_STATE_DICT:
             
             print("Saving state dict of torch model as file:", model_filename)
             # Save model as internal torch representation
