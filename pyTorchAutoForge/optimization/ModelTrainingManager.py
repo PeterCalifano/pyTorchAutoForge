@@ -120,7 +120,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     tasktype: TaskType
     batch_size: int
 
-    # DIFFERENTIABLE DATA AUGMENTATION using kornia
+    # DIFFERENTIABLE DATA AUGMENTATION
     data_augmentation_module: torch.nn.Sequential | ImageAugmentationsHelper | None = None
     augment_validation_data: bool = False
     
@@ -137,6 +137,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     mlflow_logging: bool = True  # Enable MLFlow logging
     mlflow_experiment_name : str | None = None
     eval_example: bool = False  # Evaluate example input during training
+    example_labels_scaling_factors : torch.Tensor | None = None
     checkpoint_dir: str = "./checkpoints"  # Directory to save model checkpoints
     modelName: str = "trained_model"      # Name of the model to be saved
 
@@ -146,7 +147,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     optim_momentum: float = 0.75  # Momentum value for SGD optimizer
     optimizer: Any | None = torch.optim.Adam  # optimizer class
 
-    # Model checkpoint if any
+    # Model checkpoint load if any
     checkpoint_to_load: str | None = None  # Path to model checkpoint to load
     load_strict : bool = False  # Load model checkpoint with strict matching of parameters
 
@@ -156,6 +157,15 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     # OPTUNA MODE options
     optuna_trial: Any = None  # Optuna optuna_trial object
 
+    def __post_init__(self):
+        
+        if not(torch.is_tensor(self.example_labels_scaling_factors)):
+            # Print warning
+            print("\033[38;5;208mWarning: example_labels_scaling_factors is not a torch.Tensor. Overriden to None.\033[0m")
+            # Set to none
+            self.example_labels_scaling_factors = None
+            
+
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
         Create a shallow copy of the ModelTrainingManagerConfig instance.
@@ -163,7 +173,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
         Returns:
             ModelTrainingManagerConfig: A new instance of ModelTrainingManagerConfig with the same configuration.
         """
-        return self.__init__(**instanceToCopy.getConfigDict())
+        return ModelTrainingManagerConfig(**instanceToCopy.getConfigDict())
 
     # DEVNOTE: dataclass generates __init__() automatically
     # Same goes for __repr()__ for printing and __eq()__ for equality check methods
@@ -1085,6 +1095,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         if isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
                             if self.data_augmentation_module.augs_cfg.label_scaling_factors is not None:
                                 label_scaling_factors = self.data_augmentation_module.augs_cfg.label_scaling_factors.to(Y.device)
+
+                        elif self.example_labels_scaling_factors is not None:
+                            label_scaling_factors = self.example_labels_scaling_factors.to(Y.device)
+
 
                     # Perform FORWARD PASS
                     example_predictions = self.model(X)  # Evaluate model at input
