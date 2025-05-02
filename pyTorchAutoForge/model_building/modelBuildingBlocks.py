@@ -221,14 +221,22 @@ class TemplateDeepNet(AutoForgeModule):
         super().__init__()
 
         model_name = cfg.get('model_name', 'template_deepnet')
-        norm_layer_type = cfg.get('norm_layer_type', 'batchnorm').lower()
+        regularization_layer_type = cfg.get(
+            'regularization_layer_type', 'batchnorm').lower()
 
-        if norm_layer_type == 'batchnorm':
+        if regularization_layer_type == 'batchnorm':
             self.use_batchnorm = True
-        else:
+            dropout_probability = 0.0
+        elif regularization_layer_type == 'dropout':
             self.use_batchnorm = False
-
-        alphaDropCoeff = cfg.get('alphaDropCoeff', 0)
+            dropout_probability = cfg.get('dropout_probability', 0.0)
+        elif regularization_layer_type == 'groupnorm':
+            raise NotImplementedError(
+                'Group normalization is not implemented yet. Please use batch normalization or dropout instead.')
+        else:
+            dropout_probability = 0.0
+            self.use_batchnorm = False
+        
         out_channel_sizes = cfg.get('out_channel_sizes', [])
         
         # Initialize input size for first layer
@@ -254,8 +262,8 @@ class TemplateDeepNet(AutoForgeModule):
             self.layers.append(nn.PReLU(self.out_channel_sizes[i]))
 
             # Dropout is inhibited if batch normalization
-            if not self.use_batchnorm:
-                self.layers.append(nn.Dropout(alphaDropCoeff))
+            if not self.use_batchnorm and dropout_probability > 0:
+                self.layers.append(nn.Dropout(dropout_probability))
 
             # Add batch normalization layer if required
             if self.use_batchnorm:
