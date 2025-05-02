@@ -119,7 +119,7 @@ def test_sample_images_augmentation():
     # Define augmentation helper
     cfg = AugmentationConfig(
         max_shift=(250, 250),
-        shift_aug_prob=0.35,
+        shift_aug_prob=1.0,
         is_normalized=False,
         rotation_angle=(-180, 180),
         rotation_aug_prob=1.0,
@@ -141,35 +141,39 @@ def test_sample_images_augmentation():
     # Apply augs and plot
     lbls = np.tile(np.array([resolution[0] / 2, resolution[1] / 2]), (batch_size, 1))
 
-    out_imgs, out_lbls = augs_helper(numpy_to_torch(imgs), lbls)
-    out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
+    num_trials = 10
 
-    # Plot inputs and outputs in a 2×batch_size grid
-    fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
+    for idTrial in range(num_trials):
 
-    for i in range(batch_size):
-        # Input
-        axs[0, i].imshow(imgs[i], cmap='gray')
-        axs[0, i].scatter(lbls[i, 0], lbls[i, 1], c='r', s=20)
-        axs[0, i].set_title(f"Input {i}")
-        axs[0, i].axis('off')
-        # Output (rescale if needed)
-        disp = out_imgs[i]
+        out_imgs, out_lbls = augs_helper(numpy_to_torch(imgs), lbls)
+        out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
 
-        if cfg.is_normalized or cfg.enable_auto_input_normalization:
-            disp = (disp * 255).astype(np.uint8)
-        else:
-            disp = disp.astype(np.uint8)
+        # Plot inputs and outputs in a 2×batch_size grid
+        fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
 
-        axs[1, i].imshow(disp, cmap='gray')
-        axs[1, i].scatter(out_lbls[i, 0], out_lbls[i, 1], c='r', s=20)
-        axs[1, i].set_title(f"Output {i}")
-        axs[1, i].axis('off')
+        for i in range(batch_size):
+            # Input
+            axs[0, i].imshow(imgs[i], cmap='gray')
+            axs[0, i].scatter(lbls[i, 0], lbls[i, 1], c='r', s=20)
+            axs[0, i].set_title(f"Input {i}")
+            axs[0, i].axis('off')
+            # Output (rescale if needed)
+            disp = out_imgs[i]
 
-    plt.tight_layout()
-    # plt.pause(2)
-    plt.show()
-    plt.close()
+            if cfg.is_normalized or cfg.enable_auto_input_normalization:
+                disp = (disp * 255).astype(np.uint8)
+            else:
+                disp = disp.astype(np.uint8)
+
+            axs[1, i].imshow(disp, cmap='gray')
+            axs[1, i].scatter(out_lbls[i, 0], out_lbls[i, 1], c='r', s=20)
+            axs[1, i].set_title(f"Output {i}")
+            axs[1, i].axis('off')
+
+        plt.tight_layout()
+        #plt.pause(2)
+        plt.show()
+        plt.close()
 
 
 # %% Manual test calls
