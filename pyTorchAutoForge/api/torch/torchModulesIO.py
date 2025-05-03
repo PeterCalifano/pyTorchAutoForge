@@ -54,7 +54,7 @@ def SaveModel(model: torch.nn.Module,
                 - scripted_torchscript: Save the model using the TorchScript method.
                 - model_state_dict: Save only the model's state dictionary.
                 - model_arch_state: Save the model's architectural state.
-            Defaults to AutoForgeModuleSaveMode.model_arch_state.
+            Defaults to AutoForgeModuleSaveMode.MODEL_ARCH_STATE.
         example_input (torch.Tensor | None, optional): A sample input tensor for tracing or scripting.
             Defaults to None.
         target_device (str, optional): The target device (e.g., 'cpu' or 'cuda:0') to save the model.

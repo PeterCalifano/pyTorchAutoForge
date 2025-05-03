@@ -870,7 +870,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                         if self.bestModel is not None:
                             SaveModel(model=self.bestModel, model_filename=model_save_name,
-                                    save_mode=AutoForgeModuleSaveMode.model_arch_state, 
+                                    save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
                                     target_device='cpu')
 
                 # Update current training and validation loss values
@@ -920,7 +920,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 if self.bestModel is not None:
                     SaveModel(model=self.bestModel, model_filename=model_save_name,
-                            save_mode=AutoForgeModuleSaveMode.model_arch_state, 
+                            save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
                             example_input=examplePair[0], 
                             target_device=self.device)
                 else:
@@ -948,7 +948,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     if self.bestModel is not None:
                         SaveModel(model=self.bestModel, model_filename=model_save_name,
-                                save_mode=AutoForgeModuleSaveMode.model_arch_state, 
+                                save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
                                 example_input=examplePair[0], 
                                 target_device=self.device)
                     print(f"\t\033[38;5;208mBest model checkpoint saved correctly.\033[0m")
@@ -1791,11 +1791,11 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
             modelSaveName = os.path.join(
                 checkpoint_dir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
             
-            SaveModel(model, modelSaveName, save_mode=AutoForgeModuleSaveMode.traced_dynamo, example_input=exampleInput, target_device=device)
+            SaveModel(model, modelSaveName, save_mode=AutoForgeModuleSaveMode.TRACED_DYNAMO, example_input=exampleInput, target_device=device)
 
             if swa_model != None and swa_has_improved:
                 swa_model.eval()
-                SaveModel(swa_model, modelSaveName + '_SWA', save_mode=AutoForgeModuleSaveMode.traced_dynamo, example_input=exampleInput, target_device=device)
+                SaveModel(swa_model, modelSaveName + '_SWA', save_mode=AutoForgeModuleSaveMode.TRACED_DYNAMO, example_input=exampleInput, target_device=device)
                 swa_model.train()
 
         # MODEL PREDICTION EXAMPLES
