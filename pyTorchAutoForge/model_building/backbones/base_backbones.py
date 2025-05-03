@@ -29,7 +29,7 @@ class FeatureExtractorConfig(BaseConfigClass):
     input_channels: int = 3 # Placeholder value
 
     # Whether to return only the final feature map, or all intermediate outputs
-    output_type: Literal['last', 'features'] = 'last'
+    output_type: Literal['last', 'spill_features'] = 'last'
 
 
 @dataclass
