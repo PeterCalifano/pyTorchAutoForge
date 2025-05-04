@@ -230,14 +230,6 @@ class ModelEvaluator():
         if self.loss_fcn is not None:
             self.stats['avg_loss'] = avg_loss
 
-        # Print statistics
-        #print('\033[95mModel evaluation statistics:\033[0m')
-        #print(' Mean of prediction errors: ', mean_residual)
-        #print(' Median of prediction errors: ', median_residual)
-        #print(' Std of prediction errors: ', std_residual)
-        #print(' Quantile 95 of prediction errors', quantile95_residual)
-        #print(' Median of abs prediction errors: ', median_abs_residual)
-        #print(' Max of abs prediction errors: ', max_abs_residual)
         self.printAndSaveStats(self.stats, 
             output_folder=self.plotter.output_folder)
 
