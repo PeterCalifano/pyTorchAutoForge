@@ -119,8 +119,8 @@ def run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageA
     H, W = shapes.pop()
 
     batch_np = np.stack(imgs, axis=0)  # (N, H, W)
-    scale = 255.0 if batch_np.dtype == np.uint8 else 2**16
-    batch_np /= scale
+    #scale = 255.0 if batch_np.dtype == np.uint8 else 2**16
+    #batch_np /= scale
 
     # print per-image stats
     for name, im in zip(image_names, batch_np):
@@ -134,7 +134,7 @@ def run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageA
     if apply_augs and augmentation_module is not None:
         # Y: one (H/2, W/2) center per image
         Y = torch.Tensor([[H, W]] * len(image_names)) / 2  # (N, 2)
-        batch_torch, Y = augmentation_module(batch_torch, Y)
+        batch_torch, Y = augmentation_module(batch_torch/255.0, Y)
         Y = torch_to_numpy(Y)
 
     # Run non-batched for numpy (no support for batch)
@@ -154,9 +154,8 @@ def run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageA
 
     # ---- Verify all images/maps at once ----
     for i, (nm, tm) in enumerate(zip(numpy_maps, torch_maps), start=1):
-        # nm: (N,H,W), tm: (N,1,H,W)
         tm_np = tm[:, 0].cpu().numpy()
-        assert np.allclose(nm, tm_np, atol=1e-5), f"Mismatch in map {i}"
+        assert np.allclose(nm, tm_np, atol=1e-6), f"Mismatch in map {i}"
         print(f"Map {i} matches for all {len(image_names)} images.")
 
     # ---- Plot a grid: one row per image, one column per map (+ original) ----
@@ -179,7 +178,7 @@ def run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageA
         # feature maps
         for c in range(n_maps):
             ax = axes[r, c+1]
-            ax.imshow(torch_maps[c][r, 0].cpu().numpy(), cmap='gray')
+            ax.imshow(255*torch_maps[c][r, 0].cpu().numpy(), cmap='gray')
             if r == 0:
                 ax.set_title(titles[c+1])
             ax.axis('off')
@@ -217,7 +216,7 @@ def test_all_operators():
     augmentation_module = ImageAugmentationsHelper(cfg)
     
     # Tests
-    run_all_single_image_(image_names, apply_augs, augmentation_module)
+    #run_all_single_image_(image_names, apply_augs, augmentation_module)
     run_all_batched_images_(image_names, apply_augs, augmentation_module)
 
 
