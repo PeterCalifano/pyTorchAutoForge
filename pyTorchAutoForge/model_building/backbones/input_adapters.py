@@ -37,7 +37,52 @@ class Conv2dAdapterConfig(BaseAdapterConfig):
 class ResizeAdapterConfig(BaseAdapterConfig):
     output_size: tuple      # [H, W]
     channel_sizes: tuple  = (1, 3)   # [in_channels, out_channels]
-    interp_method: Literal['linear', 'bilinear', 'bicubic', 'trilinear'] = 'bilinear'
+    interp_method: Literal['linear', 'bilinear',
+                           'bicubic', 'trilinear'] = 'bicubic'
+
+@dataclass
+class ImageMaskFilterAdapterConfig(BaseAdapterConfig):
+    output_size: tuple    # [H, W]
+    channel_sizes: tuple  = (1, 3)
+    interp_method: Literal['linear', 'bilinear', 
+                           'bicubic', 'trilinear'] = 'bicubic' 
+    binary_mask_thr_method: Literal['quantile', 'absolute', 'otsu'] | None = 'quantile' # For output channel 2
+    binary_mask_thrOrQuantile: float = 0.9
+    filter_feature_methods: tuple[Literal['sobel', 'local_variance', 'laplacian']] | None = ('sobel', )  # For output channels from 3 to N
+
+    def __post_init__(self):
+        # Validate quantile value
+        if self.binary_mask_thr_method == 'quantile':
+            if self.binary_mask_thrOrQuantile < 0 or self.binary_mask_thrOrQuantile > 1:
+                raise ValueError(f"Invalid quantile value: {self.binary_mask_thrOrQuantile}. Must be in [0, 1].")
+    
+        # Check number of channels against mask and methods
+        if self.filter_feature_methods is not None:
+            if len(self.filter_feature_methods) > 0 and self.channel_sizes[1] < 2 + len(self.filter_feature_methods):
+                print(
+                    f"\033[93mWarning: Multiple filter feature methods specified, but output channels ({self.channel_sizes[1]}) <= 2 + {len(self.filter_feature_methods)}. No filter will be applied.\033[0m")
+                # Resize tuple
+                self.filter_feature_methods = self.filter_feature_methods[:self.channel_sizes[1] - 1] # Keep only the valid methods
+
+            # Validate filter feature methods
+            for method in self.filter_feature_methods:
+                if method not in ['sobel', 'local_variance', 'laplacian']:
+                    raise ValueError(
+                        f"Invalid filter feature method: {method}. Must be 'sobel', 'local_variance', or 'laplacian'.")
+
+        if self.binary_mask_thr_method is not None:
+            # Validate binary mask threshold method
+            if self.binary_mask_thr_method not in ['quantile', 'absolute', 'otsu']:
+                raise ValueError(
+                    f"Invalid binary mask threshold method: {self.binary_mask_thr_method}. Must be 'quantile', 'absolute', or 'otsu'.")
+
+            if self.channel_sizes[1] < 2:
+                print( f"\033[93mWarning: Output channels ({self.channel_sizes[1]}) < 2. No masking will be applied.\033[0m")
+
+                # Set methods to None
+                self.binary_mask_thr_method = None
+                self.filter_feature_methods = None        
+    
 
 
 # ===== Adapter modules =====
@@ -79,7 +124,6 @@ class Conv2dResolutionChannelsAdapter(BaseAdapter):
 
         x = self.channel_expander(x)
         return self.adaptive_pool(x)
-
 
 class ResizeCopyChannelsAdapter(BaseAdapter):
     """
@@ -130,6 +174,58 @@ class ResizeCopyChannelsAdapter(BaseAdapter):
         # Return adapted tensor ready for backbone
         return x
 
+
+class ImageMaskFilterAdapter(BaseAdapter):
+
+    def __init__(self, cfg: ImageMaskFilterAdapterConfig):
+        super().__init__()
+
+        # Convert output_size list to tuple (required by Kornia)
+        self.output_size = tuple(cfg.output_size)
+
+        # Unpack input/output channels from config # e.g. [1,3] to repeat single channel
+        self.in_ch, self.out_ch = cfg.channel_sizes
+
+        # Save interpolation method for resizing
+        self.interp = cfg.interp_method
+
+        # Save binary mask threshold method
+        self.binary_mask_thr_method = cfg.binary_mask_thr_method
+        self.binary_mask_thrOrQuantile = cfg.binary_mask_thrOrQuantile
+        self.filter_feature_methods = cfg.filter_feature_methods
+
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Resize, apply binary mask and filters to produce feature maps.
+        Args:
+          x: input tensor [B, in_ch, H_in, W_in]
+        Returns:
+          Tensor [B, out_ch, target_h, target_w]
+        """
+        
+        # Cast to torch.float32 if needed
+        if x.dtype != torch.float32:
+            x = x.to(torch.float32)
+
+        # Spatial resize to desired output_size through kornia 2D interpolation function
+        x = kornia.geometry.transform.resize(
+            x, self.output_size, interpolation=self.interp)
+
+        # Define output tensor 
+        output_tensor = torch.zeros((x.size(0), self.out_ch, x.size(2), x.size(3)), device=x.device)    
+
+        # Allocate first channel: image
+        output_tensor[:, 0, :, :] = x[:, 0, :, :]
+
+        # Compute second channel: binary mask
+        # TODO
+
+        # Compute 3 to N channels: filter features
+        # TODO
+
+        # Return adapted tensor ready for backbone
+        return output_tensor
 
 # === Factory for adapters ===
 @singledispatch
