@@ -116,11 +116,22 @@ class QuantileThresholdMask(nn.Module):
             # Reshape to (B, H*W) for quantile calculation
             flat = x_bchw.view(B, -1)
 
-            # Use quantile thresholding per image in batch
-            thr_per_image = torch.quantile(
-                flat, self.quantile, dim=1, interpolation='linear')
+            flat_masked = flat.masked_fill(
+                flat <= 0, float('nan'))    # zeros → NaN
+
+            # Compute quantile ignoring NaNs
+            thr_per_image = torch.nanquantile(
+                flat_masked,
+                self.quantile,
+                dim=1,
+                keepdim=True,
+                interpolation='linear'
+            ) 
+
+            # Replace all NaN with 0.0
+            thr_per_image = torch.nan_to_num(thr_per_image, nan=0.0)
             
-            thr_per_image = thr_per_image.view(B, 1, 1)
+            thr_per_image = thr_per_image.view(B, 1, 1, 1)
             mask = (x_bchw > thr_per_image).float()
 
         else:
