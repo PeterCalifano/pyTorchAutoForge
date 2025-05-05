@@ -65,10 +65,12 @@ class ImageMaskFilterAdapterConfig(BaseAdapterConfig):
                 self.filter_feature_methods = self.filter_feature_methods[:self.channel_sizes[1] - 1] # Keep only the valid methods
 
             # Validate filter feature methods
-            for method in self.filter_feature_methods:
-                if method not in ['sobel', 'local_variance', 'laplacian']:
+            for im, method in enumerate(self.filter_feature_methods):
+
+                self.filter_feature_methods[im] = method.lower()
+                if method.lower() not in ['sobel', 'local_variance', 'laplacian']:
                     raise ValueError(
-                        f"Invalid filter feature method: {method}. Must be 'sobel', 'local_variance', or 'laplacian'.")
+                        f"Invalid filter feature method: {method.lower()}. Must be 'sobel', 'local_variance', or 'laplacian'.")
 
         if self.binary_mask_thr_method is not None:
             # Validate binary mask threshold method
@@ -294,3 +296,7 @@ def _(cfg: Conv2dAdapterConfig) -> Conv2dResolutionChannelsAdapter:
 @InputAdapterFactory.register
 def _(cfg: ResizeAdapterConfig) -> ResizeCopyChannelsAdapter:
     return ResizeCopyChannelsAdapter(cfg)
+
+@InputAdapterFactory.register
+def _(cfg: ImageMaskFilterAdapterConfig) -> ImageMaskFilterAdapter:
+    return ImageMaskFilterAdapter(cfg)

@@ -6,7 +6,7 @@ from .ModelMutator import ModelMutator, EnumMutations
 # Backbones
 from .backbones.base_backbones import FeatureExtractorConfig, FeatureExtractorFactory, BackboneConfig, BackboneFactory
 from .backbones.efficient_net import EfficientNetConfig, EfficientNetBackbone
-from .backbones.input_adapters import BaseAdapterConfig, Conv2dAdapterConfig, ResizeAdapterConfig, Conv2dResolutionChannelsAdapter, ResizeCopyChannelsAdapter
+from .backbones.input_adapters import BaseAdapterConfig, Conv2dAdapterConfig, ResizeAdapterConfig, Conv2dResolutionChannelsAdapter, ResizeCopyChannelsAdapter, ImageMaskFilterAdapter, ImageMaskFilterAdapterConfig
 
 __all__ = [
     'ModelAutoBuilder', 
@@ -30,4 +30,6 @@ __all__ = [
     'ResizeCopyChannelsAdapter',
     'BackboneConfig',
     'BackboneFactory',
+    'ImageMaskFilterAdapter',
+    'ImageMaskFilterAdapterConfig',
 ]
