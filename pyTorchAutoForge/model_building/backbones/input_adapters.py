@@ -10,7 +10,7 @@ import kornia
 import numpy as np
 import torch
 from functools import singledispatch
-
+from pyTorchAutoForge.model_building.backbones.image_processing_operators import SobelGradient, QuantileThresholdMask, LocalVarianceMap, LaplacianOfGaussian
 
 @dataclass
 class BaseAdapterConfig(BaseConfigClass):
@@ -194,6 +194,52 @@ class ImageMaskFilterAdapter(BaseAdapter):
         self.binary_mask_thrOrQuantile = cfg.binary_mask_thrOrQuantile
         self.filter_feature_methods = cfg.filter_feature_methods
 
+        self.binary_mask_operator = None
+        self.filter_operator = None
+
+        # Build modules
+        if self.binary_mask_thr_method is not None:
+            if self.binary_mask_thr_method == 'quantile':
+                self.binary_mask_operator = QuantileThresholdMask(
+                    quantile=self.binary_mask_thrOrQuantile)
+                
+            elif self.binary_mask_thr_method == 'absolute':
+                self.binary_mask = QuantileThresholdMask(
+                    abs_thr=self.binary_mask_thrOrQuantile)
+            
+            elif self.binary_mask_thr_method == 'otsu':
+                self.binary_mask = QuantileThresholdMask(
+                    method='otsu')
+                
+                raise NotImplementedError('Otsu method not implemented yet.')
+            else:
+                raise ValueError(
+                    f"Invalid binary mask threshold method: {self.binary_mask_thr_method}. Must be 'quantile', 'absolute', or 'otsu'.")
+        
+        if self.filter_feature_methods is not None:
+            self.filter_operator = nn.ModuleList()
+
+            for method in self.filter_feature_methods:
+                if method == 'local_variance':
+                    self.filter_operator.append(LocalVarianceMap())
+                elif method == 'sobel':
+                    self.filter_operator.append(SobelGradient())
+                elif method == 'laplacian':
+                    self.filter_operator.append(LaplacianOfGaussian())
+                else:
+                    raise ValueError(
+                        f"Invalid filter feature method: {method}. Must be 'sobel', 'local_variance', or 'laplacian'.")
+
+        # Check number of channels against mask and methods (throw error if not matched)
+        input_feature_maps = 1
+        if self.binary_mask_operator is not None:
+            input_feature_maps += 1
+
+        if self.filter_operator is not None:
+            input_feature_maps += len(self.filter_operator)
+
+        if self.out_ch != input_feature_maps:
+            raise ValueError(f"Number of input channels {self.in_ch} does not match number of input feature maps (image, binary mask, filters) {input_feature_maps}.")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -219,10 +265,15 @@ class ImageMaskFilterAdapter(BaseAdapter):
         output_tensor[:, 0, :, :] = x[:, 0, :, :]
 
         # Compute second channel: binary mask
-        # TODO
-
+        if self.binary_mask_operator is not None:
+            # Apply binary mask operator
+            output_tensor[:, 1, :, :] = self.binary_mask_operator(x[:, 0, :, :])
+        
         # Compute 3 to N channels: filter features
-        # TODO
+        if self.filter_operator is not None:
+            for i, filter_op in enumerate(self.filter_operator):
+                # Apply filter operator
+                output_tensor[:, 2 + i, :, :] = filter_op(x[:, 0, :, :])
 
         # Return adapted tensor ready for backbone
         return output_tensor
