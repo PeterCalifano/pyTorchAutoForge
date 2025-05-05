@@ -67,7 +67,7 @@ class ImageMaskFilterAdapterConfig(BaseAdapterConfig):
             # Validate filter feature methods
             for im, method in enumerate(self.filter_feature_methods):
 
-                self.filter_feature_methods[im] = method.lower()
+                #self.filter_feature_methods[im] = method.lower() # TODO modify to list?
                 if method.lower() not in ['sobel', 'local_variance', 'laplacian']:
                     raise ValueError(
                         f"Invalid filter feature method: {method.lower()}. Must be 'sobel', 'local_variance', or 'laplacian'.")
