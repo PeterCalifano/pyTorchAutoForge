@@ -15,6 +15,7 @@
   - [x] Add refactored version of augmentation pipeline (ImagesAugmentationHelper)
   - [x] Refactor and improve ModelTrainingManager updating augmentation pipeline and adding batch accumulation
   - [x] Improve and fix model evaluator
+  - [x] Implement new adapter type for basic engineered feature maps (image, brightness masks, pre-processing filters)
 
 - [ ] v0.1.5
   - [ ] Review NN and template blocks for modularity
