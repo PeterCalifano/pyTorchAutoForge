@@ -117,7 +117,7 @@ class QuantileThresholdMask(nn.Module):
             flat = x_bchw.view(B, -1)
 
             flat_masked = flat.masked_fill(
-                flat <= 0, float('nan'))    # zeros → NaN
+                flat == 0, float('nan'))    # zeros → NaN
 
             # Compute quantile ignoring NaNs
             thr_per_image = torch.nanquantile(
@@ -132,11 +132,11 @@ class QuantileThresholdMask(nn.Module):
             thr_per_image = torch.nan_to_num(thr_per_image, nan=0.0)
             
             thr_per_image = thr_per_image.view(B, 1, 1, 1)
-            mask = (x_bchw > thr_per_image).float()
+            mask = (x_bchw >= thr_per_image).float()
 
         else:
             # Apply absolute threshold
-            mask = (x_bchw > self.abs_thr).float()
+            mask = (x_bchw >= self.abs_thr).float()
         
         # Return 
         
@@ -168,7 +168,7 @@ class SobelGradient(nn.Module):
             self.register_buffer('kx', kx.view(1, 1, 3, 3))
             self.register_buffer('ky', ky.view(1, 1, 3, 3))
         else:
-            self.kornia_sobel = KF.Sobel()
+            self.kornia_sobel = KF.Sobel(eps=1E-12)
             
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Unsqueeze input to (B, C, H, W)

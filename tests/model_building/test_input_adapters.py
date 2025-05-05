@@ -4,6 +4,11 @@ from pyTorchAutoForge.model_building.backbones.efficient_net import EfficientNet
 import pytest
 import numpy as np
 
+import matplotlib
+# Set the backend to 'Agg' for non-interactive use
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+
 from pyTorchAutoForge.model_building.backbones.input_adapters import (
     Conv2dAdapterConfig,
     ResizeAdapterConfig,
@@ -14,20 +19,22 @@ from pyTorchAutoForge.model_building.backbones.input_adapters import (
     ImageMaskFilterAdapter,
 )
 
-def test_ResizeAdapter():
-    pass
-
 def test_conv2d_adapter_forward_and_factory_dispatch():
     # Prepare a float64 input to test dtype casting and resizing
     batch, in_ch, H_in, W_in = 2, 3, 12, 16
     out_size = (6, 8)
     out_ch = 5
+
     x = torch.randn(batch, in_ch, H_in, W_in, dtype=torch.float64)
     cfg = Conv2dAdapterConfig(output_size=out_size, channel_sizes=(in_ch, out_ch))
+    
     # Factory should return the correct adapter type
     adapter = InputAdapterFactory(cfg)
+    
     assert isinstance(adapter, Conv2dResolutionChannelsAdapter)
+    
     y = adapter(x)
+
     assert y.shape == (batch, out_ch, *out_size)
     assert y.dtype == torch.float32
 
@@ -67,8 +74,10 @@ def test_image_mask_filter_adapter_quantile_only():
     assert torch.equal(y[:, 1, :, :], expected_mask)
 
 def test_image_mask_filter_adapter_sobel_filter_and_mask():
+    
     # Constant input so sobel output = 0 everywhere, mask = 1 everywhere
     x = torch.ones(1, 1, 5, 5, dtype=torch.float32)
+
     cfg = ImageMaskFilterAdapterConfig(
         output_size=(5, 5),
         channel_sizes=(1, 3),  # image + mask + one filter
@@ -77,18 +86,22 @@ def test_image_mask_filter_adapter_sobel_filter_and_mask():
         binary_mask_thrOrQuantile=0.5,
         filter_feature_methods=('sobel',)
     )
+
     adapter = ImageMaskFilterAdapter(cfg)
+    
     y = adapter(x)
+    
     assert y.shape == (1, 3, 5, 5)
-    # channel 0 = input image
+    # Channel 0 = input image
     assert torch.allclose(y[:, 0], x[:, 0])
-    # channel 1 = mask of ones
+    # Channel 1 = mask of ones
     assert torch.all(y[:, 1] == 1.0)
-    # channel 2 = sobel on constant -> zeros
-    assert torch.allclose(y[:, 2], torch.zeros_like(y[:, 2]))
+    # Channel 2 = sobel on constant -> zeros
+    assert torch.allclose(y[:, 2], torch.zeros_like(y[:, 2]), atol=1e-5)
 
 def test_image_mask_filter_adapter_invalid_channel_mismatch():
-    # filter_feature_methods adds 1 filter but out_ch=2 only => mismatch
+
+    # Filter_feature_methods adds 1 filter but out_ch = 2 only => mismatch
     with pytest.raises(ValueError):
         ImageMaskFilterAdapterConfig(
             output_size=(2, 2),
@@ -131,6 +144,7 @@ def test_image_mask_filter_adapter_otsu_not_implemented():
         binary_mask_thrOrQuantile=0.5,
         filter_feature_methods=None
     )
+
     with pytest.raises(NotImplementedError):
         ImageMaskFilterAdapter(cfg)
 
@@ -141,7 +155,6 @@ def test_input_adapter_factory_unknown_config():
 
 # Manual run of tests
 if __name__ == "__main__":
-    test_ResizeAdapter()
     test_conv2d_adapter_forward_and_factory_dispatch()
     test_resize_copy_channels_adapter_forward_and_factory_dispatch()
     test_image_mask_filter_adapter_quantile_only()

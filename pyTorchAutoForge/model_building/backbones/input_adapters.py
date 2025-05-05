@@ -207,10 +207,7 @@ class ImageMaskFilterAdapter(BaseAdapter):
                 self.binary_mask = QuantileThresholdMask(
                     abs_thr=self.binary_mask_thrOrQuantile)
             
-            elif self.binary_mask_thr_method == 'otsu':
-                self.binary_mask = QuantileThresholdMask(
-                    method='otsu')
-                
+            elif self.binary_mask_thr_method == 'otsu':                
                 raise NotImplementedError('Otsu method not implemented yet.')
             else:
                 raise ValueError(
