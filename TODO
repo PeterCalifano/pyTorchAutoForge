@@ -16,8 +16,10 @@
   - [x] Refactor and improve ModelTrainingManager updating augmentation pipeline and adding batch accumulation
   - [x] Improve and fix model evaluator
   - [x] Implement new adapter type for basic engineered feature maps (image, brightness masks, pre-processing filters)
+  - [ ] Implement method to get traced model from ModelTrainingManager
 
 - [ ] v0.1.5
+  - [ ] Add prototype of SHAP for CNNs
   - [ ] Review NN and template blocks for modularity
   - [ ] Implement prototype usage of AMP for mixed precision training
   - [ ] Add configurable dataclasses from template yml files for training manager and extensible prototype (see pySR configuration in nav-frontend)
