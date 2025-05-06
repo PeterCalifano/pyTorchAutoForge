@@ -73,8 +73,7 @@ from typing import Any, IO
 import torch
 import mlflow
 import optuna
-import kornia
-import os, sys, time, colorama, glob, signal
+import os, sys, time, colorama, glob
 import traceback
 from torch import nn
 import numpy as np
@@ -123,6 +122,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     # DIFFERENTIABLE DATA AUGMENTATION
     data_augmentation_module: torch.nn.Sequential | ImageAugmentationsHelper | None = None
     augment_validation_data: bool = False
+    enable_augs_autograd : bool = False
     
     # FIELDS with DEFAULTS
     # Optimization strategy
@@ -463,9 +463,20 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         print(f"Training DataLoader size: {self.trainingDataloaderSize}, Validation DataLoader size: {self.validationDataloaderSize}")
 
+    def get_traced_model(self, device = None):
+        # TODO make fail safe (i.e. try except print without stopping execution, because this step can fail for a wide variety of reasons)
+        if device is None:
+            device = self.device
 
-    def getTracedModel(self):
-        raise NotImplementedError('Method not implemented yet.')
+        # Get internal model (best or model)
+        model = self.bestModel if (self.bestModel is not None) else self.model
+
+        try:
+            raise NotImplementedError('Method not implemented yet.')
+        
+        except Exception as e:
+            print(f"\033[38;5;208mError while tracing model: {e}\033[0m. Model instance will be return as python object instead.")
+            return model 
 
     def printSessionInfo(self):
         """
@@ -536,10 +547,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
 
     def trainModelOneEpoch_(self):
-        '''Method to train the model using the specified datasets and loss function. Not intended to be called as standalone.'''
+        '''
+            Internal method to train the model using the specified datasets and loss function. Not intended to be called as standalone.
+        '''
 
-        # Set model instance in training mode ("informing" backend that the training is going to start)
-        self.model.train()
+        if self.optimizer is None:
+            raise TypeError('Optimizer is not defined. Cannot proceed with training.')
+        
+        if self.trainingDataloader is None:
+            raise ValueError('No training dataloader provided.')
 
         running_loss : float = 0.0
         run_time_total : float = 0.0
@@ -547,10 +563,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         current_batch : int = 1
         is_last_batch : bool = False
 
-        if self.optimizer is None:
-            raise TypeError('Optimizer is not defined. Cannot proceed with training.')
-        
+        # Set model instance in training mode and zero out gradients
+        self.model.train()
         self.optimizer.zero_grad()
+        
         current_loop_time : float = 0.0
         start_time = time.perf_counter() # Start timer 
 
@@ -567,9 +583,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # DEVNOTE: TBD if this goes here or if to move dataloader to device
             X, Y = X.to(self.device), Y.to(self.device)
 
-            # Perform data augmentation on batch
             if self.data_augmentation_module is not None:
-                X, Y = self.augment_data_batch(X, Y)
+                if self.enable_augs_autograd:
+                    # Perform data augmentation with gradients
+                    X, Y = self.augment_data_batch(X, Y)
+                else:
+                    # Perform data augmentation without gradients
+                    with torch.no_grad():
+                        X, Y = self.augment_data_batch(X, Y)
 
             # Perform FORWARD PASS to get predictions
             # Evaluate model at input, calls forward() method
