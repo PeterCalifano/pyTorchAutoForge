@@ -33,6 +33,7 @@
         - Optimize NVML initialization and shutdown to reduce overhead.
         - Extend the DeviceManager class for multi-GPU support and additional features.
 """
+from ast import Continue
 import torch
 import warnings
 import platform
@@ -117,6 +118,24 @@ if not on_rtd:
             if torch.cuda.is_available():
                 warnings.warn(
                     "CUDA is available, but no GPU meets the minimum requirements. Using CPU instead.")
+
+                invalid_input = True
+                while invalid_input:
+                    # Ask to user if he wants to use the CPU
+                    usr_input = input(
+                        "Run program in CPU? (Y/n): ").strip().lower()
+                    
+                    if usr_input == 'n' or usr_input == 'no':
+                        import sys
+                        print("Chosen not to continue. Exiting program...")
+                        sys.exit(0)
+                    elif usr_input == 'y' or usr_input == 'yes':
+                        invalid_input = False
+                        print("Chosen to continue. Running with CPU...")
+                        return "cpu"
+                    else:
+                        print("Invalid input. Please enter 'Y/yes' or 'n/no'.")
+                        continue
 
             return "cpu"
 else:
