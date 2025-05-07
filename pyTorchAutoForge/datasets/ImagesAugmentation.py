@@ -17,10 +17,12 @@ from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
 from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
 
-# %% Configuration dataclasses
+# %% Type aliases
 ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
 
-class PoissonShotNoise(nn.Module):
+
+# %% Custom augmentation modules
+class PoissonShotNoise(AugsBaseClass):
     """
     Applies Poisson shot noise to a batch of images.
 
@@ -61,7 +63,8 @@ class PoissonShotNoise(nn.Module):
 
         return imgs_array
 
-class RandomGaussianNoiseVariableSigma(nn.Module):
+
+class RandomGaussianNoiseVariableSigma(AugsBaseClass):
     """
     Applies per-sample Gaussian noise with variable sigma.
     sigma_noise: scalar, (min,max) tuple, or per-sample (B,) or (B,2) array/tensor
@@ -100,6 +103,24 @@ class RandomGaussianNoiseVariableSigma(nn.Module):
 
         return x + noise
 
+
+# TODO (PC) move translate_batch to this custom augmentation class, add rotation and extend for multiple points labels shift
+class RandomImageLabelsRotoTranslation(AugsBaseClass):
+    def __init__(self, 
+                 angles: float | tuple[float, float] = (0.0, 360.0), 
+                 distribution_type: Literal["uniform", "normal"] = "uniform"):
+        super().__init__()
+        self.angles = angles
+        self.distribution_type = distribution_type
+
+    def forward(self, x: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # TODO implement rotation
+        raise NotImplementedError("Implementation todo")
+        return x, labels
+    
+
+# %% Augmentation helper configuration dataclass
+
 @dataclass
 class AugmentationConfig:
     # Rotation augmentation (torchvision)
@@ -113,6 +134,7 @@ class AugmentationConfig:
 
     # Translation parameters (in pixels)
     max_shift: float | tuple[float, float] = (20.0, 20.0)
+    translate_distribution_type: Literal["uniform", "normal"] = "uniform"
     shift_aug_prob: float = 0.5
 
     # Optional flag to specify if image is already in the torch layout (overrides guess)
@@ -163,10 +185,11 @@ class AugmentationConfig:
             self.rotation_interp_mode.upper() in ['BILINEAR', 'NEAREST']:
             self.rotation_interp_mode = transforms.InterpolationMode[self.rotation_interp_mode.upper()]
         
+
 # %% Augmentation helper class
-# TODO add capability to support custom augmentation module by appending it in the user-specified location ("append_custom_module_after = (module, <literal>)" that maps to a specified entry in the augs_ops list. The given module is then inserted into the list at the specified position)
+# TODO (PC) add capability to support custom augmentation module by appending it in the user-specified location ("append_custom_module_after = (module, <literal>)" that maps to a specified entry in the augs_ops list. The given module is then inserted into the list at the specified position)
   
-class ImageAugmentationsHelper(torch.nn.Module):
+class ImageAugmentationsHelper(nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
         super().__init__()
         self.augs_cfg = augs_cfg
@@ -433,6 +456,7 @@ class ImageAugmentationsHelper(torch.nn.Module):
            
         return scale_factor
 
+    # TODO (PC) move method to dedicated custom augmentation class 
     def translate_batch_(self,
                          images: torch.Tensor,
                          labels: ndArrayOrTensor
@@ -459,10 +483,18 @@ class ImageAugmentationsHelper(torch.nn.Module):
         else:
             max_x, max_y = (self.augs_cfg.max_shift, self.augs_cfg.max_shift)
 
-        # Sample shifts by applying 0.99 margin
-        dx = 0.99 * torch.randint(-int(max_x), int(max_x)+1, (B,))
-        dy = 0.99 * torch.randint(-int(max_y), int(max_y)+1, (B,))
-
+        if self.augs_cfg.translate_distribution_type == "uniform":
+            # Sample shifts by applying 0.99 margin
+            dx = torch.randint(-int(max_x), int(max_x)+1, (B,))
+            dy = torch.randint(-int(max_y), int(max_y)+1, (B,))
+        elif self.augs_cfg.translate_distribution_type == "normal":
+            # Sample shifts from normal distribution
+            dx = torch.normal(mean=0.0, std=max_x, size=(B,))
+            dy = torch.normal(mean=0.0, std=max_y, size=(B,))
+        else:
+            raise ValueError(
+                f"Unsupported distribution type: {self.translate_distribution_type}. Supported types are 'uniform' and 'normal'.")
+        
         shifted_imgs = images.new_zeros(images.shape)
 
         # TODO improve this method, currently not capable of preventing the object to exit the plane
@@ -540,7 +572,7 @@ class ImageNormalization():
         return image / self.normalization_type.value
 
 
-# TODO GeometryAugsModule
+# TODO GeometryAugsModule TBD may be unneeded
 class GeometryAugsModule(AugsBaseClass):
     def __init__(self):
         super(GeometryAugsModule, self).__init__()
@@ -559,7 +591,8 @@ class GeometryAugsModule(AugsBaseClass):
         return x, labels
 
 
-# %% Deprecated functions
+############################################################################################################################
+# %% DEPRECATED functions (legacy code)
 def build_kornia_augs(sigma_noise: float, sigma_gaussian_blur: tuple | float = (0.0001, 1.0),
                       brightness_factor: tuple | float = (0.0001, 0.01),
                       contrast_factor: tuple | float = (0.0001, 0.01)) -> torch.nn.Sequential:

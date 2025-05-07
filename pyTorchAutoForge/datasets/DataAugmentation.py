@@ -24,12 +24,9 @@ class AugsBaseClass(nn.Module, ABC):
         super(AugsBaseClass, self).__init__()
 
     @abstractmethod
-    def forward(self, imageAsDN: torch.Tensor) -> torch.Tensor:
+    def forward(self, imageAsDN: torch.Tensor | tuple[torch.Tensor], labels: torch.Tensor | tuple[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         pass
 
-    # PLACEHOLDER method
-    def process_labels(self, labels: torch.Tensor | tuple[torch.Tensor]) -> torch.Tensor | tuple[torch.Tensor]:
-        pass
 
 
 # %% Base error models classes
