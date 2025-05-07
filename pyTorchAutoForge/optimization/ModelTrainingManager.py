@@ -150,7 +150,8 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     # Model checkpoint load if any
     checkpoint_to_load: str | None = None  # Path to model checkpoint to load
     load_strict : bool = False  # Load model checkpoint with strict matching of parameters
-
+    load_traced : bool = False  # Load model as traced model
+    
     # Hardware settings
     device: str = GetDeviceMulti()  # Default device is GPU if available
 
@@ -268,7 +269,7 @@ class enumOptimizerType(Enum):
 
 # %% ModelTrainingManager class - 24-07-2024
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    def __init__(self, model: nn.Module, 
+    def __init__(self, model: nn.Module | None, 
                  lossFcn: nn.Module | CustomLossFcn, 
                  config: ModelTrainingManagerConfig | dict | str, 
                  optimizer: optim.Optimizer | enumOptimizerType | None = None, 
@@ -308,18 +309,33 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         
         # Initialize ModelTrainingManager-specific attributes
 
-        if self.checkpoint_to_load is not None:
+        if self.checkpoint_to_load is not None and model is not None:
             # Load model checkpoint
             try:
+                print(f"Checkpoint path specified: {self.checkpoint_to_load}. Attempting to load model with strict flag set to {self.load_strict}...")
                 model = LoadModel(model, self.checkpoint_to_load, False, load_strict=self.load_strict)
 
             except Exception as errMsg:
-                # DEVNOTE: here there should be a timer to automatically stop if no input is given for TBD seconds. Need a second thread though.
-                Warning(f"Model checkpoint loading failed with error: {errMsg}")
-                user_input = input("Continue without loading model checkpoint? [Y/n]: ").lower()
-                if user_input != 'y':
-                    raise ValueError("Got stop command. Termination signal...")
+                # DEVNOTE: here there should be a timer to automatically stop if no input is given for TBD seconds. Use the library for timed input requests?
+                print(f"\033[31mModel checkpoint loading failed with error: \n{errMsg}\033[0m")
                 
+                user_input = input("Continue without loading model checkpoint? [Y/n]: ").lower()
+
+                while user_input not in ['y', 'n', 'yes', 'no']:
+                    user_input = input("Please enter a valid input [Y/n]: ").lower()
+
+                if user_input == 'y' or user_input == 'yes':
+                    print("Continuing without loading model checkpoint...")
+                elif user_input == 'n' or user_input == 'no':
+                    print("Exiting program...")
+                    sys.exit(0)
+            
+        elif self.checkpoint_to_load is not None and model is None:
+            # Load model directly
+            model = LoadModel(model=None, model_filename=self.checkpoint_to_load, load_as_traced=self.load_traced, load_strict=False)
+        else:
+            raise ValueError("Neither model nor model checkpoint path provided. Cannot execute optimization.")
+
         if model is None:
             raise ValueError('Model is not defined. Cannot proceed with training.')
 
