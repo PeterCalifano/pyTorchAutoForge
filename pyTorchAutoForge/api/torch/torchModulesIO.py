@@ -180,24 +180,67 @@ def LoadModel(model: torch.nn.Module | None, model_filename: str, load_as_traced
         if model is not None:
             print('\033[38;5;208mload_as_traced is specified as true, but model has been provided. Model will be overwritten by checkpoint load.\033[0m')
 
-        model: torch.nn.Module = torch.jit.load(model_filepath)
+        model = torch.jit.load(model_filepath)
+
+        if model is None:
+            raise ValueError('Model loaded from file failed: found to be None.')
+        
         print('Traced model correctly loaded.')
 
         return model.eval()
     
     else:
-        print('Loading model, load_strict=', load_strict, ' from file: ', model_filepath)
+        print(f'Loading model, load_strict={load_strict}, from file: {model_filepath}')
 
         if model is not None:
-            model.load_state_dict(torch.load(model_filepath), 
-                                  strict=load_strict,
-                                  weights_only=True)
+            print("Selected mode: 'state dict only'.")
+            loaded_model_ = torch.load(model_filepath, map_location="cpu", weights_only=False)
 
+            # Handle different input formats (state dict only, model with state dict)
+            if hasattr(loaded_model_, "state_dict"):
+                loaded_state = loaded_model_.state_dict()
+
+            elif isinstance(loaded_model_, dict):
+                # If dict, check for state_dict or model_state_dict keys
+                if "state_dict" in loaded_model_:
+                    loaded_state = loaded_model_["state_dict"]
+                elif "model_state_dict" in loaded_model_:
+                    loaded_state = loaded_model_["model_state_dict"]
+                else:
+                    # If loaded_model_ is actually a state dict itself
+                    loaded_state = loaded_model_
+            else:
+                raise ValueError("Unrecognized checkpoint format")
+            
+            # Inject state dict into model
+            incompatible_keys = model.load_state_dict(loaded_state, strict=load_strict)
+
+            if incompatible_keys.missing_keys or incompatible_keys.unexpected_keys:
+                if incompatible_keys.missing_keys:
+                    print(f'\033[38;5;208mWarning: Missing keys in state_dict: {incompatible_keys.missing_keys}\033[0m')
+                if incompatible_keys.unexpected_keys:
+                    print(f'\033[38;5;214mWarning: Unexpected keys in state_dict: {incompatible_keys.unexpected_keys}\033[0m')
+
+                # Wait for user input to continue
+                usr_input = input('Do you want to continue anyway? (Y/n): ')
+
+                while usr_input.lower() not in ['y', 'n', 'no', 'yes']:
+                    usr_input = input('Please enter Y or n: ').lower()
+
+                if usr_input == 'n' or usr_input == 'no':
+                    print('Termination input received. Exiting program...')
+                    sys.exit(0)
+                elif usr_input == 'Y' or usr_input == 'yes':
+                    print('Continuation input received. Going on with program execution...')
+                
         else:
+            print("Selected mode: 'model with state dict'.")
             model = torch.load(model_filepath, 
                                map_location='cpu', 
                                weights_only=False)
             
+        if model is None:
+            raise ValueError('Model loaded failed: found to be None.')
         print('Model correctly loaded.')
         return model.eval()
 
