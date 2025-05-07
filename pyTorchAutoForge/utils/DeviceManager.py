@@ -56,7 +56,7 @@ else:
 if not on_rtd:
     if is_jetson:
         # GetDevice for Jetson devices
-        def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+        def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
             if torch.cuda.is_available():
                 return "cuda:0"
             return "cpu"
@@ -64,14 +64,14 @@ if not on_rtd:
     else:
         # GetDevice for Non-Tegra devices
         import pynvml
-        def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+        def GetDeviceMulti(expected_max_vram : float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
             """
             GetDeviceMulti Determines the optimal device for computation based on available memory and compatibility.
 
             The heuristic used for device selection prioritizes GPUs with sufficient free memory, ensuring efficient computation. 
             It checks all available GPUs and selects the one with the highest free memory that meets the following criteria:
             - At least 30% of the total memory is free (MIN_FREE_MEM_RATIO).
-            - At least 3 GB of free memory is available (MIN_FREE_MEM_SIZE).
+            - At least 3 GB (or selected amount) of free memory is available (MIN_FREE_MEM_SIZE).
             If no GPU meets these requirements, it falls back to MPS (for Apple Silicon) or CPU as a last resort.
 
             Returns:
@@ -80,7 +80,8 @@ if not on_rtd:
             """
 
             MIN_FREE_MEM_RATIO = 0.3
-            MIN_FREE_MEM_SIZE = 3  # Minimum free memory in GB
+            # Minimum free memory in GB
+            MIN_FREE_MEM_SIZE = 3 if expected_max_vram is None else expected_max_vram
 
             if torch.cuda.is_available():
                 # Iterate through all available GPUs to check memory availability
@@ -100,15 +101,17 @@ if not on_rtd:
                     # Ratio of free memory with respect to total memory
                     free_memory_ratio = free_memory / total_memory
 
-                    # Select the GPU with most free memory that meets the minimum requirements)
-                    if free_memory_ratio >= MIN_FREE_MEM_RATIO and free_memory > MIN_FREE_MEM_SIZE and free_memory > max_free_memory:
+                    # Select the GPU with most free memory that meets the minimum requirements
+                    min_mem_condition = free_memory_ratio >= MIN_FREE_MEM_RATIO and free_memory > MIN_FREE_MEM_SIZE if expected_max_vram is not None else free_memory > MIN_FREE_MEM_SIZE
+
+                    if (min_mem_condition) and free_memory > max_free_memory:
                         max_free_memory = free_memory
                         selected_gpu = gpu_idx
 
                 pynvml.nvmlShutdown()  # Shutdown NVML
 
                 if selected_gpu is not None:
-                    return f"cuda:{selected_gpu}"
+                    return f"cuda:{selected_gpu}" # type:ignore
 
             # Check for MPS (for Mac with Apple Silicon)
             if torch.backends.mps.is_available():
