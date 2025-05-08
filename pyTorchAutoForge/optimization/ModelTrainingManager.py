@@ -333,12 +333,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         elif self.checkpoint_to_load is not None and model is None:
             # Load model directly
             model = LoadModel(model=None, model_filename=self.checkpoint_to_load, load_as_traced=self.load_traced, load_strict=False)
-        else:
-            raise ValueError("Neither model nor model checkpoint path provided. Cannot execute optimization.")
-
-        if model is None:
-            raise ValueError('Model is not defined. Cannot proceed with training.')
-
+        elif model is None:
+            raise ValueError("Neither model nor model checkpoint path provided. Cannot continue with optimization process.")
+        
         self.model: torch.nn.Module = (model).to(self.device)
         self.bestModel : torch.nn.Module | None = None
         self.loss_fcn : torch.nn.Module = lossFcn
