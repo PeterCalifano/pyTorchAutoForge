@@ -31,6 +31,19 @@ class EfficientNetBackbone(nn.Module):
             # Add last layer (adaptive pooling) from modules
             self.feature_extractor.append(modules[1])
 
+            # Build average pooling layer
+            self.feature_poolings = nn.ModuleDict()
+
+            if self.cfg.feature_tapping_output_res is not None:
+                for key, target_res in self.cfg.feature_tapping_output_res.items():
+                    # Create adaptive pooling layer + flatten stack
+                    self.feature_poolings[str(key)] = nn.AdaptiveAvgPool2d(target_res)
+
+                    self.feature_poolings[str(key)] = nn.Sequential(
+                        self.feature_poolings[str(key)],
+                        nn.Flatten()
+                    )
+
         else:
             raise ValueError(f"Invalid output_type: {cfg.output_type}. Must be 'last' or 'spill_features'.")
         
@@ -59,6 +72,12 @@ class EfficientNetBackbone(nn.Module):
 
             if self.cfg.output_type == 'spill_features':
                 features.append(x)
+
+        # Process selected features with average pooling
+        if self.cfg.output_type == 'spill_features' and self.cfg.feature_tapping_output_res is not None:
+            for key, target_res in self.cfg.feature_tapping_output_res.items():
+                if key in self.feature_poolings:
+                    features[int(key)] = self.feature_poolings[key](features[int(key)])
 
         # Handle output and optional head
         if self.cfg.output_type == 'last':

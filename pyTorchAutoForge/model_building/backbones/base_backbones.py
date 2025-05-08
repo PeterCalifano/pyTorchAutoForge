@@ -93,9 +93,34 @@ def BackboneFactory(cfg: BackboneConfig) -> nn.Module:
 class EfficientNetConfig(FeatureExtractorConfig):
     # Which EfficientNet variant to use
     model_name: Literal['b0', 'b1', 'b2', 'b3', 'b4', 'b6'] = 'b0'
+    feature_tapping_output_res: dict[str, tuple[int, int]] | None = field(default_factory=lambda: {"1": (32,32)})
 
     def __post_init__(self):
         self.input_channels = 3
+        # Define output channel sizes for each EfficientNet variant
+        if self.model_name == 'b0':
+            feature_tapping_channel_out = [32, 16, 24, 40, 112, 192, 320, 1280]
+        else:
+            raise ValueError(f"Channel sizes output (for each module) not defined for {self.model_name} variant. Please add it manually.")
+
+        self.feature_tapping_channel_size: dict[str, int] | None = None
+
+        if self.feature_tapping_output_res is not None:
+            # Define output channels for each feature_tapping key
+            self.feature_tapping_channel_size = {key: 0 for key in self.feature_tapping_output_res.keys()}
+
+            for key, target_res in self.feature_tapping_output_res.items():
+                # Check key is a number
+                if not key.isdigit():
+                    raise ValueError(f"Key {key} is not a valid number. Must be the index of the module from which the features are spilled.")
+
+                if int(key) >= len(feature_tapping_channel_out):
+                    raise ValueError(f"Key {key} exceeds the number of EfficientNet children modules.")
+                self.feature_tapping_channel_size[key] = feature_tapping_channel_out[int(key)]
+        else:
+            self.feature_tapping_channel_size = {str(
+                i): feature_tapping_channel_out[i] for i in range(len(feature_tapping_channel_out))}
+
 
 ### ResNet
 @dataclass
