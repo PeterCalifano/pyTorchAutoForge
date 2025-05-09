@@ -1,7 +1,6 @@
 import argparse
 from pyTorchAutoForge.utils import GetDeviceMulti
 
-
 # Base class
 class ModelOptimizationParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
@@ -31,7 +30,23 @@ PTAF_training_parser.add_argument(
 PTAF_training_parser.add_argument("--augment_validation_set", type=bool,
                                   default=False, help="Whether to augment the validation set.")
 
-PTAF_training_parser.add_argument("--evaluation_dataset", type=str,
+
+def parse_eval_dataset(arg):
+    
+    # If there's a comma, split by comma
+    if isinstance(arg, tuple):
+        return arg
+    elif ',' in arg:
+        return tuple(arg.split(','))
+    # If there's a space, split by space
+    elif ' ' in arg:
+        return tuple(arg.split())
+    # Otherwise, return as a single-element tuple
+    else:
+        return (arg,)
+
+
+PTAF_training_parser.add_argument("--evaluation_dataset", type=parse_eval_dataset,
                                   default=None, help="Path to the evaluation dataset.")
 
 ## Training hyperparameters
