@@ -1,5 +1,5 @@
 import sys, signal
-from inputimeout import inputimeout, TimeoutOccurred
+#from inputimeout import TimeoutOccurred
 
 DO_IMPORT = False
 

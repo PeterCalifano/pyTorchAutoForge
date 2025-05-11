@@ -39,6 +39,7 @@ import warnings
 import platform
 from typing import Literal
 import os 
+import functools
 
 # Environment variable defined in ReadTheDocs environment
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
@@ -56,6 +57,7 @@ else:
 if not on_rtd:
     if is_jetson:
         # GetDevice for Jetson devices
+        @functools.lru_cache(maxsize=1)
         def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
             if torch.cuda.is_available():
                 return "cuda:0"
@@ -63,87 +65,107 @@ if not on_rtd:
 
     else:
         # GetDevice for Non-Tegra devices
-        import pynvml
-        def GetDeviceMulti(expected_max_vram : float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
-            """
-            GetDeviceMulti Determines the optimal device for computation based on available memory and compatibility.
+        try:
+            import pynvml
 
-            The heuristic used for device selection prioritizes GPUs with sufficient free memory, ensuring efficient computation. 
-            It checks all available GPUs and selects the one with the highest free memory that meets the following criteria:
-            - At least 30% of the total memory is free (MIN_FREE_MEM_RATIO).
-            - At least 3 GB (or selected amount) of free memory is available (MIN_FREE_MEM_SIZE).
-            If no GPU meets these requirements, it falls back to MPS (for Apple Silicon) or CPU as a last resort.
+            @functools.lru_cache(maxsize=1)
+            def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+                """
+                GetDeviceMulti Determines the optimal device for computation based on available memory and compatibility.
 
-            Returns:
-                Literal['cuda:0'] | Literal['cpu'] | Literal['mps']: 
-                    The selected device: a CUDA GPU (e.g., 'cuda:0'), MPS (for Apple Silicon), or CPU.
-            """
+                The heuristic used for device selection prioritizes GPUs with sufficient free memory, ensuring efficient computation.
+                It checks all available GPUs and selects the one with the highest free memory that meets the following criteria:
+                - At least 30% of the total memory is free (MIN_FREE_MEM_RATIO).
+                - At least 3 GB (or selected amount) of free memory is available (MIN_FREE_MEM_SIZE).
+                If no GPU meets these requirements, it falls back to MPS (for Apple Silicon) or CPU as a last resort.
 
-            MIN_FREE_MEM_RATIO = 0.3
-            # Minimum free memory in GB
-            MIN_FREE_MEM_SIZE = 3 if expected_max_vram is None else expected_max_vram
+                Returns:
+                    Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+                        The selected device: a CUDA GPU (e.g., 'cuda:0'), MPS (for Apple Silicon), or CPU.
+                """
 
-            if torch.cuda.is_available():
-                # Iterate through all available GPUs to check memory availability
-                pynvml.nvmlInit()  # Initialize NVML for accessing GPU memory info.
-                # DEVNOTE: Small overhead at each call using init-shutdown this way. Can be improved by init globally and shutting down at python program exit (atexit callback)
+                MIN_FREE_MEM_RATIO = 0.3
+                # Minimum free memory in GB
+                MIN_FREE_MEM_SIZE = 3 if expected_max_vram is None else expected_max_vram
 
-                max_free_memory = 0
-                selected_gpu = None
+                if torch.cuda.is_available():
+                    # Iterate through all available GPUs to check memory availability
+                    # Initialize NVML for accessing GPU memory info.
+                    pynvml.nvmlInit()
+                    # DEVNOTE: Small overhead at each call using init-shutdown this way. Can be improved by init globally and shutting down at python program exit (atexit callback)
 
-                for gpu_idx in range(torch.cuda.device_count()):
-                    handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_idx)
-                    total_memory = pynvml.nvmlDeviceGetMemoryInfo(
-                        handle).total / (1024 ** 3)     # Memory in GB
-                    free_memory = pynvml.nvmlDeviceGetMemoryInfo(
-                        handle).free / (1024 ** 3)  # Memory in GB
+                    max_free_memory = 0
+                    selected_gpu = None
 
-                    # Ratio of free memory with respect to total memory
-                    free_memory_ratio = free_memory / total_memory
+                    for gpu_idx in range(torch.cuda.device_count()):
+                        handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_idx)
+                        total_memory = pynvml.nvmlDeviceGetMemoryInfo(
+                            handle).total / (1024 ** 3)     # Memory in GB
+                        free_memory = pynvml.nvmlDeviceGetMemoryInfo(
+                            handle).free / (1024 ** 3)  # Memory in GB
 
-                    # Select the GPU with most free memory that meets the minimum requirements
-                    min_mem_condition = free_memory_ratio >= MIN_FREE_MEM_RATIO and free_memory > MIN_FREE_MEM_SIZE if expected_max_vram is not None else free_memory > MIN_FREE_MEM_SIZE
+                        # Ratio of free memory with respect to total memory
+                        free_memory_ratio = free_memory / total_memory
 
-                    if (min_mem_condition) and free_memory > max_free_memory:
-                        max_free_memory = free_memory
-                        selected_gpu = gpu_idx
+                        # Select the GPU with most free memory that meets the minimum requirements
+                        min_mem_condition = free_memory_ratio >= MIN_FREE_MEM_RATIO and free_memory > MIN_FREE_MEM_SIZE if expected_max_vram is not None else free_memory > MIN_FREE_MEM_SIZE
 
-                pynvml.nvmlShutdown()  # Shutdown NVML
+                        if (min_mem_condition) and free_memory > max_free_memory:
+                            max_free_memory = free_memory
+                            selected_gpu = gpu_idx
 
-                if selected_gpu is not None:
-                    return f"cuda:{selected_gpu}" # type:ignore
+                    pynvml.nvmlShutdown()  # Shutdown NVML
 
-            # Check for MPS (for Mac with Apple Silicon)
-            if torch.backends.mps.is_available():
-                return "mps"
+                    if selected_gpu is not None:
+                        return f"cuda:{selected_gpu}"  # type:ignore
 
-            # If no GPU is available, return CPU
-            if torch.cuda.is_available():
-                warnings.warn(
-                    "CUDA is available, but no GPU meets the minimum requirements. Using CPU instead.")
+                # Check for MPS (for Mac with Apple Silicon)
+                if torch.backends.mps.is_available():
+                    return "mps"
 
-                invalid_input = True
-                while invalid_input:
-                    # Ask to user if he wants to use the CPU
-                    usr_input = input(
-                        "Run program in CPU? (Y/n): ").strip().lower()
-                    
-                    if usr_input == 'n' or usr_input == 'no':
-                        import sys
-                        print("Chosen not to continue. Exiting program...")
-                        sys.exit(0)
-                    elif usr_input == 'y' or usr_input == 'yes':
-                        invalid_input = False
-                        print("Chosen to continue. Running with CPU...")
-                        return "cpu"
-                    else:
-                        print("Invalid input. Please enter 'Y/yes' or 'n/no'.")
-                        continue
+                # If no GPU is available, return CPU
+                if torch.cuda.is_available():
+                    warnings.warn(
+                        "CUDA is available, but no GPU meets the minimum requirements. Using CPU instead.")
 
-            return "cpu"
+                    invalid_input = True
+                    while invalid_input:
+                        # Ask to user if he wants to use the CPU
+                        usr_input = input(
+                            "Run program in CPU? (Y/n): ").strip().lower()
+
+                        if usr_input == 'n' or usr_input == 'no':
+                            import sys
+                            print("Chosen not to continue. Exiting program...")
+                            sys.exit(0)
+                        elif usr_input == 'y' or usr_input == 'yes':
+                            invalid_input = False
+                            print("Chosen to continue. Running with CPU...")
+                            return "cpu"
+                        else:
+                            print(
+                                "Invalid input. Please enter 'Y/yes' or 'n/no'.")
+                            continue
+
+                return "cpu"
+
+        except ImportError:
+            print("pynvml import error. Package is required to use more advanced GetDeviceMulti functionalities memory management. Please install it using 'pip install pynvml'. PTAF will use simplified logic instead.")
+
+            # Fall back to simplified logic
+            @functools.lru_cache(maxsize=1)
+            def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+                if torch.cuda.is_available():
+                    return "cuda:0"
+                return "cpu"
+
+
+
+
 else:
     # Define dummy version of GetDeviceMulti for ReadTheDocs
-    def GetDeviceMulti() -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+    @functools.lru_cache(maxsize=1)
+    def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
         return "cpu"    
 
 # Temporary placeholder class (extension wil be needed for future implementations, e.g. multi GPUs)
