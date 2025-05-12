@@ -10,13 +10,14 @@
   - [ ] Add prototype implementation of dataset classes from RAM/disk
   - [ ] Fix all unit tests
   - [x] Complete 1st version of model profiler
-  - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
   - [x] Add prototype of model explainer for vector-to-vector regression using SHAP (basic explainer)
   - [x] Add refactored version of augmentation pipeline (ImagesAugmentationHelper)
   - [x] Refactor and improve ModelTrainingManager updating augmentation pipeline and adding batch accumulation
   - [x] Improve and fix model evaluator
   - [x] Implement new adapter type for basic engineered feature maps (image, brightness masks, pre-processing filters)
   - [ ] Implement method to get traced model from ModelTrainingManager
+  - [x] Fix issues with device selection query and some imports
+  - [ ] Add support for automatic chaining of schedulers
 
 - [ ] v0.1.5
   - [ ] Add prototype of SHAP for CNNs
@@ -25,6 +26,7 @@
   - [ ] Add configurable dataclasses from template yml files for training manager and extensible prototype (see pySR configuration in nav-frontend)
   - [ ] Add pySR conveniency module
   - [ ] Explore Hydra for configuration management from yml files
+  - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
 
 - [ ] v0.1.6
   - [ ] Improve docstrings in src code
