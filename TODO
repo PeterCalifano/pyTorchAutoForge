@@ -17,7 +17,7 @@
   - [x] Implement new adapter type for basic engineered feature maps (image, brightness masks, pre-processing filters)
   - [ ] Implement method to get traced model from ModelTrainingManager
   - [x] Fix issues with device selection query and some imports
-  - [ ] Add support for automatic chaining of schedulers
+  - [ ] Add support for automatic chaining of schedulers (todo debug learning rate update in Trainer?)
 
 - [ ] v0.1.5
   - [ ] Add prototype of SHAP for CNNs

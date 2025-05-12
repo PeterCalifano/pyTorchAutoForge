@@ -1355,21 +1355,25 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 raise NotImplementedError('Task type not implemented yet.')
 
     def updateLearningRate_(self):
+        """
+        Updates the learning rate of the optimizer if a learning rate scheduler is provided.
+        """
         if self.lr_scheduler is not None and self.optimizer is not None:
             # Perform step of learning rate scheduler if provided
             self.optimizer.zero_grad()  # Reset gradients for safety
             self.lr_scheduler.step()
 
-            # Get the single learning rate value
-            current_lr = self.lr_scheduler.get_last_lr()[0]
+            # Get learning rate value after step
+            new_lr = self.optimizer.param_groups[0]['lr']
 
-            print('\n{light_blue}Learning rate changed: {prev_lr:.6g} --> {current_lr:.6g}{reset}\n'.format(light_blue=colorama.Fore.LIGHTBLUE_EX,
+            # Print 
+            print('\n{light_blue}Learning rate changed: {prev_lr:.6g} --> {new_lr:.6g}{reset}\n'.format(light_blue=colorama.Fore.LIGHTBLUE_EX,
                 prev_lr=self.current_lr,
-                current_lr=current_lr,
+                new_lr=new_lr,
                 reset=colorama.Style.RESET_ALL))
 
-            # Update current learning rate
-            self.current_lr = current_lr
+            # Save the new learning rate
+            self.current_lr = new_lr
 
     def checkForEarlyStop(self, counter: int) -> bool:
         """
