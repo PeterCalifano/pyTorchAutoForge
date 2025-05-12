@@ -269,6 +269,7 @@ class enumOptimizerType(Enum):
     ADAMW = 2
 
 # %% ModelTrainingManager class - 24-07-2024
+# TODO rework trainer NOT to inherit from Config object!
 class ModelTrainingManager(ModelTrainingManagerConfig):
     def __init__(self, model: nn.Module | None, 
                  lossFcn: nn.Module | CustomLossFcn, 
@@ -380,20 +381,21 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.setDataloaders(dataLoaderIndex)
 
         # Handle override of optimizer inherited from ModelTrainingManagerConfig
+        # TODO review implementation
         if optimizer is not None: # Override
             if isinstance(optimizer, optim.Optimizer):
-                self.reinstantiate_optimizer_(optimizer)
+                self._reinstantiate_optimizer(optimizer)
             elif isinstance(optimizer, enumOptimizerType) or issubclass(optimizer, optim.Optimizer):
-                self.define_optimizer_(optimizer)
+                self._define_optimizer(optimizer)
             else:
                 Warning('Overriding of optimizer failed. Attempt to use optimizer from ModelTrainingManagerConfig...')
 
         else: # Use optimizer from ModelTrainingManagerConfig
             if self.optimizer is not None:
                 if isinstance(self.optimizer, optim.Optimizer):
-                    self.reinstantiate_optimizer_()
+                    self._reinstantiate_optimizer()
                 elif isinstance(self.optimizer, enumOptimizerType) or issubclass(self.optimizer, optim.Optimizer):
-                    self.define_optimizer_(self.optimizer)
+                    self._define_optimizer(self.optimizer)
             else:
                 raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
 
@@ -401,7 +403,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if not (os.path.isdir(self.checkpoint_dir)):
             os.mkdir(self.checkpoint_dir)
 
-    def define_optimizer_(self, optimizer: optim.Optimizer | enumOptimizerType) -> None:
+    def _define_optimizer(self, optimizer: optim.Optimizer | enumOptimizerType) -> None:
         """
         Define and set the optimizer for the model training.
 
@@ -431,7 +433,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             raise ValueError('Optimizer not recognized. Please provide a valid optimizer type or ID from enumOptimizerType enumeration class.')
         
 
-    def reinstantiate_optimizer_(self, optimizer_override: optim.Optimizer | None = None) -> None:
+    def _reinstantiate_optimizer(self, optimizer_override: optim.Optimizer | None = None) -> None:
         """
         Reinstantiates the optimizer with the same hyperparameters but with the current model parameters.
         """
@@ -450,10 +452,25 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.model.parameters(), **optimizer_hyperparams)
 
         if self.lr_scheduler is not None:
-            for param_group in self.optimizer.param_groups:
-                param_group['initial_lr'] = self.optimizer.param_groups[0]['lr']
+            # Reset initial_lr of each group
+            base_lr = self.optimizer.param_groups[0]["lr"]
+            for pg in self.optimizer.param_groups:
+                pg["initial_lr"] = base_lr
 
-            self.lr_scheduler.optimizer = self.optimizer
+            self._reassign_optimizer_to_scheduler(self.lr_scheduler)
+
+    def _reassign_optimizer_to_scheduler(self, lr_scheduler):
+        # Add the new optimizer to *this scheduler
+        lr_scheduler.optimizer = self.optimizer
+
+        # If *this scheduler wraps other schedulers, recurse into them
+        #    SequentialLR uses `schedulers`, other wrappers may use `_schedulers`.
+        for attr in ("schedulers", "_schedulers"):
+            children_scheduler = getattr(lr_scheduler, attr, None)
+            if children_scheduler is not None:
+                for subscheduler in children_scheduler:
+                    self._reassign_optimizer_to_scheduler(subscheduler)  # Recurse assignment
+                break
 
     def setDataloaders(self, dataloaderIndex: DataloaderIndex) -> None:
         """
@@ -1364,7 +1381,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.lr_scheduler.step()
 
             # Get learning rate value after step
-            new_lr = self.optimizer.param_groups[0]['lr']
+            new_lr = self.lr_scheduler.get_last_lr()[0]
 
             # Print 
             print('\n{light_blue}Learning rate changed: {prev_lr:.6g} --> {new_lr:.6g}{reset}\n'.format(light_blue=colorama.Fore.LIGHTBLUE_EX,
