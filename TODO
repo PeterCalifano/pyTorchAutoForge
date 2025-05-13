@@ -15,17 +15,20 @@
   - [x] Refactor and improve ModelTrainingManager updating augmentation pipeline and adding batch accumulation
   - [x] Improve and fix model evaluator
   - [x] Implement new adapter type for basic engineered feature maps (image, brightness masks, pre-processing filters)
-  - [ ] Implement method to get traced model from ModelTrainingManager
+  - [ ] Implement method to get traced model directly from ModelTrainingManager (or try to)
   - [x] Fix issues with device selection query and some imports
-  - [ ] Add support for automatic chaining of schedulers (todo debug learning rate update in Trainer?)
+  - [x] Add support for automatic chaining of schedulers (todo debug learning rate update in Trainer?)
+  - [ ] Add support for "reduce on plateau" scheduler (independent of step())
+  - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
 
 - [ ] v0.1.5
-  - [ ] Add prototype of SHAP for CNNs
+  - [ ] Implement new training mode: SWA_MODE
   - [ ] Review NN and template blocks for modularity
   - [ ] Implement prototype usage of AMP for mixed precision training
   - [ ] Add configurable dataclasses from template yml files for training manager and extensible prototype (see pySR configuration in nav-frontend)
   - [ ] Add pySR conveniency module
   - [ ] Explore Hydra for configuration management from yml files
+  - [ ] Add prototype of SHAP for CNNs
   - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
 
 - [ ] v0.1.6
