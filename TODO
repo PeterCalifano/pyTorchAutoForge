@@ -18,6 +18,7 @@
   - [ ] Implement method to get traced model from ModelTrainingManager
   - [x] Fix issues with device selection query and some imports
   - [ ] Add support for automatic chaining of schedulers (todo debug learning rate update in Trainer?)
+  - [ ] Update Trainer to save checkpoints in subfolder with mlflow experiment name
 
 - [ ] v0.1.5
   - [ ] Add prototype of SHAP for CNNs
