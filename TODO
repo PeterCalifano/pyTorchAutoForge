@@ -21,6 +21,8 @@
   - [ ] Update Trainer to save checkpoints in subfolder with mlflow experiment name
   - [ ] Add support for "reduce on plateau" scheduler (independent of step())
   - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
+  - [ ] Upgrade translation augmentation to support translation of multiple (key)points
+  - [ ] Implement custom rotation augmentation to support rotation of multiple (key)points, through warping
 
 - [ ] v0.1.5
   - [ ] Implement new training mode: SWA_MODE
