@@ -1,5 +1,5 @@
 from .ModelAutoBuilder import ModelAutoBuilder
-from .modelBuildingBlocks import AutoForgeModule, TemplateConvNet, TemplateFullyConnectedDeepNet, TemplateFullyConnectedDeepNetConfig_experimental, MultiHeadRegressor, TemplateFullyConnectedDeepNetConfig, TemplateConvNetConfig
+from .modelBuildingBlocks import AutoForgeModule, TemplateConvNet2d, TemplateFullyConnectedDeepNet, TemplateFullyConnectedDeepNetConfig_experimental, MultiHeadRegressor, TemplateFullyConnectedDeepNetConfig, TemplateConvNetConfig2d
 from .ModelAssembler import ModelAssembler
 from .ModelMutator import ModelMutator, EnumMutations
 
@@ -16,8 +16,8 @@ __all__ = [
     'ConvolutionalBlock1d', 
     'ConvolutionalBlock2d', 
     'ConvolutionalBlock3d', 
-    'TemplateConvNet', 
-    'TemplateConvNetConfig', 
+    'TemplateConvNet2d', 
+    'TemplateConvNetConfig2d', 
     'TemplateFullyConnectedDeepNetConfig', 
     'TemplateFullyConnectedDeepNet', 
     'TemplateFullyConnectedDeepNetConfig_experimental', 
