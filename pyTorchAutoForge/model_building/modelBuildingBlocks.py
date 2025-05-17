@@ -71,7 +71,9 @@ class TemplateNetBaseConfig(BaseConfigClass):
 
     # Architecture design
     regularization_layer_type: Literal['batchnorm',
-                                       'dropout', 'groupnorm'] = 'batchnorm'
+                                       'dropout', 
+                                       'groupnorm', 
+                                       'none'] = 'batchnorm'
     
     out_channels_sizes : list[int] | None = None
 
@@ -326,9 +328,12 @@ class TemplateFullyConnectedDeepNet(AutoForgeModule):
         elif regularization_layer_type == 'groupnorm':
             raise NotImplementedError(
                 'Group normalization is not implemented yet. Please use batch normalization or dropout instead.')
-        else:
+        elif regularization_layer_type == 'none':
             self.dropout_probability = 0.0
             self.use_batchnorm = False
+        else:
+            raise ValueError(
+                f"TemplateFullyConnectedDeepNet: regularization_layer_type must be 'batchnorm', 'dropout', 'groupnorm' or 'none'. Found {regularization_layer_type}.")
 
         out_channel_sizes = cfg.out_channel_sizes
 
