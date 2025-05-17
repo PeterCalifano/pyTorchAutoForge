@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from abc import ABCMeta
 from typing import Any, Callable, Literal
 import yaml
+from PIL import Image
 
 # %% Experimental code
 # DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
