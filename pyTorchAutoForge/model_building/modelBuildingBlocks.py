@@ -1,5 +1,4 @@
 # Module to apply activation functions in forward pass instead of defining them in the model class
-import torch.nn as nn
 from pyTorchAutoForge.api.torch import * 
 from pyTorchAutoForge.model_building.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, EnumMultiHeadOutMode, MultiHeadRegressor
 from typing import Literal
@@ -8,14 +7,17 @@ from pyTorchAutoForge.utils import GetDeviceMulti
 from pyTorchAutoForge.setup import BaseConfigClass
 from pyTorchAutoForge.model_building.modelBuildingFunctions import build_activation_layer
 from pyTorchAutoForge.model_building.ModelMutator import ModelMutator
+from pyTorchAutoForge.model_building.convolutionalBlocks import ConvolutionalBlock1d, ConvolutionalBlock2d, ConvolutionalBlock3d
 
 from torch import nn
 from torch.nn import functional as torchFunc
 import torch, optuna, os, kornia
 
+from dataclasses import dataclass   
 import numpy as np
 from torchvision import models
 from abc import ABC
+from typing import Literal
 
 # DEVNOTE TODO change name of this file to "modelBuildingBlocks.py" and move the OLD classes to the file "modelClasses.py" for compatibility with legacy codebase
  
@@ -61,98 +63,178 @@ class AutoForgeModule(torch.nn.Module):
 # Normalization Layer example:
 
 ###########################################################
+@dataclass
+class TemplateNetBaseConfig(BaseConfigClass):
+
+    # General
+    model_name: str = "template_network"
+
+    # Architecture design
+    regularization_layer_type: Literal['batchnorm',
+                                       'dropout', 'groupnorm'] = 'batchnorm'
+    
+    out_channels_sizes : list[int] | None = None
+
+# %% TemplateConvNet2d - 19-09-2024
+@dataclass 
+class TemplateConvNetConfig(TemplateNetBaseConfig):
+
+    # Generic convolutional blocks parameters
+    # Pooling parameters
+    pool_type: Literal[
+        "MaxPool1d", "AvgPool1d", "Adapt_MaxPool1d", "Adapt_AvgPool1d",
+        "MaxPool2d", "AvgPool2d", "Adapt_MaxPool2d", "Adapt_AvgPool2d",
+        "MaxPool3d", "AvgPool3d", "Adapt_MaxPool3d", "Adapt_AvgPool3d",
+        "none"
+    ] = "MaxPool2d"
+    
+    activ_type: Literal["prelu", "sigmoid",
+                        "relu", "tanh", "none"] = "prelu"
+    
+    regularizer_type: Literal["dropout",
+                              "batchnorm", "groupnorm", "none"] = "none"
+    regularized_param : int | float = 0.0
+    
+    conv_stride: int | tuple[int, int, int] = 1
+    conv_padding: int | tuple[int, int, int] = 0
+    conv_dilation: int | tuple[int, int, int] = 1
+    prelu_params: Literal["all", "unique"] = "unique"
+    
+    # Nominal size of input tensor. Optional to verify design can work
+    reference_input_size: tuple[int, ...] | None = None
+
+@dataclass
+class TemplateConvNetConfig2d(TemplateConvNetConfig):
+
+    save_intermediate_features : bool = False
+
+    kernel_sizes: list[int] | None = None
+    pool_kernel_sizes: list[int] | int | None = None
+    num_input_channels: int = 3  # Default is 3
+
+    output_linear_layer_size : int | None = None # If specified, a convolution using out_channels as this number is added # TODO
+
+    add_fcn_layer_size : int | None = None # By default, no linear output layer
+    size_skip_to_linear_output: int | None = None
 
 
+    def __post_init__(self):
 
-# TODO --> convolutional building block
-class ConvolutionalBlock():
-    def __init__(self, dict_key, *args, **kwargs):
-        pass
+        # Check pooling type is correct (2d)
+        if not self.pool_type.endswith("2d"):
+            raise TypeError(f"TemplateConvNetConfig2d: pool_type must be of type 'MaxPool2d', 'AvgPool2d', 'Adapt_MaxPool2d' or 'Adapt_AvgPool2d'. Found {self.pool_type}.")
 
+        # Check config validity, throw error is not
+        if self.kernel_sizes is None:
+            raise ValueError("TemplateConvNetConfig2d: 'kernel_sizes' cannot be None")
+        if self.pool_kernel_sizes is None:
+            raise ValueError("TemplateConvNetConfig2d: 'pool_kernel_sizes' cannot be None")
+        if self.out_channels_sizes is None:
+            raise ValueError("TemplateConvNetConfig2d: 'out_channels_sizes' cannot be None")
+            
+        if len(self.kernel_sizes) != len(self.out_channels_sizes):
+            raise ValueError("TemplateConvNetConfig2d: 'kernel_sizes' and 'out_channels_sizes' must have the same length")
 
-# %% TemplateConvNet - 19-09-2024
-class TemplateConvNet(AutoForgeModule):
-    '''Template class for a fully parametric CNN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
-    # TODO: not finished yet
-    def __init__(self, parametersConfig) -> None:
+        if isinstance(self.pool_kernel_sizes, list):
+            if len(self.kernel_sizes) != len(self.pool_kernel_sizes):
+                raise ValueError("TemplateConvNetConfig2d: 'kernel_sizes' and 'pool_kernel_sizes' must have the same length. Alternatively, pool_kernel_sizes must be scalar integer.")
+            
+        # Automagic configuration post-processing
+        # If pooling kernel size is scalar, unroll to number of layers
+        if isinstance(self.pool_kernel_sizes, int):
+            self.pool_kernel_sizes = [
+                self.pool_kernel_sizes] * len(self.kernel_sizes)
+
+        assert( isinstance(conv_stride, int) ), "conv_stride must be a scalar integer for ConvolutionalBlock2d"
+
+        # TODO add check on conv sizes if reference_input_size is passed, to ensure kernel and pool sizes are compatible
+        # convBlockOutputSize = AutoComputeConvBlocksOutput( self, kernel_sizes, pool_kernel_sizes)
+
+class TemplateConvNet2d(AutoForgeModule):
+    '''
+    Template class for a fully parametric CNN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).
+    '''
+    
+    def __init__(self, cfg: TemplateConvNetConfig2d) -> None:
         super().__init__()
 
-        # Extract all the inputs of the class init method from dictionary parametersConfig, else use default values
+        self.cfg = cfg
 
-        kernelSizes = parametersConfig.get('kernelSizes', [5, 3, 3])
-        poolkernelSizes = parametersConfig.get('poolkernelSizes', [2, 2, 2])
+        # Build architecture model
+        kernel_sizes = cfg.kernel_sizes
+        pool_kernel_sizes = cfg.pool_kernel_sizes
 
-        useBatchNorm = parametersConfig.get('useBatchNorm', True)
-        alphaDropCoeff = parametersConfig.get('alphaDropCoeff', 0)
-        alphaLeaky = parametersConfig.get('alphaLeaky', 0)
-        patchSize = parametersConfig.get('patchSize', 7)
-
-        outChannelsSizes = parametersConfig.get('outChannelsSizes', [])
-
-        if len(kernelSizes) != len(poolkernelSizes):
+        if kernel_sizes is None or pool_kernel_sizes is None:
             raise ValueError(
-                'Kernel and pooling kernel sizes must have the same length')
+                'Kernel and pooling kernel sizes must not be none')
+
+        if isinstance(pool_kernel_sizes, list):
+            if len(kernel_sizes) != len(pool_kernel_sizes):
+                raise ValueError(
+                    'Kernel and pooling kernel sizes must have the same length')
+        else:
+            raise ValueError('pool_kernel_sizes cannot be scalar')
+
+        # Define output layer if required by config
+        self.linear_output_layer : nn.Module | None
 
         # Model parameters
-        self.outChannelsSizes = outChannelsSizes
-        self.patchSize = patchSize
-        self.imagePixSize = self.patchSize**2
-        self.numOfConvLayers = len(kernelSizes)
-        self.useBatchNorm = useBatchNorm
+        self.out_channels_sizes = cfg.out_channels_sizes
+        self.num_of_conv_blocks = len(kernel_sizes)
 
-        self.num_layers = len(self.outChannelsSizes) - len(kernelSizes)
+        # Additional checks
+        if self.out_channels_sizes is None:
+            raise ValueError(
+                'TemplateConvNetConfig2d: out_channels_sizes cannot be None')
 
-        convBlockOutputSize = AutoComputeConvBlocksOutput(
-            self, kernelSizes, poolkernelSizes)
-
-        # self.LinearInputFeaturesSize = (patchSize - self.numOfConvLayers * np.floor(float(kernelSizes[-1])/2.0)) * self.outChannelsSizes[-1] # Number of features arriving as input to FC layer
-        # convBlockOutputSize is tuple ((imgWidth, imgHeight), flattenedSize*nOutFeatures)
-        self.LinearInputFeaturesSize = convBlockOutputSize[1]
-
-        # 11 # CHANGE TO 7 removing R_DEM and PosTF
-        self.LinearInputSkipSize = parametersConfig.get('LinearInputSkipSize')
-        self.LinearInputSize = self.LinearInputSkipSize + self.LinearInputFeaturesSize
-
-        self.layers = nn.ModuleList()
-        input_size = self.LinearInputSize  # Initialize input size for first layer
+        self.blocks = nn.ModuleList()
 
         # Model architecture
         idLayer = 0
 
         # Convolutional blocks auto building
-        in_channels = 1
+        in_channels = cfg.num_input_channels    
+        for ith in range(len(kernel_sizes)):
 
-        for i in range(len(kernelSizes)):
-            # Convolutional layers block
-            self.layers.append(
-                nn.Conv2d(in_channels, self.outChannelsSizes[i], kernelSizes[i]))
-            self.layers.append(nn.PReLU(self.outChannelsSizes[i]))
-            self.layers.append(nn.MaxPool2d(
-                poolkernelSizes[i], poolkernelSizes[i]))
+            # Get data for ith block
+            kernel_size = kernel_sizes[ith]
+            pool_kernel_size = pool_kernel_sizes[ith]
+            out_channels = self.out_channels_sizes[ith]
+            pool_type = cfg.pool_type
+            activ_type_ = cfg.activ_type
+            regularization_layer_type_ = cfg.regularization_layer_type
+            regularized_param_ = cfg.regularized_param
+            conv_stride_ = cfg.conv_stride
 
-            in_channels = self.outChannelsSizes[i]
+            # Convolutional blocks
+            block = ConvolutionalBlock2d(in_channels=in_channels, 
+                                        out_channels=out_channels, 
+                                        kernel_size=kernel_size,
+                                        pool_kernel_size=pool_kernel_size,
+                                        pool_type=pool_type, #type:ignore
+                                        activ_type=activ_type_,
+                                        regularizer_type=regularization_layer_type_,
+                                        regularized_param=regularized_param_,
+                                        conv_stride=conv_stride_, #type:ignore
+                                        )
+
+            self.blocks.append(block)
+
+            in_channels = out_channels
             idLayer += 1
 
-        # Fully Connected predictor autobuilder
-        # self.Flatten = nn.Flatten()
-        self.layers.append(nn.Flatten())
+        if cfg.add_fcn_layer_size is not None:
+            
+            regressor_sequential = nn.ModuleList()
+            if in_channels != cfg.add_fcn_layer_size:
+                # Add convolutional "expander"
+                regressor_sequential.append(nn.Conv2d(in_channels, cfg.add_fcn_layer_size, 1, 1))
 
-        input_size = self.LinearInputSize  # Initialize input size for first layer
-
-        for i in range(idLayer, self.num_layers+idLayer):
-            # Fully Connected layers block
-            self.layers.append(
-                nn.Linear(input_size, self.outChannelsSizes[i], bias=True))
-            self.layers.append(nn.PReLU(self.outChannelsSizes[i]))
-            self.layers.append(nn.Dropout(alphaDropCoeff))
-
-            # Add batch normalization layer if required
-            if self.useBatchNorm:
-                self.layers.append(nn.BatchNorm1d(
-                    self.outChannelsSizes[i], eps=1E-5, momentum=0.1, affine=True))
-
-            # Update input size for next layer
-            input_size = self.outChannelsSizes[i]
+            # Fully Connected regressor
+            regressor_sequential.append(nn.AdaptiveAvgPool2d((1,1))) 
+            regressor_sequential.append(module=nn.Flatten())
+            regressor_sequential.append(nn.Linear(in_channels, 
+            cfg.add_fcn_layer_size, bias=True))
 
         # Initialize weights of layers
         self.__initialize_weights__()
@@ -160,8 +242,7 @@ class TemplateConvNet(AutoForgeModule):
     def __initialize_weights__(self):
         '''Weights Initialization function for layers of the model. Xavier --> layers with tanh and sigmoid, Kaiming --> layers with ReLU activation'''
 
-         # Wait, why is it using onlt Kaiming?
-        for layer in self.layers:
+        for layer in self.blocks:
             # Check if layer is a Linear layer
             if isinstance(layer, nn.Linear):
                 # Apply Kaiming initialization
@@ -177,70 +258,82 @@ class TemplateConvNet(AutoForgeModule):
                     # Initialize bias to zero if present
                     nn.init.constant_(layer.bias, 0)
 
-    def forward(self, inputSample):
+    def forward(self, X, X_skips: list[torch.Tensor] | torch.Tensor | None = None):
+        """
+        Generic forward pass for TemplateConvNet2d. Use only as prototype. Graph capture, scripting and tracing will likely not work with this class.
+        """
 
-        imgWidth = int(torch.sqrt(self.imagePixSize))
-        # img2Dinput = (((inputSample[:, 0:self.imagePixSize]).T).reshape( imgWidth, -1, 1, inputSample.size(0))).T  # First portion of the input vector reshaped to 2D
+        # Perform forward pass iterating through all blocks of CNN
+        x = X
 
-        # Step 1: Select the first self.imagePixSize columns for all rows
-        # Step 2: Permute the dimensions to match the transposition (swap axes 0 and 1)
-        # Step 3: Reshape the permuted tensor to the specified dimensions
-        # Step 4: Permute again to match the final transposition (swap axes 0 and 1 again)
+        # TODO upgrade template to receive a second input: feature map skip
+        # TODO add how to merge x_skip with x
 
-        # Perform forward pass iterating through all layers of CNN
-        val = inputSample
+        x_skip_out = []
+        if isinstance(X_skips, (torch.Tensor, type(None))):
 
-        for layer in self.layers:
+            for block in self.blocks:
+                x = block(x)
+                if self.cfg.save_intermediate_features:
+                    x_skip_out.append(x)
 
-            if isinstance(layer, nn.Conv2d):
-                val = layer(val)
-            elif isinstance(layer, nn.MaxPool2d):
-                val = layer(val)
-            elif isinstance(layer, nn.Linear):
-                val = layer(val)
-            elif isinstance(layer, nn.PReLU):
-                val = torchFunc.prelu(val, layer.weight)
-            elif isinstance(layer, nn.Dropout):
-                val = layer(val)
-            elif isinstance(layer, nn.BatchNorm1d):
-                val = layer(val)
-            elif isinstance(layer, nn.Flatten):
-                val = layer(val)
+        elif isinstance(X_skips, list):
 
-        # Output layer
-        predictedPixCorrection = val
-
-        return predictedPixCorrection
+            for block, x_skip in zip(self.blocks, X_skips):
+                x = block(x)
+                if self.cfg.save_intermediate_features:
+                    x_skip_out.append(x)
+        
+        return x, x_skip_out
 
 
-# %% TemplateDeepNet - 19-09-2024
-class TemplateDeepNet(AutoForgeModule):
-    '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
+# %% TemplateFullyConnectedDeepNetConfig - 19-09-2024
+@dataclass
+class TemplateFullyConnectedDeepNetConfig(TemplateNetBaseConfig):
 
-    def __init__(self, cfg) -> None:
+    # Architecture definition
+    out_channel_sizes: list[int] | None = None
+    input_layer_size: int | None = None
+    dropout_probability : float = 0.0
+
+    def __post_init__(self):
+        def __post_init__(self):
+            if self.out_channel_sizes is None:
+                raise ValueError("TemplateFullyConnectedDeepNetConfig: 'out_channel_sizes' cannot be None")
+            if self.input_layer_size is None:
+                raise ValueError("TemplateFullyConnectedDeepNetConfig: 'input_layer_size' cannot be None")
+
+class TemplateFullyConnectedDeepNet(AutoForgeModule):
+    '''
+    Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).
+    '''
+
+    def __init__(self, cfg : TemplateFullyConnectedDeepNetConfig) -> None:
         super().__init__()
 
-        model_name = cfg.get('model_name', 'template_deepnet')
-        regularization_layer_type = cfg.get(
-            'regularization_layer_type', 'batchnorm').lower()
+        self.cfg = cfg
+        self.model_name = cfg.model_name
+
+        regularization_layer_type = cfg.regularization_layer_type
+        dropout_probability = cfg.dropout_probability
 
         if regularization_layer_type == 'batchnorm':
             self.use_batchnorm = True
-            dropout_probability = 0.0
+
         elif regularization_layer_type == 'dropout':
             self.use_batchnorm = False
-            dropout_probability = cfg.get('dropout_probability', 0.0)
+
         elif regularization_layer_type == 'groupnorm':
             raise NotImplementedError(
                 'Group normalization is not implemented yet. Please use batch normalization or dropout instead.')
         else:
-            dropout_probability = 0.0
+            self.dropout_probability = 0.0
             self.use_batchnorm = False
-        
-        out_channel_sizes = cfg.get('out_channel_sizes', [])
-        
+
+        out_channel_sizes = cfg.out_channel_sizes
+
         # Initialize input size for first layer
-        input_size = cfg.get('input_size')
+        input_size = cfg.input_layer_size
 
         # Model parameters
         self.out_channel_sizes = out_channel_sizes
@@ -313,7 +406,7 @@ class TemplateDeepNet(AutoForgeModule):
 
 
 # DEVELOPMENT CODE: DEVNOTE: test definition of template DNN using new build_activation_layer function
-class TemplateDeepNet_experimental(AutoForgeModule):
+class TemplateFullyConnectedDeepNetConfig_experimental(AutoForgeModule):
     '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
 
     def __init__(self, parametersConfig) -> None:
@@ -322,10 +415,10 @@ class TemplateDeepNet_experimental(AutoForgeModule):
         useBatchNorm = parametersConfig.get('useBatchNorm', False) # TODO try to replace with build_normalization_layer function
         alphaDropCoeffLayers = parametersConfig.get('alphaDropCoeffLayers', None) # Can be either scalar (apply to all) or list (apply to specific layers)
         #alphaLeaky = parametersConfig.get('alphaLeaky', 0)
-        outChannelsSizes = parametersConfig.get('outChannelsSizes', [])
+        out_channels_sizes = parametersConfig.get('out_channels_sizes', [])
 
         if alphaDropCoeffLayers is not None:
-            assert len(alphaDropCoeffLayers) == len(outChannelsSizes) -1, 'Length of alphaDropCoeffLayers must match number of layers in outChannelsSizes'
+            assert len(alphaDropCoeffLayers) == len(out_channels_sizes) -1, 'Length of alphaDropCoeffLayers must match number of layers in out_channels_sizes'
 
         # Define activation function parameters (default: PReLU)
         self.activation_fcn_name = parametersConfig.get( 'activation_fcn_name', 'PReLU')
@@ -335,10 +428,10 @@ class TemplateDeepNet_experimental(AutoForgeModule):
         input_size = parametersConfig.get('input_size')
 
         # Model parameters
-        self.outChannelsSizes = outChannelsSizes
+        self.out_channels_sizes = out_channels_sizes
         self.useBatchNorm = useBatchNorm
 
-        self.num_layers = len(self.outChannelsSizes)
+        self.num_layers = len(self.out_channels_sizes)
 
         # Model architecture
         self.layers = nn.ModuleList()
@@ -350,11 +443,11 @@ class TemplateDeepNet_experimental(AutoForgeModule):
         for i in range(idLayer, self.num_layers+idLayer-1):
 
             # Build Linear layer
-            self.layers.append( nn.Linear(input_size, self.outChannelsSizes[i], bias=True))
+            self.layers.append( nn.Linear(input_size, self.out_channels_sizes[i], bias=True))
 
             # Build activation layer
             if self.activation_fcn_name == 'PReLU': 
-                act_fcn_params_dict['num_parameters'] = self.outChannelsSizes[i]
+                act_fcn_params_dict['num_parameters'] = self.out_channels_sizes[i]
 
             self.layers.append(build_activation_layer( self.activation_fcn_name, False, **act_fcn_params_dict))
 
@@ -368,13 +461,13 @@ class TemplateDeepNet_experimental(AutoForgeModule):
 
             # Add batch normalization layer if required
             if self.useBatchNorm:
-                self.layers.append(nn.BatchNorm1d( self.outChannelsSizes[i], eps=1E-5, momentum=0.1, affine=True))
+                self.layers.append(nn.BatchNorm1d( self.out_channels_sizes[i], eps=1E-5, momentum=0.1, affine=True))
 
             # Update input size for next layer
-            input_size = self.outChannelsSizes[i]
+            input_size = self.out_channels_sizes[i]
 
         # Add output layer
-        self.layers.append(nn.Linear(input_size, self.outChannelsSizes[-1], bias=True))
+        self.layers.append(nn.Linear(input_size, self.out_channels_sizes[-1], bias=True))
 
         # Initialize weights of layers
         self.__initialize_weights__()
@@ -540,12 +633,12 @@ def ReloadModelFromOptuna(trial: optuna.trial.FrozenTrial, other_params: dict, m
     model = LoadModel(model, os.path.join(filepath, modelName), False)
 
     # Loading validation
-    validateDictLoading(model, modelName, filepath)
+    ValidateDictLoading(model, modelName, filepath)
 
     return model
 
 
-def validateDictLoading(model: nn.Module | nn.ModuleDict | nn.ModuleList, modelName: str, filepath: str):
+def ValidateDictLoading(model: nn.Module | nn.ModuleDict | nn.ModuleList, modelName: str, filepath: str):
 
     # Load the saved state dict (just to compare)
     checkpoint = torch.load(os.path.join(filepath, modelName+'.pth'))
@@ -562,153 +655,3 @@ def validateDictLoading(model: nn.Module | nn.ModuleDict | nn.ModuleList, modelN
     else:
         print("All model parameters are correctly loaded.")
 
-
-def DefineModel(trial: optuna.trial.Trial | optuna.trial.FrozenTrial, other_params: dict):
-
-    # Decision parameters
-    # use_default_size = trial.params['use_default_size']
-    if 'efficient_net_ID' in trial.params.keys():
-        efficient_net_ID = trial.params['efficient_net_ID']
-    else:
-        efficient_net_ID = 0
-
-    if efficient_net_ID == 0:
-        input_size = 224
-    elif efficient_net_ID == 1:
-        input_size = 240
-
-    if 'input_size' in other_params.keys():
-        input_size = other_params['input_size']
-        print(f"Overriding backbone default input size. Using:", input_size)
-
-    # Define EfficientNet backbone output size
-    efficientNet_output_size = 1280
-    # DEVNOTE: EfficientNet architecture has 1280 feature maps from the last Conv2dNormActivation block.
-    # The adaptive average pooling synthesizes each feature map in a single value to avoid need for flattening or reshaping.
-
-    regressor_arch_version = trial.params['regressor_arch_version'] if 'regressor_arch_version' in trial.params.keys(
-    ) else other_params['regressor_arch_version']
-
-    if 'model_definition_mode' in other_params.keys():
-        model_definition = other_params['model_definition_mode']
-
-        if model_definition == 'multihead' and regressor_arch_version == 1:
-            output_type = 'last'
-        elif model_definition == 'multihead' and regressor_arch_version == 2:
-            output_type = 'features'
-        elif model_definition == 'centroid_only':
-            output_type = 'last'
-
-    else:
-        model_definition = 'centroid_only'
-        output_type = ' last'
-
-    feature_extractor = EfficientNetBackbone(
-        efficient_net_ID, output_type=output_type)
-
-    if 'dropout_probability' in trial.params.keys():
-        dropout_coeff = trial.params['dropout_probability']
-    else:
-        dropout_coeff = 0
-
-    if 'use_batchnorm' in trial.params.keys():
-        use_batchnorm = trial.params['use_batchnorm']
-    else:
-        use_batchnorm = 0
-
-    if "image_adapter_strategy" in trial.params.keys():
-        image_adapter_strategy = trial.params["image_adapter_strategy"]
-    elif "image_adapter_strategy" in other_params.keys():
-        image_adapter_strategy = other_params["image_adapter_strategy"]
-    else:
-        image_adapter_strategy = 'conv_adapter'
-
-    # Define adapter model to bring resolution down to feature_extractor input size
-    if image_adapter_strategy == 'conv_adapter':
-
-        if 'mutate_to_groupnorm' in trial.params.keys():
-            if trial.params['mutate_to_groupnorm'] == 1:
-                feature_extractor = (ModelMutator(
-                    feature_extractor, 32)).mutate()
-
-        resAdapter = Conv2dResolutionChannelsAdapter([input_size, input_size], [1, 3])
-
-    elif image_adapter_strategy == 'resize_copy':
-
-        # if 'mutate_to_groupnorm' in trial.params.keys():
-        #    if trial.params['mutate_to_groupnorm'] == 1:
-        #        mlflow.start_run() # Start new run to log that it is invalid
-        #        mlflow.log_param("invalid_trial", True)
-        #        mlflow.log_param("image_adapter_strategy", image_adapter_strategy)
-        #        mlflow.log_param("mutate_to_groupnorm", trial.params['mutate_to_groupnorm'])
-        #        mlflow.end_run(status="KILLED")
-        #        optuna.TrialPruned() # Prevent trial to be executed (Combination of parameters is not valid). Batch norm statistics must be preserved.
-
-        if 'mutate_to_groupnorm' in trial.params.keys():
-            if trial.params['mutate_to_groupnorm'] == 1:
-                feature_extractor = (ModelMutator(
-                    feature_extractor, 32)).mutate()
-
-        resAdapter = ResizeCopyChannelsAdapter(output_size=[input_size, input_size], num_channels=[
-                                       1, 3], interp_method='bicubic')  # ACHTUNG: trilinear is for volumetric data
-
-        # Freeze EfficientNet backbone in this strategy
-        # feature_extractor.requires_grad_(False)
-
-    # NOTE: expected input size is 240x240, 3 channels
-    # Expected output for EfficientNet-B1 feature extractor, the shape of the extracted features before the final classification layer
-    # will be approximately (batch_size, 1280, 7, 7) (which represents the spatial dimensions and channels of the last convolutional block)
-    # NOTE: but... does using only last layer output implies using only higher level features?
-    # print("EfficientNet B model: \n", feature_extractor)
-
-    if 'model_definition_mode' in other_params.keys():
-        model_definition = other_params['model_definition_mode']
-    else:
-        model_definition = 'centroid_only'
-
-    if model_definition == 'centroid_only':
-        out_channels_sizes = other_params['out_channels_sizes']
-
-        headCentroid_config = {
-            'input_size': efficientNet_output_size,
-            'useBatchNorm': use_batchnorm,
-            'alphaDropCoeff': dropout_coeff,
-            'alphaLeaky': 0.0,
-            'outChannelsSizes': out_channels_sizes
-        }
-
-        model = nn.Sequential(resAdapter, feature_extractor,
-                              TemplateDeepNet(headCentroid_config))
-        return model
-
-    elif model_definition == 'multihead':
-
-        out_channels_sizes_H1 = other_params['out_channels_sizes_H1']
-        out_channels_sizes_H2 = other_params['out_channels_sizes_H2']
-
-        headCentroid_config = {
-            'input_size': efficientNet_output_size,
-            'useBatchNorm': use_batchnorm,
-            'alphaDropCoeff': dropout_coeff,
-            'alphaLeaky': 0.0,
-            'outChannelsSizes': out_channels_sizes_H1
-        }
-
-        # Define Regression head
-        headRange_config = {
-            'input_size': efficientNet_output_size,
-            'useBatchNorm': use_batchnorm,
-            'alphaDropCoeff': dropout_coeff,
-            'alphaLeaky': 0.0,
-            'outChannelsSizes': out_channels_sizes_H2
-        }
-
-        if regressor_arch_version == 1:
-            model = build_multiHeadV1(
-                feature_extractor, resAdapter, headCentroid_config, headRange_config)
-
-        elif regressor_arch_version == 2:
-            model = build_multiHeadV2(
-                feature_extractor, resAdapter, headCentroid_config, headRange_config)
-
-        return model
