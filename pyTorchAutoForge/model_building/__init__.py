@@ -1,7 +1,9 @@
 from .ModelAutoBuilder import ModelAutoBuilder
-from .modelBuildingBlocks import AutoForgeModule, ConvolutionalBlock, TemplateConvNet, TemplateDeepNet, TemplateDeepNet_experimental, MultiHeadRegressor
+from .modelBuildingBlocks import AutoForgeModule, TemplateConvNet, TemplateFullyConnectedDeepNet, TemplateFullyConnectedDeepNetConfig_experimental, MultiHeadRegressor, TemplateFullyConnectedDeepNetConfig, TemplateConvNetConfig
 from .ModelAssembler import ModelAssembler
 from .ModelMutator import ModelMutator, EnumMutations
+
+from .convolutionalBlocks import ConvolutionalBlock1d, ConvolutionalBlock2d, ConvolutionalBlock3d
 
 # Backbones
 from .backbones.base_backbones import FeatureExtractorConfig, FeatureExtractorFactory, BackboneConfig, BackboneFactory
@@ -11,10 +13,14 @@ from .backbones.input_adapters import BaseAdapterConfig, Conv2dAdapterConfig, Re
 __all__ = [
     'ModelAutoBuilder', 
     'AutoForgeModule', 
-    'ConvolutionalBlock', 
+    'ConvolutionalBlock1d', 
+    'ConvolutionalBlock2d', 
+    'ConvolutionalBlock3d', 
     'TemplateConvNet', 
-    'TemplateDeepNet', 
-    'TemplateDeepNet_experimental', 
+    'TemplateConvNetConfig', 
+    'TemplateFullyConnectedDeepNetConfig', 
+    'TemplateFullyConnectedDeepNet', 
+    'TemplateFullyConnectedDeepNetConfig_experimental', 
     'ModelAssembler', 
     'ModelMutator', 
     'EnumMutations',

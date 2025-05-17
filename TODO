@@ -23,6 +23,10 @@
   - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
   - [ ] Upgrade translation augmentation to support translation of multiple (key)points
   - [ ] Implement custom rotation augmentation to support rotation of multiple (key)points, through warping
+  - [ ] Update parametric template of CNN class for different uses
+  - [ ] Modify DataLoaderIndex to accept datasets directly and a combination. If dataset is input, use default specifications for dataloader
+  - [ ] Add semi-automatic function to run model inference on sample input and save to disk with resulting predictions
+  - [ ] Add automatic check of equivalence in ModelExporter
 
 - [ ] v0.1.5
   - [ ] Implement new training mode: SWA_MODE
