@@ -21,6 +21,8 @@ class DataloaderIndex:
             Returns the DataLoader for the validation dataset.
     """
 
+    # TODO modify to accept datasets directly and a combination. If dataset is input, use default specifications for dataloader
+
     def __init__(self, trainLoader: DataLoader, 
                  validLoader: DataLoader | None = None, 
                  split_ratio: int | float | tuple = 0.8, 

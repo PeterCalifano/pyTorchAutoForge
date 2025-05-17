@@ -18,8 +18,8 @@ class ResultsPlotterConfig():
     unit_scalings: dict | None = None
     num_of_bins: int = 100
     colours: list = field(default_factory=list)
-    units: tuple | None = None
-    entriesNames: tuple | None = None
+    units: tuple[str, ...] | list[str] | None = None
+    entriesNames: tuple[str, ...] | list[str] | None = None
     output_folder: str | None = None
 
 class ResultsPlotterHelper():

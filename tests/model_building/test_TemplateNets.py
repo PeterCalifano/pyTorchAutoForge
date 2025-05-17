@@ -1,6 +1,6 @@
 import matplotlib
 from pyTorchAutoForge.api.torch import SaveModel, LoadModel
-from pyTorchAutoForge.model_building import ModelAutoBuilder, TemplateDeepNet, TemplateConvNet
+from pyTorchAutoForge.model_building import ModelAutoBuilder, TemplateFullyConnectedDeepNet, TemplateConvNet
 from pyTorchAutoForge.utils import GetDevice
 import torchvision.models as models
 from typing import Union
@@ -15,7 +15,7 @@ matplotlib.use('agg')  # or 'Qt5Agg'
 plt.ion()
 
 
-def test_TemplateDeepNet():
+def test_TemplateFullyConnectedDeepNetConfig():
     pass
 
 
@@ -78,7 +78,7 @@ def main():
         'outChannelsSizes': [256, 128, 32, 16, 2]
     }
 
-    centroidRegressor = TemplateDeepNet(headCentroid_config)
+    centroidRegressor = TemplateFullyConnectedDeepNet(headCentroid_config)
     print("Centroid regressor model: \n", headCentroid_config)
     # NOTE: why torch summary does not see parameters in regressor?
     # Assembly model

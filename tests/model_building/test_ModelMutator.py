@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from torch import nn
 import torchvision.models as models
-from pyTorchAutoForge.model_building import TemplateDeepNet
+from pyTorchAutoForge.model_building import TemplateFullyConnectedDeepNet
 
 import matplotlib
 import pytest
@@ -130,7 +130,7 @@ def main():
         'outChannelsSizes': [256, 128, 32, 16, 2]
     }
 
-    centroidRegressor = TemplateDeepNet(headCentroid_config)
+    centroidRegressor = TemplateFullyConnectedDeepNet(headCentroid_config)
     print("Centroid regressor model: \n", headCentroid_config)
 
     model = nn.Sequential(
