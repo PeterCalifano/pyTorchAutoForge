@@ -51,7 +51,8 @@ class ModelEvaluator():
                  evalFunction: Callable | None = None,
                  plotter: ResultsPlotterHelper | None = None,
                  make_plot_predict_vs_target: bool = False,
-                 output_scale_factors: NDArray[np.generic] | torch.Tensor | None = None) -> None:
+                 output_scale_factors: NDArray[np.generic] | torch.Tensor | None = None,
+                 augmentation_module: nn.Module | None = None) -> None:
 
         self.loss_fcn = lossFcn
         self.validationDataloader : DataLoader = dataLoader
@@ -66,6 +67,7 @@ class ModelEvaluator():
         self.model = model.to(self.device)
         self.stats : dict = {}
         self.plotter = plotter
+        self.augmentation_module = augmentation_module
 
         # Determine scale factors
         self.output_scale_factors: NDArray[np.generic] | torch.Tensor | None = None
@@ -125,6 +127,13 @@ class ModelEvaluator():
         with torch.no_grad():
             for batch_idx, (X, Y) in enumerate(tmp_dataloader):
                 X, Y = X.to(self.device), Y.to(self.device)
+
+                # Optional augmentation module
+                if self.augmentation_module is not None:
+                    #Y = Y * torch.Tensor(self.output_scale_factors).to(self.device) # DOUBT not sure this is needed, in Trainer not used!
+
+                    # Apply augmentations
+                    X, Y = self.augmentation_module(X, Y)
 
                 # Perform forward pass
                 Y_hat = self.model(X)
