@@ -84,7 +84,6 @@ class ImageMaskFilterAdapterConfig(BaseAdapterConfig):
                 self.binary_mask_thr_method = None
                 self.filter_feature_methods = None        
     
-
 @dataclass
 class ScalerAdapterConfig(BaseAdapterConfig):
     scale: float | list[float] | np.ndarray | torch.Tensor
@@ -92,6 +91,9 @@ class ScalerAdapterConfig(BaseAdapterConfig):
 
     def __post_init__(self):
         # Validate scale and bias
+        if self.scale is None:
+            raise ValueError("`scale` must be provided and cannot be None.")
+        
         if isinstance(self.scale, (list, np.ndarray)) and len(self.scale) == 0:
             raise ValueError("`scale` must be a non-empty list or numpy array.")
         if self.bias is not None and isinstance(self.bias, (list, np.ndarray)) and len(self.bias) == 0:
@@ -103,8 +105,8 @@ class ScalerAdapter(BaseAdapter):
     ScalerAdapter rescales input tensors by a fixed scale and bias vectors or scalars. Useful for normalizing or shifting input data before feeding to a model.
 
     Args:
-        scale (float): Multiplicative scaling factor. Can be a 0D (for all archs) or 1D vector (for DNNs only).
-        bias (float, optional): Additive bias. Defaults to 0.0. Can be a 0D (for all archs) or 1D vector (for DNNs only).
+        scale_coefficient (float | list[float] | np.ndarray | torch.Tensor): Multiplicative scaling factor. Can be a scalar or 1D vector.
+        bias_coefficient (float | list[float] | np.ndarray | torch.Tensor | None, optional): Additive bias. Defaults to 0.0. Can be a scalar or 1D vector.
     """
     def __init__(
         self,
