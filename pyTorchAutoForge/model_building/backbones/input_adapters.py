@@ -17,7 +17,6 @@ class BaseAdapterConfig(BaseConfigClass):
     """Marker base class for adapter configs"""
     pass
 
-
 class BaseAdapter(nn.Module, ABC):
     """Common interface for all adapters"""
 
@@ -85,9 +84,91 @@ class ImageMaskFilterAdapterConfig(BaseAdapterConfig):
                 self.binary_mask_thr_method = None
                 self.filter_feature_methods = None        
     
+@dataclass
+class ScalerAdapterConfig(BaseAdapterConfig):
+    scale: float | list[float] | np.ndarray | torch.Tensor
+    bias: float | list[float] | np.ndarray | torch.Tensor | None = None
 
+    def __post_init__(self):
+        # Validate scale and bias
+        if self.scale is None:
+            raise ValueError("`scale` must be provided and cannot be None.")
+        
+        if isinstance(self.scale, (list, np.ndarray)) and len(self.scale) == 0:
+            raise ValueError("`scale` must be a non-empty list or numpy array.")
+        if self.bias is not None and isinstance(self.bias, (list, np.ndarray)) and len(self.bias) == 0:
+            raise ValueError("`bias` must be a non-empty list or numpy array.")
 
 # ===== Adapter modules =====
+class ScalerAdapter(BaseAdapter):
+    """
+    ScalerAdapter rescales input tensors by a fixed scale and bias vectors or scalars. Useful for normalizing or shifting input data before feeding to a model.
+
+    Args:
+        scale_coefficient (float | list[float] | np.ndarray | torch.Tensor): Multiplicative scaling factor. Can be a scalar or 1D vector.
+        bias_coefficient (float | list[float] | np.ndarray | torch.Tensor | None, optional): Additive bias. Defaults to 0.0. Can be a scalar or 1D vector.
+    """
+    def __init__(
+        self,
+        scale_coefficient: list[float] | np.ndarray | torch.Tensor,
+        bias_coefficient: list[float] | np.ndarray | torch.Tensor | None = None
+    ) -> None:
+        
+        super().__init__()
+        # Handle scale input
+        if isinstance(scale_coefficient, list) or isinstance(scale_coefficient, np.ndarray):
+            scale = torch.as_tensor(scale_coefficient, dtype=torch.float32)
+
+        elif torch.is_tensor(scale_coefficient):
+            scale = scale_coefficient.to(dtype=torch.float32)
+
+        else:
+            raise TypeError(
+                "`scale_coefficient` must be a list, a 1-D numpy array, or a torch Tensor")
+        
+        if scale.ndim > 1:
+            raise ValueError("`scale_coefficient` must be 1-D (or 0-D)")
+
+        # Handle bias input
+        if bias_coefficient is None:
+            bias = torch.zeros_like(scale)
+
+        elif isinstance(bias_coefficient, list) or isinstance(bias_coefficient, np.ndarray):
+            bias = torch.as_tensor(bias_coefficient, dtype=torch.float32)
+        elif torch.is_tensor(bias_coefficient):
+            bias = bias_coefficient.to(dtype=torch.float32)
+        else:
+            raise TypeError(
+                "`bias_coefficient` must be None, a list, a 1-D numpy array, or a torch Tensor"
+            )
+        if bias.ndim > 1:
+            raise ValueError("`bias_coefficient` must be 1-D (or 0-D)")
+
+        # Check consistency of dimensions
+        if scale.ndim == 1 and bias.ndim == 1 and scale.shape != bias.shape:
+            raise ValueError("`scale_coefficient` and `bias_coefficient` must have the same length")
+
+        # Register scale and bias as buffers
+        self.register_buffer('scale', scale)
+        self.register_buffer('bias',  bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        if self.scale.ndim == 1:
+            if x.dim() != 2 or x.shape[1] != self.scale.numel():
+                raise ValueError(f"Current implementation supports inputs of shape (B, N) where N must be = {self.scale.shape[0]}, but got {x.shape}")
+            
+            # Reshape scale and bias for broadcasting over batch
+            scale_broadcast = self.scale.unsqueeze(0)  # shape (1, N)
+            bias_broadcast = self.bias.unsqueeze(0)    # shape (1, N)
+
+        else:
+            # Scalar (0-D tensor) broadcasts automatically
+            scale_broadcast = self.scale
+            bias_broadcast = self.bias
+
+        return x * scale_broadcast + bias_broadcast
+
 class Conv2dResolutionChannelsAdapter(BaseAdapter):
     """
     Channels & resolution adapter using 1x1 convolution and pooling.
@@ -175,7 +256,6 @@ class ResizeCopyChannelsAdapter(BaseAdapter):
 
         # Return adapted tensor ready for backbone
         return x
-
 
 class ImageMaskFilterAdapter(BaseAdapter):
 
@@ -287,11 +367,10 @@ def InputAdapterFactory(cfg) -> nn.Module:
     raise ValueError(
         f"No adapter registered for config type {type(cfg).__name__}")
 
-
+# === Register adapters ===
 @InputAdapterFactory.register
 def _(cfg: Conv2dAdapterConfig) -> Conv2dResolutionChannelsAdapter:
     return Conv2dResolutionChannelsAdapter(cfg)
-
 
 @InputAdapterFactory.register
 def _(cfg: ResizeAdapterConfig) -> ResizeCopyChannelsAdapter:
@@ -300,3 +379,7 @@ def _(cfg: ResizeAdapterConfig) -> ResizeCopyChannelsAdapter:
 @InputAdapterFactory.register
 def _(cfg: ImageMaskFilterAdapterConfig) -> ImageMaskFilterAdapter:
     return ImageMaskFilterAdapter(cfg)
+
+@InputAdapterFactory.register
+def _(cfg: ScalerAdapterConfig) -> ScalerAdapter:
+    return ScalerAdapter(cfg.scale, cfg.bias)

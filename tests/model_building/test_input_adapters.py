@@ -1,6 +1,7 @@
 import torch
 from torchvision import models
 from pyTorchAutoForge.model_building.backbones.efficient_net import EfficientNetConfig, FeatureExtractorFactory, EfficientNetBackbone
+
 import pytest
 import numpy as np
 
@@ -17,6 +18,8 @@ from pyTorchAutoForge.model_building.backbones.input_adapters import (
     Conv2dResolutionChannelsAdapter,
     ResizeCopyChannelsAdapter,
     ImageMaskFilterAdapter,
+    ScalerAdapter,
+    ScalerAdapterConfig,
 )
 
 def test_conv2d_adapter_forward_and_factory_dispatch():
@@ -153,6 +156,48 @@ def test_input_adapter_factory_unknown_config():
     with pytest.raises(ValueError):
         InputAdapterFactory(DummyConfig())
 
+
+def test_scaler_adapter_vector_scale_and_bias_numpy():
+    # using numpy arrays
+    scale = np.array([1.0, 0.0])
+    bias = np.array([-1.0, 2.0])
+    adapter = ScalerAdapter(scale_coefficient=scale, bias_coefficient=bias)
+    x = torch.tensor([[5.0, -5.0]])
+    out = adapter(x)
+    expected = torch.tensor([[5.0*1.0 - 1.0, -5.0*0.0 + 2.0]])
+    torch.testing.assert_close(out, expected)
+
+
+def test_scaler_adapter_buffers_registered():
+    adapter = ScalerAdapter(scale_coefficient=[1.0], bias_coefficient=[2.0])
+    sd = adapter.state_dict()
+    # scale and bias should be in state_dict (as buffers)
+    assert 'scale' in sd
+    assert 'bias' in sd
+
+
+@pytest.mark.parametrize("bad_scale", [
+    "not a list/array/tensor",
+    [[1.0, 2.0], [3.0, 4.0]],           # 2-D list
+    np.array([[1.0, 2.0]]),           # 2-D numpy
+    torch.randn(2, 2),                # 2-D tensor
+])
+def test_scaler_adapter_bad_scale_type_or_dim_raises(bad_scale):
+    with pytest.raises((TypeError, ValueError)):
+        ScalerAdapter(scale_coefficient=bad_scale)
+
+
+@pytest.mark.parametrize("bad_bias", [
+    "bad",
+    [[1.0, 2.0], [3.0, 4.0]],
+    np.array([[1.0, 2.0]]),
+    torch.randn(2, 2),
+])
+def test_bad_bias_type_or_dim_raises(bad_bias):
+    with pytest.raises((TypeError, ValueError)):
+        ScalerAdapter(scale_coefficient=1.0, bias_coefficient=bad_bias)
+
+
 # Manual run of tests
 if __name__ == "__main__":
     test_conv2d_adapter_forward_and_factory_dispatch()
@@ -163,5 +208,8 @@ if __name__ == "__main__":
     test_image_mask_filter_adapter_invalid_binary_method_in_config()
     test_image_mask_filter_adapter_otsu_not_implemented()
     test_input_adapter_factory_unknown_config()
+    test_scaler_adapter_vector_scale_and_bias_numpy()
+    test_scaler_adapter_buffers_registered()
+    #test_scaler_adapter_bad_scale_type_or_dim_raises()
 
 
