@@ -198,6 +198,15 @@ class DropoutEnsemblingNetworkWrapper(AutoForgeModule):
         self.last_median: torch.Tensor | None = None
         self.last_variance: torch.Tensor | None = None
 
+    def get_last_stats(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Get the last mean, median and variance computed during the forward pass.
+        """
+        if self.last_mean is None or self.last_median is None or self.last_variance is None:
+            raise ValueError("DropoutEnsemblingNetworkWrapper: No forward pass has been performed yet.")
+        
+        return self.last_mean, self.last_median, self.last_variance
+
     def _forward_single(self, x: torch.Tensor) -> torch.Tensor:
         x : torch.Tensor = self.base_model(x)
         return x

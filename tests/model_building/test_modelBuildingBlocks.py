@@ -220,7 +220,7 @@ class DummyModel(nn.Module):
         super().__init__()
         self.linear = nn.Linear(3, out_features)
         self.dropout = nn.Dropout(0.5)
-        
+
     def forward(self, x):
         return self.linear(x)
 
@@ -253,11 +253,11 @@ def test_dropout_ensembling_forward_eval_mode_batch_size_1():
     wrapper.eval()
     x = torch.randn(1, 3)
     out = wrapper(x)
-    # Should expand input to (5, 3), output shape (5, out_features), mean over dim=0
-    assert out.shape == (base.linear.out_features,)
-    assert wrapper.last_mean.shape == (base.linear.out_features,)
-    assert wrapper.last_median.shape == (base.linear.out_features,)
-    assert wrapper.last_variance.shape == (base.linear.out_features,)
+    # Output should be the mean of 5 forward passes, with size (1, out_features)
+    assert out.shape == (1, base.linear.out_features)
+    assert wrapper.last_mean.shape == (1, base.linear.out_features)
+    assert wrapper.last_median.shape == (1, base.linear.out_features)
+    assert wrapper.last_variance.shape == (1, base.linear.out_features)
 
 def test_dropout_ensembling_forward_eval_mode_batch_size_gt1():
     base = DummyModel()
