@@ -4,10 +4,10 @@
 
 - [x] v0.1.3
 
-- [ ] v0.1.4
+- [ ] v0.2.0
   - [x] Add prototype implementation of heads and backbones builders using registries
   - [ ] Add abstract meta class for loss functions to enforce interface
-  - [ ] Add prototype implementation of dataset classes from RAM/disk
+  - [ ] Add prototype implementation of dataset classes from paths
   - [ ] Fix all unit tests
   - [x] Complete 1st version of model profiler
   - [x] Add prototype of model explainer for vector-to-vector regression using SHAP (basic explainer)
@@ -15,23 +15,24 @@
   - [x] Refactor and improve ModelTrainingManager updating augmentation pipeline and adding batch accumulation
   - [x] Improve and fix model evaluator
   - [x] Implement new adapter type for basic engineered feature maps (image, brightness masks, pre-processing filters)
-  - [ ] Implement method to get traced model directly from ModelTrainingManager (or try to)
   - [x] Fix issues with device selection query and some imports
   - [x] Add support for automatic chaining of schedulers (todo debug learning rate update in Trainer?)
   - [x] Update Trainer to save checkpoints in subfolder with mlflow experiment name
-  - [ ] Add support for "reduce on plateau" scheduler (independent of step())
-  - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
   - [ ] Upgrade translation augmentation to support translation of multiple (key)points
   - [ ] Implement custom rotation augmentation to support rotation of multiple (key)points, through warping
   - [ ] Update parametric template of CNN class for different uses
-  - [ ] Modify DataLoaderIndex to accept datasets directly and a combination. If dataset is input, use default specifications for dataloader
   - [ ] Add semi-automatic function to run model inference on sample input and save to disk with resulting predictions
-  - [ ] Add automatic check of equivalence in ModelExporter
   - [x] Implement Scaler adapter to store scaling factors for standalone input scaling (directly in forward)
   - [x] Add prototype of automatic MC dropout wrapper for NNs with dropout layers
+  - [ ] Upgrade PTAF trainer and loss function interfaces to support image segmentation tasks
 
-- [ ] v0.1.5
+- [ ] v0.2.1
+  - [ ] Modify DataLoaderIndex to accept datasets directly and a combination of datasets and dataloaders. If dataset is input, use default specifications for dataloader
+  - [ ] Implement method to get traced model directly from ModelTrainingManager (or try to)
   - [ ] Implement new training mode: SWA_MODE
+  - [ ] Add support for "reduce on plateau" scheduler (independent of step())
+  - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
+  - [ ] Add automatic check of equivalence in ModelExporter
   - [ ] Review NN and template blocks for modularity
   - [ ] Implement prototype usage of AMP for mixed precision training
   - [ ] Add configurable dataclasses from template yml files for training manager and extensible prototype (see pySR configuration in nav-frontend)
@@ -40,12 +41,12 @@
   - [ ] Add prototype of SHAP for CNNs
   - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
 
-- [ ] v0.1.6
+- [ ] v0.2.2
   - [ ] Improve docstrings in src code
   - [ ] Implement prototype of K-fold cross-validation for training runs
   - [ ] Extend ModelEvaluator to evaluate sklearn and xgb models
 
-- [ ] v0.2.0
+- [ ] v0.3.0
   - [ ] All those above
   - [ ] Add working argument parser for training scripts
   - [ ] Add configurable dataclasses from template yml files
