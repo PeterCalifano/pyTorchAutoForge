@@ -2,6 +2,8 @@ import pytest
 import torch
 
 from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, TemplateConvNetConfig2d, TemplateNetBaseConfig, NormalizeImg, ReNormalizeImg, TemplateConvNet2d
+from torch import nn
+from pyTorchAutoForge.model_building.modelBuildingBlocks import DropoutEnsemblingNetworkWrapper
 
 
 # %% AutoForgeModule tests
@@ -210,3 +212,64 @@ def test_template_convnet2d_output_shape_simple():
     h_out = (10 - 3 + 1) // 2  # (kernel removes 2) then pool halves
     w_out = h_out
     assert out.shape == (2, 4, h_out, w_out)
+
+
+# %% DropoutEnsemblingNetworkWrapper tests
+class DummyModel(nn.Module):
+    def __init__(self, out_features=4):
+        super().__init__()
+        self.linear = nn.Linear(3, out_features)
+        self.dropout = nn.Dropout(0.5)
+        
+    def forward(self, x):
+        return self.linear(x)
+
+def test_dropout_ensembling_wrapper_init_accepts_nn_module():
+    base = DummyModel()
+    wrapper = DropoutEnsemblingNetworkWrapper(base)
+    assert isinstance(wrapper.base_model, nn.Module)
+    assert wrapper.ensemble_size == 20
+    assert wrapper.enable_ensembling_ is True
+
+def test_dropout_ensembling_wrapper_init_rejects_non_module():
+    with pytest.raises(TypeError):
+        DropoutEnsemblingNetworkWrapper(model="not_a_module")
+
+def test_dropout_ensembling_forward_training_mode():
+    base = DummyModel()
+    wrapper = DropoutEnsemblingNetworkWrapper(base)
+    wrapper.train()
+    x = torch.randn(2, 3)
+    out = wrapper(x)
+    # Should just call base model once, no ensembling
+    assert out.shape == (2, base.linear.out_features)
+    assert torch.allclose(wrapper.last_mean, out)
+    assert torch.allclose(wrapper.last_median, out)
+    assert torch.all(wrapper.last_variance == 0)
+
+def test_dropout_ensembling_forward_eval_mode_batch_size_1():
+    base = DummyModel()
+    wrapper = DropoutEnsemblingNetworkWrapper(base, ensemble_size=5)
+    wrapper.eval()
+    x = torch.randn(1, 3)
+    out = wrapper(x)
+    # Should expand input to (5, 3), output shape (5, out_features), mean over dim=0
+    assert out.shape == (base.linear.out_features,)
+    assert wrapper.last_mean.shape == (base.linear.out_features,)
+    assert wrapper.last_median.shape == (base.linear.out_features,)
+    assert wrapper.last_variance.shape == (base.linear.out_features,)
+
+def test_dropout_ensembling_forward_eval_mode_batch_size_gt1():
+    base = DummyModel()
+    wrapper = DropoutEnsemblingNetworkWrapper(base, ensemble_size=4)
+    wrapper.eval()
+    x = torch.randn(3, 3)
+    out = wrapper(x)
+    # Should stack 4 outputs of shape (3, out_features), mean over dim=0
+    assert out.shape == (3, base.linear.out_features)
+    assert wrapper.last_mean.shape == (3, base.linear.out_features)
+    assert wrapper.last_median.shape == (3, base.linear.out_features)
+    assert wrapper.last_variance.shape == (3, base.linear.out_features)
+
+if __name__ == "__main__":
+    pytest.main([__file__])

@@ -63,6 +63,7 @@ class AutoForgeModule(torch.nn.Module):
 # Normalization Layer example:
 
 ###########################################################
+# %% Configuration dataclasses
 @dataclass
 class TemplateNetBaseConfig(BaseConfigClass):
 
@@ -76,6 +77,9 @@ class TemplateNetBaseConfig(BaseConfigClass):
                                        'none'] = 'batchnorm'
     
     out_channels_sizes : list[int] | None = None
+
+    # Additional features
+    dropout_ensemble_size: int = 1  # Set >1 if building using ensemble wrapper
 
 # %% TemplateConvNet2d - 19-09-2024
 @dataclass 
@@ -152,6 +156,99 @@ class TemplateConvNetConfig2d(TemplateConvNetConfig):
         # TODO add check on conv sizes if reference_input_size is passed, to ensure kernel and pool sizes are compatible
         # convBlockOutputSize = AutoComputeConvBlocksOutput( self, kernel_sizes, pool_kernel_sizes)
 
+@dataclass
+class TemplateFullyConnectedDeepNetConfig(TemplateNetBaseConfig):
+
+    # Architecture definition
+    out_channel_sizes: list[int] | None = None
+    input_layer_size: int | None = None
+    dropout_probability: float = 0.0
+
+    def __post_init__(self):
+        def __post_init__(self):
+            if self.out_channel_sizes is None:
+                raise ValueError(
+                    "TemplateFullyConnectedDeepNetConfig: 'out_channel_sizes' cannot be None")
+            if self.input_layer_size is None:
+                raise ValueError(
+                    "TemplateFullyConnectedDeepNetConfig: 'input_layer_size' cannot be None")
+
+            if self.dropout_ensemble_size > 1 and (self.dropout_probability == 0.0 or self.regularization_layer_type != 'dropout'):
+                raise ValueError(
+                    "TemplateFullyConnectedDeepNetConfig: 'use_dropout_ensembling' is True but either 'dropout_probability' is 0.0 or 'regularization_layer_type' is not set to 'dropout'. Please set 'regularization_layer_type' to 'dropout' and provide a non-zero value for 'dropout_probability'.")
+            
+# %% Template model classes
+### Monte-Carlo Dropout generic DNN wrapper
+class DropoutEnsemblingNetworkWrapper(AutoForgeModule):
+    def __init__(self, 
+                 model: nn.Module, 
+                 ensemble_size: int = 20,
+                 enable_ensembling : bool = True) -> None:
+        
+        super().__init__()
+        self.base_model: nn.Module = model # Store model
+        self.ensemble_size: int = ensemble_size
+        self.enable_ensembling_: bool = enable_ensembling
+
+        if not isinstance(self.base_model, nn.Module):
+            raise TypeError("DropoutEnsemblingNetworkWrapper: base_model must be an instance of nn.Module")
+
+        # Outputs cached after forward
+        self.last_mean: torch.Tensor | None = None
+        self.last_median: torch.Tensor | None = None
+        self.last_variance: torch.Tensor | None = None
+
+    def _forward_single(self, x: torch.Tensor) -> torch.Tensor:
+        x : torch.Tensor = self.base_model(x)
+        return x
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B = x.shape[0]
+
+        if self.training:
+            # During training, run batched mode on different samples, as usual
+            self._enable_ensembling_ = False
+            self.base_model.train()
+            x = self._forward_single(x)
+
+            # Store the last mean, median and variance
+            self.last_mean = x
+            self.last_median = x
+            self.last_variance = torch.zeros_like(x)
+
+            return x
+        
+        # Otherwise, in eval() mode, run ensembling
+        # Enable dropout by keeping the model in training mode but no grad)
+        self._enable_ensembling_ = True
+        self.base_model.train()
+
+        with torch.no_grad():
+            if B == 1:
+                # Single input, expand to tensor in batch size
+                x_repeated = x.expand(self.ensemble_size, -1) # Output keeps the shape shape if B == 1
+                x = self._forward_single(x=x_repeated)  # [T, out]
+
+            else:
+                x = torch.stack([
+                    self._forward_single(x=x) for _ in range(self.ensemble_size)
+                ])  # [T, B, out]
+
+        # Compute mean, median and variance
+        # NOTE: batch dimension is always preserved, no need to do manual squeeze
+        self.last_mean = x.mean(dim=0)
+        self.last_median = x.median(dim=0).values
+        self.last_variance = x.var(dim=0)
+
+        if B == 1:
+            # If input was a single sample, return the mean
+            self.last_mean = self.last_mean.unsqueeze(0)
+            self.last_median = self.last_median.unsqueeze(0)
+            self.last_variance = self.last_variance.unsqueeze(0)
+
+        return self.last_mean
+        
+### TemplateConvNet2d
 class TemplateConvNet2d(AutoForgeModule):
     '''
     Template class for a fully parametric CNN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).
@@ -288,23 +385,7 @@ class TemplateConvNet2d(AutoForgeModule):
         
         return x, x_skip_out
 
-
-# %% TemplateFullyConnectedDeepNetConfig - 19-09-2024
-@dataclass
-class TemplateFullyConnectedDeepNetConfig(TemplateNetBaseConfig):
-
-    # Architecture definition
-    out_channel_sizes: list[int] | None = None
-    input_layer_size: int | None = None
-    dropout_probability : float = 0.0
-
-    def __post_init__(self):
-        def __post_init__(self):
-            if self.out_channel_sizes is None:
-                raise ValueError("TemplateFullyConnectedDeepNetConfig: 'out_channel_sizes' cannot be None")
-            if self.input_layer_size is None:
-                raise ValueError("TemplateFullyConnectedDeepNetConfig: 'input_layer_size' cannot be None")
-
+### TemplateFullyConnectedDeepNet
 class TemplateFullyConnectedDeepNet(AutoForgeModule):
     '''
     Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).
@@ -409,8 +490,14 @@ class TemplateFullyConnectedDeepNet(AutoForgeModule):
 
         return prediction
 
+    @staticmethod
+    def build_dropout_ensemble(cls, cfg: TemplateFullyConnectedDeepNetConfig) -> DropoutEnsemblingNetworkWrapper:
+        base_model = cls(cfg)
+        return DropoutEnsemblingNetworkWrapper(base_model, 
+                                               ensemble_size=cfg.dropout_ensemble_size, 
+                                               enable_ensembling=True)
 
-# DEVELOPMENT CODE: DEVNOTE: test definition of template DNN using new build_activation_layer function
+# EXPERIMENTAL: DEVNOTE: test definition of template DNN using new build_activation_layer function
 class TemplateFullyConnectedDeepNetConfig_experimental(AutoForgeModule):
     '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
 
@@ -500,7 +587,6 @@ class TemplateFullyConnectedDeepNetConfig_experimental(AutoForgeModule):
             x = layer(x)
         return x 
 
-
 # %% Image normalization classes
 class NormalizeImg(nn.Module):
     def __init__(self, normaliz_value : float = 255.0):
@@ -518,7 +604,6 @@ class ReNormalizeImg(nn.Module):
 
     def forward(self, x):
         return x * self.normaliz_value  # Re-normalize to [0, 255]
-
 
 # %% TEMPORARY DEV
 # TODO: make this function generic!
