@@ -395,6 +395,9 @@ class TemplateConvNet2d(AutoForgeModule):
         return x, x_skip_out
 
 ### TemplateFullyConnectedDeepNet
+# TODO rework template by using the "blocks" concept
+
+
 class TemplateFullyConnectedDeepNet(AutoForgeModule):
     '''
     Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).
