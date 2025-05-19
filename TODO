@@ -18,7 +18,7 @@
   - [ ] Implement method to get traced model directly from ModelTrainingManager (or try to)
   - [x] Fix issues with device selection query and some imports
   - [x] Add support for automatic chaining of schedulers (todo debug learning rate update in Trainer?)
-  - [ ] Update Trainer to save checkpoints in subfolder with mlflow experiment name
+  - [x] Update Trainer to save checkpoints in subfolder with mlflow experiment name
   - [ ] Add support for "reduce on plateau" scheduler (independent of step())
   - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
   - [ ] Upgrade translation augmentation to support translation of multiple (key)points
@@ -27,6 +27,8 @@
   - [ ] Modify DataLoaderIndex to accept datasets directly and a combination. If dataset is input, use default specifications for dataloader
   - [ ] Add semi-automatic function to run model inference on sample input and save to disk with resulting predictions
   - [ ] Add automatic check of equivalence in ModelExporter
+  - [x] Implement Scaler adapter to store scaling factors for standalone input scaling (directly in forward)
+  - [x] Add prototype of automatic MC dropout wrapper for NNs with dropout layers
 
 - [ ] v0.1.5
   - [ ] Implement new training mode: SWA_MODE
