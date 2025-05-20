@@ -655,8 +655,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             else:
                 continue # Accumulate more batches before update
             
-            # Synchronize CUDA stream once here
-            torch.cuda.synchronize()
+            if self.device.startswith('cuda'): 
+                # Synchronize CUDA stream once here
+                torch.cuda.synchronize()
 
             # Update total loop time
             current_loop_time = time.perf_counter() - start_time
@@ -697,11 +698,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         original_dataloader = self.validationDataloader
 
         # Temporarily initialize a new dataloader for validation
-        newBathSizeTmp = 2 * self.validationDataloader.batch_size  # TODO replace this heuristics with something more grounded and memory aware!
+        newBatchSizeTmp = 2 * self.validationDataloader.batch_size  # TODO replace this heuristics with something more grounded and memory aware!
 
         tmpdataloader = DataLoader(
             original_dataloader.dataset,
-            batch_size=newBathSizeTmp,
+            batch_size=newBatchSizeTmp,
             shuffle=False,
             drop_last=False,
             pin_memory=True,
@@ -1582,16 +1583,20 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
         original_batch_size = dataloader.batch_size
 
         # Temporarily initialize a new dataloader for validation
-        allocMem = torch.cuda.memory_allocated(0)
-        freeMem = torch.cuda.get_device_properties(
-            0).total_memory - torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)
-        estimated_memory_per_sample = allocMem / original_batch_size
-        newBathSizeTmp = min(
-            round(0.5 * freeMem / estimated_memory_per_sample), 2048)
+        # If device is CUDA check for memory availability
+        if device.startswith('cuda'):
+            allocMem = torch.cuda.memory_allocated(0)
+            freeMem = torch.cuda.get_device_properties(
+                0).total_memory - torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)
+            estimated_memory_per_sample = allocMem / original_batch_size
+            newBatchSizeTmp = min(
+                round(0.5 * freeMem / estimated_memory_per_sample), 2048)
+        else:
+            newBatchSizeTmp = 2 * original_batch_size
 
         dataloader = DataLoader(
             dataloader.dataset,
-            batch_size=newBathSizeTmp,
+            batch_size=newBatchSizeTmp,
             shuffle=False,
             drop_last=False,
             pin_memory=True,
