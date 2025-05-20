@@ -2,6 +2,27 @@ import torch
 from torch import nn
 from typing import Literal
 
+# TODO implement an optional "residual connection" feature
+
+def _initialize_weights(block,
+                        init_method_type: Literal["xavier_uniform",
+                                                  "kaiming_uniform",
+                                                  "xavier_normal",
+                                                  "kaiming_normal",
+                                                  "orthogonal"] = "xavier_uniform"):
+    """
+    Initialize weights using specified method. Assumes the input module has a "conv" attribute. 
+    """
+    match init_method_type.lower():
+        # type:ignore
+        case "xavier_uniform": nn.init.xavier_uniform_(block.conv.weight)
+        # type:ignore
+        case "kaiming_uniform": nn.init.kaiming_uniform_(block.conv.weight)
+        case "xavier_normal": nn.init.xavier_normal_(block.conv.weight)
+        case "kaiming_normal": nn.init.kaiming_normal_(block.conv.weight)
+        case "orthogonal": nn.init.orthogonal_(block.conv.weight)
+        case _: raise ValueError(f"Unsupported initialization method: {init_method_type}")
+
 
 class ConvolutionalBlock1d(nn.Module):
     """
@@ -46,6 +67,11 @@ class ConvolutionalBlock1d(nn.Module):
         conv_padding: int = 0,
         conv_dilation: int = 1,
         prelu_params: Literal["all", "unique"] = "unique",
+        init_method: Literal["xavier_uniform",
+                             "kaiming_uniform",
+                             "xavier_normal",
+                             "kaiming_normal",
+                             "orthogonal"] = "xavier_uniform",
         **kwargs
     ):
 
@@ -106,6 +132,20 @@ class ConvolutionalBlock1d(nn.Module):
             case "none": self.regularizer = nn.Identity()
             case _: raise ValueError(f"Unsupported regularizer: {regularizer_type}")
 
+        # Initialize weights using specified method
+        self.initialize_weights(init_method)
+
+    def initialize_weights(self,
+                           init_method_type: Literal["xavier_uniform",
+                                                     "kaiming_uniform",
+                                                     "xavier_normal",
+                                                     "kaiming_normal",
+                                                     "orthogonal"] = "xavier_uniform"):
+        """
+        Initialize weights using specified method.
+        """
+        self = _initialize_weights(self, init_method_type)
+
     # Simple forward method
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
@@ -115,6 +155,7 @@ class ConvolutionalBlock1d(nn.Module):
         return x
 
 
+# TODO change to use match case pattern
 class ConvolutionalBlock2d(nn.Module):
     """
     ConvolutionalBlock2d is a configurable 2D convolutional block for PyTorch.
@@ -158,6 +199,11 @@ class ConvolutionalBlock2d(nn.Module):
         conv_padding: int = 0,
         conv_dilation: int = 1,
         prelu_params: Literal["all", "unique"] = "unique",
+        init_method: Literal["xavier_uniform",
+                             "kaiming_uniform",
+                             "xavier_normal",
+                             "kaiming_normal",
+                             "orthogonal"] = "xavier_uniform",
         **kwargs
     ):
 
@@ -252,6 +298,19 @@ class ConvolutionalBlock2d(nn.Module):
             raise ValueError(
                 f"Unsupported regularizer type: {regularizer_type}")
 
+        self.initialize_weights(init_method)
+
+    def initialize_weights(self,
+                           init_method_type: Literal["xavier_uniform",
+                                                     "kaiming_uniform",
+                                                     "xavier_normal",
+                                                     "kaiming_normal",
+                                                     "orthogonal"] = "xavier_uniform"):
+        """
+        Initialize weights using specified method.
+        """
+        self = _initialize_weights(self, init_method_type)
+
     # Simple forward method
     def forward(self, x):
 
@@ -306,6 +365,11 @@ class ConvolutionalBlock3d(nn.Module):
         conv_padding: int | tuple[int, int, int] = 0,
         conv_dilation: int | tuple[int, int, int] = 1,
         prelu_params: Literal["all", "unique"] = "unique",
+        init_method_type: Literal["xavier_uniform",
+                                  "kaiming_uniform",
+                                  "xavier_normal",
+                                  "kaiming_normal",
+                                  "orthogonal"] = "xavier_uniform",
         **kwargs
     ):
 
@@ -369,6 +433,18 @@ class ConvolutionalBlock3d(nn.Module):
             case _:
                 raise ValueError(
                     f"Unsupported regularizer: {regularizer_type}")
+        self.initialize_weights(init_method)
+
+    def initialize_weights(self,
+                           init_method_type: Literal["xavier_uniform",
+                                                     "kaiming_uniform",
+                                                     "xavier_normal",
+                                                     "kaiming_normal",
+                                                     "orthogonal"] = "xavier_uniform"):
+        """
+        Initialize weights using specified method.
+        """
+        self = _initialize_weights(self, init_method_type)
 
     # Simple forward method
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -379,8 +455,8 @@ class ConvolutionalBlock3d(nn.Module):
         return x
 
 
-
 # TODO
 class ConvolutionalBlockNd(nn.Module):
     def __init__(self):
-        raise NotImplementedError('Torch does not have NDim convolutions by default. Implementation needs to rely on custom code or existing modules. TODO')
+        raise NotImplementedError(
+            'Torch does not have NDim convolutions by default. Implementation needs to rely on custom code or existing modules. TODO')
