@@ -16,12 +16,14 @@ from numpy.typing import NDArray
 import pandas as pd
 import matplotlib.pyplot as plt
 import math
+import seaborn as sns
 
 @dataclass
 class ModelEvaluatorConfig():
     device = GetDevice()
     # TODO
 
+# TODO (PC) rework this class. Not general enough, hint types are to review, constrain more.
 class ModelEvaluator():
     """
     A class for evaluating PyTorch models.
@@ -52,13 +54,18 @@ class ModelEvaluator():
                  plotter: ResultsPlotterHelper | None = None,
                  make_plot_predict_vs_target: bool = False,
                  output_scale_factors: NDArray[np.generic] | torch.Tensor | None = None,
-                 augmentation_module: nn.Module | None = None) -> None:
+                 augmentation_module: nn.Module | None = None,
+                 variable_to_plot_against: np.ndarray | None = None,
+                 variable_to_plot_against_label: str = "Independent variable #0") -> None:
 
         self.loss_fcn = lossFcn
         self.validationDataloader : DataLoader = dataLoader
         self.trainingDataloaderSize : int = len(self.validationDataloader)
         self.eval_function = evalFunction
         self.device = device
+
+        self.variable_to_plot_against = variable_to_plot_against
+        self.variable_to_plot_against_label = variable_to_plot_against_label
 
         self.make_plot_predict_vs_target = make_plot_predict_vs_target
         self.predicted_values : np.ndarray | None = None
@@ -281,16 +288,15 @@ class ModelEvaluator():
             print('\033[93m' + 'Warning: No plotter object provided. Cannot plot histograms of prediction errors.' + '\033[0m')
 
         # Predictions vs targets scatter plot
+        n_samples, n_outputs = self.predicted_values.shape
+
+        # Make grid layout
+        n_cols = int(math.ceil(math.sqrt(n_outputs)))
+        n_rows = int(math.ceil(n_outputs / n_cols))
+
         if self.make_plot_predict_vs_target:
-
             # Make plot of predicted values vs target values
-            n_samples, n_outputs = self.predicted_values.shape
-
-            # Make grid layout
-            n_cols = int(math.ceil(math.sqrt(n_outputs)))
-            n_rows = int(math.ceil(n_outputs / n_cols))
-
-            fig, axes = plt.subplots(n_rows, n_cols,
+            fig_vs_plot, axes_vs_plot = plt.subplots(n_rows, n_cols,
                                     figsize=(4*n_cols, 4*n_rows),
                                     squeeze=False)
 
@@ -303,7 +309,7 @@ class ModelEvaluator():
                 idcol = id_output % n_cols
 
                 # Select axis
-                ax = axes[idrow][idcol]
+                ax = axes_vs_plot[idrow][idcol]
 
                 # Scatter of target vs predicted
                 ax.scatter(targets[:, id_output], preds[:, id_output], alpha=0.6, edgecolors='none')
@@ -321,7 +327,7 @@ class ModelEvaluator():
             for j in range(n_outputs, n_rows*n_cols):
                 idrow = j // n_cols
                 idcol = j % n_cols
-                axes[idrow][idcol].axis('off')
+                axes_vs_plot[idrow][idcol].axis('off')
 
             plt.tight_layout()
 
@@ -332,3 +338,118 @@ class ModelEvaluator():
             # Show if not tmux
             if sys.stdout.isatty():
                 plt.show()
+
+
+            # Optional plot errors against another input quantity
+            if self.variable_to_plot_against is not None:
+                # Check variable (batch) size is correct
+                if self.variable_to_plot_against.shape[0] != n_samples:
+                    print(f"\033[93mVariable to plot against has batch size {self.variable_to_plot_against.shape[0]}, but expected {n_samples}.\033[0m")
+                else:
+                    # Do plot for each output
+                    variable_to_plot_against_label_ = self.variable_to_plot_against_label 
+
+                    try:
+                        # Determine scale factors
+                        if unit_scalings is not None:
+                            # Handle unit_scalings according to type
+                            if isinstance(unit_scalings, dict):
+                                unit_scale_values = np.asarray([unit_scalings[key] for key in unit_scalings])
+                            elif isinstance(unit_scalings, (tuple, list, np.ndarray)):
+                                unit_scale_values = np.asarray(unit_scalings)
+                            else:
+                                unit_scale_values = unit_scalings  # Assume scalar
+                        elif self.output_scale_factors is not None:
+                            unit_scale_values = torch_to_numpy(self.output_scale_factors)
+
+                        elif self.plotter.unit_scalings is not None:
+                            unit_scale_values = np.asarray([self.plotter.unit_scalings[key] for key in self.plotter.unit_scalings])
+                        else:
+                            print('\033[93mNo unit scalings found. Using default scale factors of 1.0.\033[0m')
+                            unit_scale_values = None
+
+
+                    except AttributeError:
+                        print('\033[93mNo unit scalings provided. Using default scale factors of 1.0.\033[0m')
+                        unit_scale_values = None
+
+                    # TODO add check on values, must be assigned before this code can run!
+                    targets = self.target_values
+                    preds = self.predicted_values
+                    errors = preds - targets
+
+                    # Scale each size of errors if unit_scalings are provided
+                    if unit_scale_values is not None:
+                        errors *= unit_scale_values
+
+                    num_bins = 25 # TODO allow to change this setting
+
+                    # Compute binned means and standard deviations
+                    bins = np.linspace(self.variable_to_plot_against.min(), self.variable_to_plot_against.max(), num_bins + 1)
+                    bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+                    binned_stats_df = pd.DataFrame({
+                        'x': np.repeat(self.variable_to_plot_against, preds.shape[1]),
+                        'output': np.tile(np.arange(preds.shape[1]), len(self.variable_to_plot_against)),
+                        'Prediction error': (errors).ravel()
+                    })
+                    
+                    # Cut into bins, but label by the numeric center
+                    binned_stats_df['bin'] = pd.cut(binned_stats_df['x'], bins=bins, labels=bin_centers)
+
+                    # Make axes
+                    fig_against_plot, axes_against_plot = plt.subplots(
+                        n_rows, n_cols, figsize=(4*n_cols, 4*n_rows), squeeze=False)
+
+                    for id_output in range(n_outputs):
+                        idrow = id_output // n_cols
+                        idcol = id_output % n_cols
+
+                        # Select axis and binned values
+                        ax = axes_against_plot[idrow][idcol]
+                        sub = binned_stats_df[binned_stats_df['output'] == id_output]
+
+                        # Make box plot
+                        sns.set_style("whitegrid")
+
+                        # Boxplot per bin
+                        sns.boxplot(x='bin', y='Prediction error',
+                                    data=sub,
+                                    ax=ax,
+                                    color='lightblue',
+                                    showcaps=True,
+                                    boxprops={'alpha':0.8},
+                                    medianprops={'color':'navy'},
+                                    whiskerprops={'color':'navy'},
+                                    capprops={'color':'navy'})
+                        
+                        # Raw‐error scatter, jittered horizontally so you see point cloud
+                        sns.stripplot(x='bin', y='Prediction error',
+                                    data=sub,
+                                    ax=ax,
+                                    color='orange',
+                                    size=3,
+                                    alpha=0.6,
+                                    jitter=0.2)
+                        
+                        ax.set_xlabel(variable_to_plot_against_label_)
+
+                        if units is not None:
+                            ax.set_ylabel(
+                                f'Prediction error [{units[id_output]}]')
+                        else:
+                            ax.set_ylabel('Prediction error [-]')
+
+                        # Make x‐labels
+                        ax.set_xticklabels([f"{c:.2f}" for c in bin_centers], rotation=45)
+                        ax.set_title(f'Output #{id_output}')
+
+                    plt.tight_layout()
+                    if self.plotter.save_figs or not sys.stdout.isatty():
+                        # Save to file
+                        plt.savefig(os.path.join(self.plotter.output_folder,
+                                    'error_partial_dependence_plot.png'), dpi=300, bbox_inches='tight')
+
+                    # Show if not tmux
+                    if sys.stdout.isatty():
+                        plt.show()
