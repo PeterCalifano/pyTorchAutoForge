@@ -705,7 +705,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             batch_size=newBatchSizeTmp,
             shuffle=False,
             drop_last=False,
-            pin_memory=True,
+            pin_memory=True if self.device.startswith('cuda') else False,
             num_workers=0
         )
 
