@@ -1,3 +1,4 @@
+from matplotlib.ticker import MultipleLocator
 import torch
 import sys, os
 from torch import nn
@@ -334,11 +335,6 @@ class ModelEvaluator():
             if self.plotter.save_figs or not sys.stdout.isatty():
                 # Save to file
                 plt.savefig(os.path.join(self.plotter.output_folder, 'predictions_vs_targets.png'), dpi=300, bbox_inches='tight')
-        
-            # Show if not tmux
-            if sys.stdout.isatty():
-                plt.show()
-
 
             # Optional plot errors against another input quantity
             if self.variable_to_plot_against is not None:
@@ -416,10 +412,10 @@ class ModelEvaluator():
                         sns.boxplot(x='bin', y='Prediction error',
                                     data=sub,
                                     ax=ax,
-                                    color='lightblue',
+                                    color='navy',
                                     whis=[5, 95],
                                     showcaps=True,
-                                    boxprops={'alpha':0.8},
+                                    boxprops={'alpha':0.5, 'color':'navy'},
                                     medianprops={'color':'navy'},
                                     whiskerprops={'color':'navy'},
                                     capprops={'color':'navy'})
@@ -429,15 +425,22 @@ class ModelEvaluator():
                                     data=sub,
                                     ax=ax,
                                     color='orange',
-                                    size=3,
+                                    size=2.5,
                                     alpha=0.6,
                                     jitter=0.2)
-                        
+
+
+                        # Set ticks and grid
+                        #ax.yaxis.set_major_locator(MultipleLocator(0.5))
+                        #ax.yaxis.set_minor_locator(MultipleLocator(0.25))
+                        ax.minorticks_on()
+                        ax.grid(which='major', axis='y', linestyle='--', linewidth=0.8,  alpha=0.8)
+                        ax.grid(which='minor', axis='y', linestyle=':',  linewidth=0.6,  alpha=0.5)
+
                         ax.set_xlabel(variable_to_plot_against_label_)
 
                         if units is not None:
-                            ax.set_ylabel(
-                                f'Prediction error [{units[id_output]}]')
+                            ax.set_ylabel(f'Prediction error [{units[id_output]}]')
                         else:
                             ax.set_ylabel('Prediction error [-]')
 
@@ -449,7 +452,7 @@ class ModelEvaluator():
                     if self.plotter.save_figs or not sys.stdout.isatty():
                         # Save to file
                         plt.savefig(os.path.join(self.plotter.output_folder,
-                                    'error_partial_dependence_plot.png'), dpi=300, bbox_inches='tight')
+                                    'error_dependence__boxplot.png'), dpi=300, bbox_inches='tight')
 
                     # Show if not tmux
                     if sys.stdout.isatty():
