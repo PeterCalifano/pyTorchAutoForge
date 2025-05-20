@@ -417,6 +417,7 @@ class ModelEvaluator():
                                     data=sub,
                                     ax=ax,
                                     color='lightblue',
+                                    whis=[5, 95],
                                     showcaps=True,
                                     boxprops={'alpha':0.8},
                                     medianprops={'color':'navy'},
