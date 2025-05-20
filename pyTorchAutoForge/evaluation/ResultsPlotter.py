@@ -107,7 +107,7 @@ class ResultsPlotterHelper():
         # Create combined figure and axes
         fig, axes = plt.subplots(grid_rows, 
                                  grid_cols, 
-                                 figsize=(grid_cols * 5, grid_rows * 4))
+                                 figsize=(grid_cols * 10, grid_rows * 10))
         axes = axes.flatten()
 
         # COLOURS: Check that number of colours is equal to number of entries

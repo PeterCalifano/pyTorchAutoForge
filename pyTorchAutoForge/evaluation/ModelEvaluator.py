@@ -297,7 +297,7 @@ class ModelEvaluator():
         if self.make_plot_predict_vs_target:
             # Make plot of predicted values vs target values
             fig_vs_plot, axes_vs_plot = plt.subplots(n_rows, n_cols,
-                                    figsize=(4*n_cols, 4*n_rows),
+                                    figsize=(10*n_cols, 10*n_rows),
                                     squeeze=False)
 
             # For each output dim, make scatter + identity line plot
@@ -399,7 +399,7 @@ class ModelEvaluator():
 
                     # Make axes
                     fig_against_plot, axes_against_plot = plt.subplots(
-                        n_rows, n_cols, figsize=(4*n_cols, 4*n_rows), squeeze=False)
+                        n_rows, n_cols, figsize=(12*n_cols, 12*n_rows), squeeze=False)
 
                     for id_output in range(n_outputs):
                         idrow = id_output // n_cols
