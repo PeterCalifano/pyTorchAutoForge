@@ -185,10 +185,13 @@ class ModelEvaluator():
 
                 # Optional augmentation module
                 if self.augmentation_module is not None:
-                    # Y = Y * torch.Tensor(self.output_scale_factors).to(self.device) # DOUBT not sure this is needed, in Trainer not used!
 
                     # Apply augmentations
                     X, Y = self.augmentation_module(X, Y)
+
+                    # Rescale labels down to [0,1]
+                    Y = Y / torch.Tensor(self.output_scale_factors).to(self.device)
+
 
                 # Perform forward pass
                 Y_hat = self.model(X)
