@@ -556,12 +556,10 @@ class ModelEvaluator():
                     # Make x‐labels
                     try:
                         tick_labels = [np.round(c, 1) for c in bin_centers]
-                        ax.set_xticks(tick_labels)
                     except TypeError:
-                        pass 
-                        #tick_labels = [f"{c:.2f}" for c in bin_centers]
+                        tick_labels = [f"{c:.2f}" for c in bin_centers]
 
-                    ax.set_xticklabels([f"{c:.2f}" for c in bin_centers], rotation='vertical')
+                    ax.set_xticklabels(tick_labels, rotation=60)
                     ax.set_title(f'Output #{id_output}')
 
                 plt.tight_layout()
@@ -607,7 +605,8 @@ class ModelEvaluator():
                                     y="Value",
                                     hue="Type",
                                     ax=ax_top,
-                                    edgecolor='black'
+                                    edgecolor=(0, 0, 0, 0.85),
+                                    alpha=0.9,
                                     )
 
                     ax_top.set_title(
@@ -639,9 +638,9 @@ class ModelEvaluator():
                                 line_kws={'color': 'blue', 'lw': 1.2},
                                 label="LOWESS smoothed",
                                 scatter_kws={'alpha': 0.95,
-                                             'color': 'orange',
-                                             's': 10,
-                                             'edgecolor': 'black'})
+                                             'color': 'red',
+                                             's': 12,
+                                             'edgecolor': (0,0,0,0.75)})
 
                     ax_bottom.axhline(0, linestyle='--', color='black')
                     ax_bottom.set_title(
