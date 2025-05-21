@@ -4,15 +4,15 @@ import numpy as np
 from numpy import ndarray
 from numpy.typing import NDArray
 import torch
-
 from typing import Any, Literal, TypeAlias
+from pathlib import Path
+import numbers
 
-# Types
+# %% Types
 dtype_: TypeAlias = np.dtype | torch.dtype | Literal["source"]
 numpy_types : TypeAlias = np.floating | np.integer | np.bool_
 
-# Interfaces between numpy and torch tensors
-
+# %% Interfaces between numpy and torch tensors
 
 def torch_to_numpy(tensor: Tensor | NDArray[numpy_types], dtype: dtype_ = "source") -> NDArray[numpy_types]:
 
@@ -36,7 +36,6 @@ def torch_to_numpy(tensor: Tensor | NDArray[numpy_types], dtype: dtype_ = "sourc
     else:
         raise ValueError("Input must be a torch.Tensor or np.ndarray")
 
-
 def numpy_to_torch(array: Tensor | NDArray[numpy_types], dtype: dtype_ = "source") -> Tensor:
 
     if isinstance(array, np.ndarray):
@@ -54,8 +53,7 @@ def numpy_to_torch(array: Tensor | NDArray[numpy_types], dtype: dtype_ = "source
     else:
         raise ValueError("Input must be a torch.Tensor or np.ndarray")
 
-
-# Conversion functions from json/yml to hdf5 and vice versa
+# %% Conversion functions from json/yml to hdf5 and vice versa
 def json_yml_to_hdf5(input_filepath: str, output_hdf5_filepath: str):
     """
     Convert a JSON or YAML file to an HDF5 file. 
@@ -82,7 +80,6 @@ def json_yml_to_hdf5(input_filepath: str, output_hdf5_filepath: str):
                 
             # Write dataset
             hdf5_file.create_dataset(key, data=data)
-
 
 def load_json_yml(filepath : str) -> Any:
     """
@@ -154,7 +151,6 @@ def hdf5_to_json_yml(input_hdf5_filepath: str, output_filepath: str):
         raise ValueError(
             "Output file must have a .json, .yaml, or .yml extension.")
 
-
 def merge_json_yml_to_hdf5(input_filepaths: tuple[str, ...], output_hdf5_filepath : str):
     """
     Merge multiple JSON or YAML configuration files into a single HDF5 file.
@@ -199,6 +195,79 @@ def merge_json_yml_to_hdf5(input_filepaths: tuple[str, ...], output_hdf5_filepat
                 dtype = h5py.string_dtype(encoding='utf-8')
                 hdf5_file.create_dataset(key, data=json_string, dtype=dtype)
 
+# %% Json to/from numpy
+class json2numpy():
+    """
+    Custom JSON decoder for NumPy data types.
+    """
+
+    def __call__(self, object: str | Path | dict):
+        """
+        Convert a JSON string to numpy structures, then always return a dict.
+        If the conversion result is already a dict, return it directly;
+        otherwise wrap it into a dict under the 'data' key.
+        """
+
+        # If input is a path or a string, try to load it as JSON
+        if isinstance(object, (str, Path)):
+            # If it has json extension, try to load it as JSON
+            if (isinstance(object, str) and object.endswith(".json")) or (isinstance(object, Path) and object.suffix == ".json"):
+
+                with open(object, 'r') as f:
+                    object = json.load(f)
+
+            elif isinstance(object, str) and os.path.splitext(object)[1] == "":
+                # If the object is a string without extension, try to parse it as JSON
+                object = json.loads(object)
+
+            else:
+                raise ValueError(
+                    "Cannot resolve string input type. Please provide a valid JSON string or file path.")
+
+        # Call json decoder to numpy
+        result = json2numpy.json_to_numpy_(obj=object)
+
+        # If the result is a dict, return it directly else wrap it into a dict
+        if isinstance(result, dict):
+            return result
+        else:
+            return {"data": result}
+
+    @classmethod
+    def json_to_numpy_(cls, obj):
+        """
+        Recursively convert any list of numbers (or nested lists of numbers
+        of uniform shape) into a NumPy array.  Leave strings, dicts, mixed
+        lists, etc. alone.
+        """
+        # Determine if data is a dict, recursively convert
+        if isinstance(obj, dict):
+            return {k: json2numpy.json_to_numpy_(v) for k, v in obj.items()}
+
+        # Determine if data is list
+        if isinstance(obj, list):
+            converted_ = [json2numpy.json_to_numpy_(el) for el in obj]
+
+            # Determine if list of scalars
+            if all(isinstance(el, numbers.Number) for el in converted_):
+                return np.array(converted_)
+
+            # Determine if a list of equally‐shaped arrays
+            if all(isinstance(el, np.ndarray) for el in converted_):
+                shapes = {el.shape for el in converted_}
+
+                if len(shapes) == 1:
+                    # Stack them into a matrix if they all have the same shape
+                    return np.stack(converted_)
+
+            # Fallback case, leave them as list of inhomogeneous arrays
+            return converted_
+
+        # Default case, leave the object as is
+        return obj
+
+
+# %% Manual testing for development
 if __name__ == '__main__':
 
     output_filename = "merged_labels"
