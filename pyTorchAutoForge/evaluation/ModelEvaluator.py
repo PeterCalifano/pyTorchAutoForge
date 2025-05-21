@@ -635,12 +635,13 @@ class ModelEvaluator():
                                 scatter=True,
                                 lowess=True,
                                 ax=ax_bottom,
-                                line_kws={'color': 'blue', 'lw': 1.2},
-                                label="LOWESS smoothed",
-                                scatter_kws={'alpha': 0.95,
+                                line_kws={'color': 'blue', 
+                                          'lw': 1.2,
+                                          'label': 'LOWESS fit'},
+                                scatter_kws={'alpha': 0.9,
                                              'color': 'red',
                                              's': 12,
-                                             'edgecolor': (0,0,0,0.75)})
+                                             'edgecolor': (0,0,0,0.4)})
 
                     ax_bottom.axhline(0, linestyle='--', color='black')
                     ax_bottom.set_title(
