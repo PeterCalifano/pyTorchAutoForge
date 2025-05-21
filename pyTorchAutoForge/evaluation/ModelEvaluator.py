@@ -566,7 +566,7 @@ class ModelEvaluator():
                 if self.plotter.save_figs or not sys.stdout.isatty():
                     # Save to file
                     plt.savefig(os.path.join(self.base_output_folder,
-                                'error_boxplot_.png'), dpi=300, bbox_inches='tight')
+                                'error_boxplot.png'), dpi=300, bbox_inches='tight')
 
         # Optional dependence plot of the errors against independent variable
         if self.indep_variable_dependenceplot is not None:
