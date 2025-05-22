@@ -54,32 +54,44 @@ class ModelEvaluator():
     def __init__(self, model: nn.Module,
                  lossFcn: nn.Module | CustomLossFcn,
                  dataLoader: DataLoader,
+                 plotter: ResultsPlotterHelper,
                  device: str = 'cpu',
-                 evalFunction: Callable | None = None,
-                 plotter: ResultsPlotterHelper | None = None,
+                 custom_eval_fcn: Callable | None = None,
                  make_plot_predict_vs_target: bool = False,
                  output_scale_factors: NDArray[np.generic] | torch.Tensor | None = None,
                  augmentation_module: nn.Module | None = None,
-                 variable_to_plot_against: np.ndarray | None = None,
-                 variable_to_plot_against_label: str = "Independent variable #0") -> None:
+                 indep_variable_boxplot: np.ndarray | None = None,
+                 indep_variable_boxplot_label: str = "Independent variable #0",
+                 indep_variable_dependenceplot: np.ndarray | None = None,
+                 indep_variable_dependenceplot_label: str = "Independent variable #0") -> None:
 
+        # Evaluator attributes
         self.loss_fcn = lossFcn
         self.validationDataloader: DataLoader = dataLoader
         self.trainingDataloaderSize: int = len(self.validationDataloader)
-        self.eval_function = evalFunction
+        self.custom_eval_function = custom_eval_fcn
         self.device = device
-
-        self.variable_to_plot_against = variable_to_plot_against
-        self.variable_to_plot_against_label = variable_to_plot_against_label
-
-        self.make_plot_predict_vs_target = make_plot_predict_vs_target
-        self.predicted_values: np.ndarray | None = None
-        self.target_values: np.ndarray | None = None
-
         self.model = model.to(self.device)
         self.stats: dict = {}
         self.plotter = plotter
         self.augmentation_module = augmentation_module
+
+        if not isinstance(self.plotter, ResultsPlotterHelper):
+            raise TypeError(
+                "plotter must be an instance of ResultsPlotterHelper")
+
+        # Store variables for additional plots
+        self.indep_variable_boxplot = indep_variable_boxplot
+        self.indep_variable_boxplot_label = indep_variable_boxplot_label
+        self.indep_variable_dependenceplot = indep_variable_dependenceplot
+        self.indep_variable_dependenceplot_label = indep_variable_dependenceplot_label
+
+        # Flag to determine plots
+        self.make_plot_predict_vs_target = make_plot_predict_vs_target
+
+        # Storage attributes
+        self.predicted_values: np.ndarray | None = None
+        self.target_values: np.ndarray | None = None
 
         # Determine scale factors
         self.output_scale_factors: NDArray[np.generic] | torch.Tensor | None = None
@@ -102,14 +114,40 @@ class ModelEvaluator():
         else:
             print("No output scale factors provided. Using default scale factors of 1.0.")
 
-        if plotter is not None and output_scale_factors is not None:
-            if plotter.unit_scalings is not None:
+        if self.plotter is not None and output_scale_factors is not None:
+            if self.plotter.unit_scalings is not None:
                 print('\033[93mWarning: Overriding unit scalings in plotter with output scale factors as they would result in double application when plotting. Modify input settings to remove this warning.\033[0m')
                 # Override plotter.unit_scalings to 1.0
-                plotter.unit_scalings = {
-                    k: 1.0 for k in plotter.unit_scalings.keys()}
+                self.plotter.unit_scalings = {
+                    k: 1.0 for k in self.plotter.unit_scalings.keys()}
+
+        # Define base output folder
+        self.base_output_folder = self.plotter.output_folder + f'_{0}'
+
+        # Check if folder exists, increase counter if so
+        counter = 0
+        while os.path.exists(self.base_output_folder):
+            counter += 1
+            self.base_output_folder = self.plotter.output_folder + \
+                f'_{counter}'
+
+        # Make directory if not exists
+        os.makedirs(self.base_output_folder, exist_ok=True)
 
     def evaluateRegressor(self) -> dict:
+        """
+        evaluateRegressor _summary_
+
+        _extended_summary_
+
+        :raises ValueError: _description_
+        :raises ValueError: _description_
+        :raises ValueError: _description_
+        :raises ValueError: _description_
+        :return: _description_
+        :rtype: dict
+        """
+
         self.model.eval()
 
         # Backup the original batch size (TODO: TBC if it is useful)
@@ -174,9 +212,9 @@ class ModelEvaluator():
                     self.target_values[batch_idx * batch_size: (
                         batch_idx + 1) * batch_size] = torch_to_numpy(Y)
 
-                if self.eval_function is not None:
+                if self.custom_eval_function is not None:
                     # Compute errors per component
-                    error_per_component = self.eval_function(Y_hat, Y)
+                    error_per_component = self.custom_eval_function(Y_hat, Y)
                 else:
                     # Assume that error is computed as difference between prediction and target
                     error_per_component = Y_hat - Y
@@ -255,12 +293,12 @@ class ModelEvaluator():
         self.stats['num_samples'] = dataset_size
 
         error_labels = [f"Output {i}" for i in range(residuals.shape[1])]
-        if self.plotter is not None:
-            if self.plotter.entriesNames is not None:
-                error_labels = self.plotter.entriesNames
-            if self.plotter.units is not None:
-                error_labels = [f"{label} ({unit})" for label, unit in zip(
-                    error_labels, self.plotter.units)]
+
+        if self.plotter.entriesNames is not None:
+            error_labels = self.plotter.entriesNames
+        if self.plotter.units is not None:
+            error_labels = [f"{label} ({unit})" for label, unit in zip(
+                error_labels, self.plotter.units)]
 
         # TODO (PC) come back here when changed plotter. Some fields are assigned dynamically and mypy fails to detect those
         self.stats["error_labels"] = tuple(error_labels)
@@ -269,12 +307,23 @@ class ModelEvaluator():
             self.stats['avg_loss'] = avg_loss
 
         self.printAndSaveStats(self.stats,
-                               output_folder=self.plotter.output_folder)
+                               output_folder=self.base_output_folder)
 
         return self.stats
 
     def printAndSaveStats(self, stats: dict, output_folder: str = "."):
+        """
+        printAndSaveStats _summary_
 
+        _extended_summary_
+
+        :param stats: _description_
+        :type stats: dict
+        :param output_folder: _description_, defaults to "."
+        :type output_folder: str, optional
+        """
+
+        # Build output table of stats
         num_entries = len(stats["error_labels"])
         vector_stats = {k: v for k, v in stats.items()
                         if hasattr(v, "__len__") and len(v) == num_entries}
@@ -289,35 +338,86 @@ class ModelEvaluator():
         print("\n")
         # Save CSV / JSON / Excel
         # df.to_csv(f"{out_prefix}.csv", index=False)
+
         df.to_json(os.path.join(output_folder, "eval_stats.json"),
                    orient="index", indent=2)
+
         # df.to_excel(f"{out_prefix}.xlsx", index=False)
         # print(f"\n CSV, JSON, XLSX saved as '{out_prefix}.*'")
 
-    def plotResults(self, entriesNames: list | None = None,
-                    units: list | None = None,
-                    unit_scalings: dict | tuple | float | None = None,
-                    colours: list | None = None,
-                    num_of_bins: int = 100) -> None:
+    def makeOutputPlots(self, entriesNames: list | None = None,
+                        units: list | None = None,
+                        unit_scalings: dict | tuple | float | None = None,
+                        colours: list | None = None,
+                        num_of_bins: int = 100) -> None:
+        """
+         _summary_
 
-        if self.plotter is not None:
-            self.plotter.histPredictionErrors(self.stats,
-                                              entriesNames=entriesNames,
-                                              units=units,
-                                              unit_scalings=unit_scalings,
-                                              colours=colours,
-                                              num_of_bins=num_of_bins)
-        else:
-            print(
-                '\033[93m' + 'Warning: No plotter object provided. Cannot plot histograms of prediction errors.' + '\033[0m')
+        _extended_summary_
+        """
+
+        # Plot histograms of prediction errors
+        self.plotter.histPredictionErrors(self.stats,
+                                          entriesNames=entriesNames,
+                                          units=units,
+                                          unit_scalings=unit_scalings,
+                                          colours=colours,
+                                          num_of_bins=num_of_bins)
 
         # Predictions vs targets scatter plot
         n_samples, n_outputs = self.predicted_values.shape
 
-        # Make grid layout
+        # Define grid layout sizes
         n_cols = int(math.ceil(math.sqrt(n_outputs)))
         n_rows = int(math.ceil(n_outputs / n_cols))
 
+        targets = self.target_values
+        preds = self.predicted_values
+        errors = preds - targets
+        # TODO add check on values, must be assigned before this code can run!
+
+        try:
+            # Determine scale factors
+            if unit_scalings is not None:
+                # Handle unit_scalings according to type
+                if isinstance(unit_scalings, dict):
+                    unit_scale_values = np.asarray(
+                        [unit_scalings[key] for key in unit_scalings])
+                elif isinstance(unit_scalings, (tuple, list, np.ndarray)):
+                    unit_scale_values = np.asarray(unit_scalings)
+                else:
+                    unit_scale_values = unit_scalings  # Assume scalar
+
+            elif self.output_scale_factors is not None:
+                unit_scale_values = torch_to_numpy(
+                    self.output_scale_factors)
+
+            elif self.plotter.unit_scalings is not None:
+                unit_scale_values = np.asarray(
+                    [self.plotter.unit_scalings[key] for key in self.plotter.unit_scalings])
+            else:
+                print(
+                    '\033[93mNo unit scalings found. Using default scale factors of 1.0.\033[0m')
+                unit_scale_values = None
+
+        except AttributeError:
+            print(
+                '\033[93mNo unit scalings provided. Using default scale factors of 1.0.\033[0m')
+            unit_scale_values = None
+
+        # Scale each size of errors if unit_scalings are provided
+        if unit_scale_values is not None:
+            preds *= unit_scale_values
+            targets *= unit_scale_values
+            errors *= unit_scale_values
+
+        if preds is None or targets is None:
+            raise ValueError(
+                'Predicted values or target values are None. Cannot plot results.')
+
+        # OPTIONAL PLOTS
+        # Optional predicted vs target scatter plot
+        # TODO replace with better plot using seaborn!
         if self.make_plot_predict_vs_target:
             # Make plot of predicted values vs target values
             fig_vs_plot, axes_vs_plot = plt.subplots(n_rows, n_cols,
@@ -326,9 +426,6 @@ class ModelEvaluator():
                                                      squeeze=False)
 
             # For each output dim, make scatter + identity line plot
-            targets = self.target_values
-            preds = self.predicted_values
-
             for id_output in range(n_outputs):
                 idrow = id_output // n_cols
                 idcol = id_output % n_cols
@@ -345,6 +442,7 @@ class ModelEvaluator():
                          preds[:, id_output].min())
                 mx = max(targets[:, id_output].max(),
                          preds[:, id_output].max())
+
                 ax.plot([mn, mx], [mn, mx], linestyle='--',
                         color='red', linewidth=2)
 
@@ -358,151 +456,217 @@ class ModelEvaluator():
                 idcol = j % n_cols
                 axes_vs_plot[idrow][idcol].axis('off')
 
+            # Apply layout settings
             plt.tight_layout()
 
             if self.plotter.save_figs or not sys.stdout.isatty():
                 # Save to file
-                plt.savefig(os.path.join(self.plotter.output_folder,
+                plt.savefig(os.path.join(self.base_output_folder,
                             'predictions_vs_targets.png'), dpi=300, bbox_inches='tight')
 
-            # Optional plot errors against another input quantity
-            if self.variable_to_plot_against is not None:
-                # Check variable (batch) size is correct
-                if self.variable_to_plot_against.shape[0] != n_samples:
-                    print(
-                        f"\033[93mVariable to plot against has batch size {self.variable_to_plot_against.shape[0]}, but expected {n_samples}.\033[0m")
-                else:
-                    # Do plot for each output
-                    variable_to_plot_against_label_ = self.variable_to_plot_against_label
+        # Optional box plot of the errors against independent variable
+        if self.indep_variable_boxplot is not None:
+            # Check variable (batch) size is correct
+            if self.indep_variable_boxplot.shape[0] != n_samples:
+                print(
+                    f"\033[93mVariable to plot against has batch size {self.indep_variable_boxplot.shape[0]}, but expected {n_samples}.\033[0m")
+            else:
+                # Do plot for each output
+                variable_to_plot_against_label_ = self.indep_variable_boxplot_label
+                num_bins = 25  # TODO allow to change this setting
 
+                # Compute binned means and standard deviations
+                bins = np.linspace(self.indep_variable_boxplot.min(
+                ), self.indep_variable_boxplot.max(), num_bins + 1)
+                bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+                binned_stats_df = pd.DataFrame({
+                    'x': np.repeat(self.indep_variable_boxplot, preds.shape[1]),
+                    'output': np.tile(np.arange(preds.shape[1]), len(self.indep_variable_boxplot)),
+                    'Prediction error': (errors).ravel()
+                })
+
+                # Cut into bins, but label by the numeric center
+                binned_stats_df['bin'] = pd.cut(
+                    binned_stats_df['x'], bins=bins, labels=bin_centers)
+
+                # Make axes
+                fig_against_plot, axes_against_plot = plt.subplots(
+                    n_rows, n_cols, figsize=(12*n_cols, 12*n_rows), squeeze=False)
+
+                for id_output in range(n_outputs):
+                    idrow = id_output // n_cols
+                    idcol = id_output % n_cols
+
+                    # Select axis and binned values
+                    ax = axes_against_plot[idrow][idcol]
+                    sub = binned_stats_df[binned_stats_df['output']
+                                          == id_output]
+
+                    # Make box plot
+                    sns.set_style("whitegrid")
+
+                    # Boxplot per bin
+                    sns.boxplot(x='bin', y='Prediction error',
+                                data=sub,
+                                ax=ax,
+                                color='navy',
+                                showcaps=True,
+                                showfliers=True,
+                                whis=(0.1, 99),
+                                boxprops={
+                                    'alpha': 0.5, 'color': 'navy', 'facecolor': 'lightblue'},
+                                medianprops={'color': 'navy'},
+                                whiskerprops={
+                                    'color': 'navy', "linewidth": 2.0},
+                                capprops={'color': 'navy'},
+                                flierprops={
+                                    'marker': 'x',
+                                    'markerfacecolor': 'crimson',
+                                    'markeredgecolor': 'crimson',
+                                    'markersize': 6,
+                                    'alpha': 0.8
+                                })
+
+                    # Raw‐error scatter, jittered horizontally so you see point cloud
+                    sns.stripplot(x='bin', y='Prediction error',
+                                  data=sub,
+                                  ax=ax,
+                                  color='orange',
+                                  size=2.5,
+                                  alpha=0.6,
+                                  jitter=0.2)
+
+                    # Set ticks and grid
+                    # ax.yaxis.set_major_locator(MultipleLocator(0.5))
+                    # ax.yaxis.set_minor_locator(MultipleLocator(0.25))
+                    ax.minorticks_on()
+                    ax.grid(which='major', axis='y',
+                            linestyle='--', linewidth=0.8,  alpha=0.8)
+                    ax.grid(which='minor', axis='y', linestyle=':',
+                            linewidth=0.6,  alpha=0.5)
+
+                    ax.set_xlabel(variable_to_plot_against_label_)
+
+                    if units is not None:
+                        ax.set_ylabel(
+                            f'Prediction error [{units[id_output]}]')
+                    else:
+                        ax.set_ylabel('Prediction error [-]')
+
+                    # Make x‐labels
                     try:
-                        # Determine scale factors
-                        if unit_scalings is not None:
-                            # Handle unit_scalings according to type
-                            if isinstance(unit_scalings, dict):
-                                unit_scale_values = np.asarray(
-                                    [unit_scalings[key] for key in unit_scalings])
-                            elif isinstance(unit_scalings, (tuple, list, np.ndarray)):
-                                unit_scale_values = np.asarray(unit_scalings)
-                            else:
-                                unit_scale_values = unit_scalings  # Assume scalar
-                        elif self.output_scale_factors is not None:
-                            unit_scale_values = torch_to_numpy(
-                                self.output_scale_factors)
+                        tick_labels = [np.round(c, 1) for c in bin_centers]
+                    except TypeError:
+                        tick_labels = [f"{c:.2f}" for c in bin_centers]
 
-                        elif self.plotter.unit_scalings is not None:
-                            unit_scale_values = np.asarray(
-                                [self.plotter.unit_scalings[key] for key in self.plotter.unit_scalings])
-                        else:
-                            print(
-                                '\033[93mNo unit scalings found. Using default scale factors of 1.0.\033[0m')
-                            unit_scale_values = None
+                    ax.set_xticklabels(tick_labels, rotation=60)
+                    ax.set_title(f'Output #{id_output}')
 
-                    except AttributeError:
-                        print(
-                            '\033[93mNo unit scalings provided. Using default scale factors of 1.0.\033[0m')
-                        unit_scale_values = None
+                plt.tight_layout()
+                if self.plotter.save_figs or not sys.stdout.isatty():
+                    # Save to file
+                    plt.savefig(os.path.join(self.base_output_folder,
+                                'error_boxplot.png'), dpi=300, bbox_inches='tight')
 
-                    # TODO add check on values, must be assigned before this code can run!
-                    targets = self.target_values
-                    preds = self.predicted_values
-                    errors = preds - targets
+        # Optional dependence plot of the errors against independent variable
+        if self.indep_variable_dependenceplot is not None:
+            # Build a 2xN figure
+            fig_dependence_plot, axes_dependence_plot = plt.subplots(
+                2, n_outputs, figsize=(16*n_outputs, 12*2), squeeze=False)
 
-                    # Scale each size of errors if unit_scalings are provided
-                    if unit_scale_values is not None:
-                        errors *= unit_scale_values
+            # Check variable (batch) size is correct
+            if self.indep_variable_dependenceplot.shape[0] != n_samples:
+                print(
+                    f"\033[93mVariable to plot against has batch size {self.indep_variable_dependenceplot.shape[0]}, but expected {n_samples}.\033[0m")
+            else:
+                for id_output in range(n_outputs):
 
-                    num_bins = 25  # TODO allow to change this setting
+                    # Top plot: Predicted vs Target
+                    ax_top = axes_dependence_plot[0, id_output]
+                    sns.set_theme(style="whitegrid")
 
-                    # Compute binned means and standard deviations
-                    bins = np.linspace(self.variable_to_plot_against.min(
-                    ), self.variable_to_plot_against.max(), num_bins + 1)
-                    bin_centers = 0.5 * (bins[:-1] + bins[1:])
-
-                    binned_stats_df = pd.DataFrame({
-                        'x': np.repeat(self.variable_to_plot_against, preds.shape[1]),
-                        'output': np.tile(np.arange(preds.shape[1]), len(self.variable_to_plot_against)),
-                        'Prediction error': (errors).ravel()
+                    # Prepare DataFrame for top jointplot: predictions and targets vs indep_var
+                    df_top = pd.DataFrame({
+                        'indep_var': self.indep_variable_dependenceplot.ravel(),
+                        'Predicted': preds[:, id_output],
+                        'Target': targets[:, id_output]
                     })
 
-                    # Cut into bins, but label by the numeric center
-                    binned_stats_df['bin'] = pd.cut(
-                        binned_stats_df['x'], bins=bins, labels=bin_centers)
+                    # Melt the DataFrame to facilitate grouping by type
+                    # DOUBT what does melt do in practice?
+                    df_top_melt = df_top.melt(id_vars='indep_var',
+                                              value_vars=[
+                                                  'Predicted', 'Target'],
+                                              var_name='Type',
+                                              value_name='Value')
 
-                    # Make axes
-                    fig_against_plot, axes_against_plot = plt.subplots(
-                        n_rows, n_cols, figsize=(12*n_cols, 12*n_rows), squeeze=False)
+                    sns.scatterplot(data=df_top_melt,
+                                    x="indep_var",
+                                    y="Value",
+                                    hue="Type",
+                                    ax=ax_top,
+                                    edgecolor=(0, 0, 0, 0.85),
+                                    alpha=0.9,
+                                    )
 
-                    for id_output in range(n_outputs):
-                        idrow = id_output // n_cols
-                        idcol = id_output % n_cols
+                    ax_top.set_title(
+                        f'Output #{id_output} Predictions vs Targets')
+                    ax_top.set_xlabel(self.indep_variable_dependenceplot_label)
+                    ax_top.set_ylabel('Value')
+                    ax_top.legend(loc='best')
+                    ax_top.grid(True, which='both',
+                                linestyle='--', linewidth=0.6)
+                    ax_top.minorticks_on()
 
-                        # Select axis and binned values
-                        ax = axes_against_plot[idrow][idcol]
-                        sub = binned_stats_df[binned_stats_df['output']
-                                              == id_output]
+                    # Bottom plot: Errors vs indep_var
+                    ax_bottom = axes_dependence_plot[1, id_output]
+                    sns.set_theme(style="whitegrid")
 
-                        # Make box plot
-                        sns.set_style("whitegrid")
+                    # Prepare DataFrame for bottom jointplot: errors vs indep_var
+                    df_bottom = pd.DataFrame({
+                        'indep_var': self.indep_variable_dependenceplot.ravel(),
+                        'error': errors[:, id_output]
+                    })
 
-                        # Boxplot per bin
-                        sns.boxplot(x='bin', y='Prediction error',
-                                    data=sub,
-                                    ax=ax,
-                                    color='navy',
-                                    whis=[5, 95],
-                                    showcaps=True,
-                                    boxprops={
-                                        'alpha': 0.5, 'color': 'navy', 'facecolor': 'lightblue'},
-                                    medianprops={'color': 'navy'},
-                                    whiskerprops={
-                                        'color': 'navy', "linewidth": 2.0},
-                                    capprops={'color': 'navy'},
-                                    flierprops={                    # passed straight to plt.boxplot
-                                        'marker': 'x',
-                                        'markerfacecolor': 'crimson',
-                                        'markeredgecolor': 'crimson',
-                                        'markersize': 4,
-                                        'alpha': 0.8
-                                    },)
+                    # Add a LOWESS smooth line using regplot on the joint axes
+                    sns.regplot(x='indep_var',
+                                y='error',
+                                data=df_bottom,
+                                scatter=True,
+                                lowess=True,
+                                ax=ax_bottom,
+                                line_kws={'color': 'blue', 
+                                          'lw': 1.2,
+                                          'label': 'LOWESS fit'},
+                                scatter_kws={'alpha': 0.9,
+                                             'color': 'red',
+                                             's': 12,
+                                             'edgecolor': (0,0,0,0.4)})
 
-                        # Raw‐error scatter, jittered horizontally so you see point cloud
-                        sns.stripplot(x='bin', y='Prediction error',
-                                      data=sub,
-                                      ax=ax,
-                                      color='orange',
-                                      size=2.5,
-                                      alpha=0.6,
-                                      jitter=0.2)
+                    ax_bottom.axhline(0, linestyle='--', color='black')
+                    ax_bottom.set_title(
+                        f'Output #{id_output} Prediction Errors')
+                    ax_bottom.set_xlabel(
+                        self.indep_variable_dependenceplot_label)
+                    ax_bottom.set_ylabel('Error')
+                    ax_bottom.legend(loc='best')
+                    ax_bottom.grid(True, which='both',
+                                   linestyle='--', linewidth=0.5)
+                    ax_bottom.minorticks_on()
 
-                        # Set ticks and grid
-                        # ax.yaxis.set_major_locator(MultipleLocator(0.5))
-                        # ax.yaxis.set_minor_locator(MultipleLocator(0.25))
-                        ax.minorticks_on()
-                        ax.grid(which='major', axis='y',
-                                linestyle='--', linewidth=0.8,  alpha=0.8)
-                        ax.grid(which='minor', axis='y', linestyle=':',
-                                linewidth=0.6,  alpha=0.5)
+                # Setup figure layout and save
+                plt.tight_layout()
+                if self.plotter.save_figs or not sys.stdout.isatty():
+                    fig_dependence_plot.savefig(
+                        os.path.join(
+                            self.base_output_folder,
+                            f'dependence_plot_all_outputs.png'
+                        ),
+                        dpi=300,
+                        bbox_inches='tight'
+                    )
 
-                        ax.set_xlabel(variable_to_plot_against_label_)
-
-                        if units is not None:
-                            ax.set_ylabel(
-                                f'Prediction error [{units[id_output]}]')
-                        else:
-                            ax.set_ylabel('Prediction error [-]')
-
-                        # Make x‐labels
-                        ax.set_xticklabels(
-                            [f"{c:.2f}" for c in bin_centers], rotation=45)
-                        ax.set_title(f'Output #{id_output}')
-
-                    plt.tight_layout()
-                    if self.plotter.save_figs or not sys.stdout.isatty():
-                        # Save to file
-                        plt.savefig(os.path.join(self.plotter.output_folder,
-                                    'error_dependence__boxplot.png'), dpi=300, bbox_inches='tight')
-
-                    # Show if not tmux
-                    if sys.stdout.isatty():
-                        plt.show()
+        # Show all figures if not tmux and interactive backend
+        if sys.stdout.isatty() and plt.get_backend().lower() != 'agg':
+            plt.show()

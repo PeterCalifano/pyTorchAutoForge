@@ -1,6 +1,7 @@
 import inspect, torch
 from typing import Union
 
+# TODO (PC) complete rework of this module is needed
 # %% Class to define a custom loss function for training, validation and testing - 01-06-2024
 # NOTE: Function EvalLossFcn must be implemented using Torch operations to work!
 
