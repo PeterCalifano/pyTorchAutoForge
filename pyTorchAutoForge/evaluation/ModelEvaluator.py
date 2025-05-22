@@ -147,12 +147,13 @@ class ModelEvaluator():
 
                 # Optional augmentation module
                 if self.augmentation_module is not None:
+                    Y = Y * self.output_scale_factors
 
                     # Apply augmentations
                     X, Y = self.augmentation_module(X, Y)
 
-                    # Rescale labels down to [0,1]
-                    Y = Y / torch.Tensor(self.output_scale_factors).to(self.device)
+                    # Rescale labels down to [0,1] # DOUBT this breaks everything? Why?
+                    #Y = Y / torch.Tensor(self.output_scale_factors).to(self.device)
 
 
                 # Perform forward pass
