@@ -122,14 +122,7 @@ class ModelEvaluator():
                     k: 1.0 for k in self.plotter.unit_scalings.keys()}
 
         # Define base output folder
-        self.base_output_folder = self.plotter.output_folder + f'_{0}'
-
-        # Check if folder exists, increase counter if so
-        counter = 0
-        while os.path.exists(self.base_output_folder):
-            counter += 1
-            self.base_output_folder = self.plotter.output_folder + \
-                f'_{counter}'
+        self.base_output_folder = self.plotter.output_folder
 
         # Make directory if not exists
         os.makedirs(self.base_output_folder, exist_ok=True)

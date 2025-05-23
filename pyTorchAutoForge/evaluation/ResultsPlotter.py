@@ -20,7 +20,7 @@ class ResultsPlotterConfig():
     colours: list = field(default_factory=list)
     units: tuple[str, ...] | list[str] | None = None
     entriesNames: tuple[str, ...] | list[str] | None = None
-    output_folder: str | None = None
+    output_folder: str = "eval_results"
 
 class ResultsPlotterHelper():
     """
@@ -56,9 +56,28 @@ class ResultsPlotterHelper():
         for key, value in vars(config).items():
             setattr(self, key, value)
 
+        # Determine whether output folder exists already and if is empty
+        folder_id = 0
+        tmp_output_folder = self.output_folder + f"_{folder_id}"
+
+        while os.path.isdir(tmp_output_folder):
+            if len(os.listdir(tmp_output_folder)) == 0:
+                self.output_folder = tmp_output_folder
+                print(f"Output folder {tmp_output_folder} exists but is empty. Using it...")
+                break
+            else:
+                folder_id += 1
+                tmp_output_folder = tmp_output_folder + f"_{folder_id}"
+
+        # Define the output folder
+        self.output_folder = tmp_output_folder
+
+        # Create the output folder if it does not exist
+        print(f"Output results will be saved to folder {tmp_output_folder}")
         os.makedirs(self.output_folder, exist_ok=True) if self.output_folder is not None else None
 
-    def histPredictionErrors(self, stats: dict = None, 
+    def histPredictionErrors(self, 
+                             stats: dict = None, 
                              entriesNames: list = None, 
                              units: list = None,
                              unit_scalings: dict | list | np.ndarray | float | int = None, 
@@ -218,7 +237,8 @@ class ResultsPlotterHelper():
 
         # Save or show combined figure
         if self.save_figs:
-            output_dir = self.output_folder or '.' # Set output folder
+            output_dir = self.output_folder # Set output folder
+
             os.makedirs(output_dir, exist_ok=True)
             save_path = os.path.join(output_dir, 'prediction_errors_all_components.png')
             fig.savefig(save_path, bbox_inches='tight')
