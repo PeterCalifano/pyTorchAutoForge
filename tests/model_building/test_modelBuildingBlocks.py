@@ -1,6 +1,6 @@
 import pytest
 import torch
-from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNet2dConfig, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d, TemplateFullyConnectedNetConfig, TemplateFullyConnectedNet,    TemplateConvNetFeatureFuser2dConfig, TemplateConvNetFeatureFuser2d,
+from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNet2dConfig, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d, TemplateFullyConnectedNetConfig, TemplateFullyConnectedNet,    TemplateConvNetFeatureFuser2dConfig, TemplateConvNetFeatureFuser2d
 
 from torch import nn
 from pyTorchAutoForge.model_building.modelBuildingBlocks import DropoutEnsemblingNetworkWrapper
@@ -216,37 +216,36 @@ def test_template_convnet2d_forward_with_intermediate_features():
     ([3], None, "must not be none"),
 ])
 def test_template_convnet2d_none_kernel_or_pool_raises(kernels, pools, msg):
-    cfg = TemplateConvNet2dConfig(
-        kernel_sizes=kernels,
-        pool_kernel_sizes=pools,
-        out_channels_sizes=[4],
-        num_input_channels=1,
-    )
     with pytest.raises(ValueError) as exc:
+        cfg = TemplateConvNet2dConfig(
+            kernel_sizes=kernels,
+            pool_kernel_sizes=pools,
+            out_channels_sizes=[4],
+            num_input_channels=1,
+        )
         TemplateConvNet2d(cfg)
     assert msg in str(exc.value)
 
 
 def test_template_convnet2d_mismatched_kernel_pool_length():
-    cfg = TemplateConvNet2dConfig(
-        kernel_sizes=[3, 5],
-        pool_kernel_sizes=[2],
-        out_channels_sizes=[4, 8],
-        num_input_channels=1,
-    )
     with pytest.raises(ValueError) as exc:
-        TemplateConvNet2d(cfg)
+        TemplateConvNet2dConfig(
+            kernel_sizes=[3, 5],
+            pool_kernel_sizes=[2],
+            out_channels_sizes=[4, 8],
+            num_input_channels=1,
+        )
     assert "must have the same length" in str(exc.value)
 
 
 def test_template_convnet2d_scalar_pool_raises():
-    cfg = TemplateConvNet2dConfig(
-        kernel_sizes=[3],
-        pool_kernel_sizes=2,
-        out_channels_sizes=[4],
-        num_input_channels=1,
-    )
     with pytest.raises(ValueError) as exc:
+        cfg = TemplateConvNet2dConfig(
+            kernel_sizes=[3],
+            pool_kernel_sizes=2,
+            out_channels_sizes=[4],
+            num_input_channels=1,
+        )
         TemplateConvNet2d(cfg)
     assert "cannot be scalar" in str(exc.value)
 
