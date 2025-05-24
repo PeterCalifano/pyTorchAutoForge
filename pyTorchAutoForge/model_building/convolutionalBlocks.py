@@ -296,7 +296,8 @@ class ConvolutionalBlockNd(nn.Module):
 # %% Feature map fusion blocks
 # EXPERIMENTAL
 from collections.abc import Callable
-fuser_type = Literal["feature_add", "channel_concat", "multihead_attention"]
+fuser_type = Literal["feature_add", "channel_concat",
+                     "multihead_attention", "identity"]
 
 @dataclass
 class FeatureMapFuserConfig():
@@ -345,13 +346,23 @@ class FeatureMapFuser(nn.Module):
         super().__init__()
         self.fuser_type = fuser_type
 
+        if fuser_type == "identity":
+            def _identity_fuser(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
+                """
+                Identity fuser that returns the first feature map unchanged.
+                """
+                return x_feat1
+            
+            self.fuser = _identity_fuser 
+            return
+
         # TODO does conv/attention requires upsampling of one of the two entries?
 
         # Define interpolation operation
         import torch.nn.functional as F
 
         if num_dims == 2:  # 1D inputs: [B, L]
-            mode = kwargs.get("mode", "linear")
+            mode = kwargs.get("mode", "bilinear")
 
             def _resample_xfeat2(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
                 return F.interpolate(input=x_feat2, size=x_feat1.shape[1:], mode=mode, align_corners=True, antialias=False)
@@ -470,12 +481,11 @@ class FeatureMapFuser(nn.Module):
 
         else:
             raise ValueError(f"Unknown fuse mode: {fuser_type}")
-
+        
     def forward(self, x: torch.Tensor, skip_features: torch.Tensor) -> torch.Tensor:
         # Call fuser module
         fused_x: torch.Tensor = self.fuser(x, skip_features)
         return fused_x
-
 
 # FeatureMapFuser factory
 def _feature_map_fuser_factory(config: FeatureMapFuserConfig,

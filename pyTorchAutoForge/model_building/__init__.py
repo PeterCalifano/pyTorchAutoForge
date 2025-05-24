@@ -1,5 +1,5 @@
 from .ModelAutoBuilder import ModelAutoBuilder
-from .modelBuildingBlocks import AutoForgeModule, TemplateConvNet2d, TemplateFullyConnectedDeepNet, MultiHeadRegressor, TemplateFullyConnectedNetConfig, TemplateConvNetConfig2d, DropoutEnsemblingNetworkWrapper, TemplateFullyConnectedNet
+from .modelBuildingBlocks import AutoForgeModule, TemplateConvNet2d, TemplateFullyConnectedDeepNet, MultiHeadRegressor, TemplateFullyConnectedNetConfig, TemplateConvNet2dConfig, DropoutEnsemblingNetworkWrapper, TemplateFullyConnectedNet, TemplateConvNetFeatureFuser2d, TemplateConvNetFeatureFuser2dConfig, FeatureMapFuserConv2dBlock
 
 from .ModelAssembler import ModelAssembler
 from .ModelMutator import ModelMutator, EnumMutations
@@ -20,10 +20,13 @@ __all__ = [
     'ConvolutionalBlock3d',
     'DropoutEnsemblingNetworkWrapper', 
     'TemplateConvNet2d', 
-    'TemplateConvNetConfig2d', 
+    'TemplateConvNet2dConfig', 
     'TemplateFullyConnectedNetConfig',
     'TemplateFullyConnectedNet', 
     'TemplateFullyConnectedDeepNet', 
+    'TemplateConvNetFeatureFuser2d',
+    'TemplateConvNetFeatureFuser2dConfig',
+    'FeatureMapFuserConv2dBlock',
     'ModelAssembler', 
     'ModelMutator', 
     'EnumMutations',
