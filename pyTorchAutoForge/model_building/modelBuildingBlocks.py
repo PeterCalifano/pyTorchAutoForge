@@ -1,4 +1,3 @@
-# Module to apply activation functions in forward pass instead of defining them in the model class
 from pyTorchAutoForge.api.torch import * 
 from pyTorchAutoForge.model_building.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, EnumMultiHeadOutMode, MultiHeadRegressor
 from typing import Literal
@@ -66,7 +65,6 @@ class AutoForgeModule(torch.nn.Module):
 # %% Configuration dataclasses
 @dataclass
 class TemplateNetBaseConfig(BaseConfigClass):
-
     # General
     model_name: str = "template_network"
 
@@ -81,7 +79,6 @@ class TemplateNetBaseConfig(BaseConfigClass):
     # Additional features
     dropout_ensemble_size: int = 1  # Set >1 if building using ensemble wrapper
 
-# %% TemplateConvNet2d - 19-09-2024
 @dataclass 
 class TemplateConvNetConfig(TemplateNetBaseConfig):
 
@@ -178,85 +175,7 @@ class TemplateFullyConnectedDeepNetConfig(TemplateNetBaseConfig):
                     "TemplateFullyConnectedDeepNetConfig: 'use_dropout_ensembling' is True but either 'dropout_probability' is 0.0 or 'regularization_layer_type' is not set to 'dropout'. Please set 'regularization_layer_type' to 'dropout' and provide a non-zero value for 'dropout_probability'.")
             
 # %% Template model classes
-### Monte-Carlo Dropout generic DNN wrapper
-class DropoutEnsemblingNetworkWrapper(AutoForgeModule):
-    def __init__(self, 
-                 model: nn.Module, 
-                 ensemble_size: int = 20,
-                 enable_ensembling : bool = True) -> None:
-        
-        super().__init__()
-        self.base_model: nn.Module = model # Store model
-        self.ensemble_size: int = ensemble_size
-        self.enable_ensembling_: bool = enable_ensembling
 
-        if not isinstance(self.base_model, nn.Module):
-            raise TypeError("DropoutEnsemblingNetworkWrapper: base_model must be an instance of nn.Module")
-
-        # Outputs cached after forward
-        self.last_mean: torch.Tensor | None = None
-        self.last_median: torch.Tensor | None = None
-        self.last_variance: torch.Tensor | None = None
-
-    def get_last_stats(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Get the last mean, median and variance computed during the forward pass.
-        """
-        if self.last_mean is None or self.last_median is None or self.last_variance is None:
-            raise ValueError("DropoutEnsemblingNetworkWrapper: No forward pass has been performed yet.")
-        
-        return self.last_mean, self.last_median, self.last_variance
-
-    def _forward_single(self, x: torch.Tensor) -> torch.Tensor:
-        x : torch.Tensor = self.base_model(x)
-        return x
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B = x.shape[0]
-
-        if self.training:
-            # During training, run batched mode on different samples, as usual
-            self._enable_ensembling_ = False
-            self.base_model.train()
-            x = self._forward_single(x)
-
-            # Store the last mean, median and variance
-            self.last_mean = x
-            self.last_median = x
-            self.last_variance = torch.zeros_like(x)
-
-            return x
-        
-        # Otherwise, in eval() mode, run ensembling
-        # Enable dropout by keeping the model in training mode but no grad)
-        self._enable_ensembling_ = True
-        self.base_model.train()
-
-        with torch.no_grad():
-            if B == 1:
-                # Single input, expand to tensor in batch size
-                x_repeated = x.expand(self.ensemble_size, -1) # Output keeps the shape shape if B == 1
-                x = self._forward_single(x=x_repeated)  # [T, out]
-
-            else:
-                x = torch.stack([
-                    self._forward_single(x=x) for _ in range(self.ensemble_size)
-                ])  # [T, B, out]
-
-        # Compute mean, median and variance
-        # NOTE: batch dimension is always preserved, no need to do manual squeeze
-        self.last_mean = x.mean(dim=0)
-        self.last_median = x.median(dim=0).values
-        self.last_variance = x.var(dim=0)
-
-        if B == 1:
-            # If input was a single sample, return the mean
-            self.last_mean = self.last_mean.unsqueeze(0)
-            self.last_median = self.last_median.unsqueeze(0)
-            self.last_variance = self.last_variance.unsqueeze(0)
-
-        return self.last_mean
-        
 ### TemplateConvNet2d
 class TemplateConvNet2d(AutoForgeModule):
     '''
@@ -509,7 +428,7 @@ class TemplateFullyConnectedDeepNet(AutoForgeModule):
                                                ensemble_size=cfg.dropout_ensemble_size, 
                                                enable_ensembling=True)
 
-# EXPERIMENTAL: DEVNOTE: test definition of template DNN using new build_activation_layer function
+# EXPERIMENTAL: DEVNOTE: test definition of template DNN using build_activation_layer factory function
 class TemplateFullyConnectedDeepNetConfig_experimental(AutoForgeModule):
     '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
 
@@ -599,161 +518,108 @@ class TemplateFullyConnectedDeepNetConfig_experimental(AutoForgeModule):
             x = layer(x)
         return x 
 
+
+
+# Special wrapper classes
+### Monte-Carlo Dropout generic DNN wrapper
+class DropoutEnsemblingNetworkWrapper(AutoForgeModule):
+    def __init__(self, 
+                 model: nn.Module, 
+                 ensemble_size: int = 20,
+                 enable_ensembling : bool = True) -> None:
+        
+        super().__init__()
+        self.base_model: nn.Module = model # Store model
+        self.ensemble_size: int = ensemble_size
+        self.enable_ensembling_: bool = enable_ensembling
+
+        if not isinstance(self.base_model, nn.Module):
+            raise TypeError("DropoutEnsemblingNetworkWrapper: base_model must be an instance of nn.Module")
+
+        # Outputs cached after forward
+        self.last_mean: torch.Tensor | None = None
+        self.last_median: torch.Tensor | None = None
+        self.last_variance: torch.Tensor | None = None
+
+    def get_last_stats(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Get the last mean, median and variance computed during the forward pass.
+        """
+        if self.last_mean is None or self.last_median is None or self.last_variance is None:
+            raise ValueError("DropoutEnsemblingNetworkWrapper: No forward pass has been performed yet.")
+        
+        return self.last_mean, self.last_median, self.last_variance
+
+    def _forward_single(self, x: torch.Tensor) -> torch.Tensor:
+        x : torch.Tensor = self.base_model(x)
+        return x
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B = x.shape[0]
+
+        if self.training:
+            # During training, run batched mode on different samples, as usual
+            self._enable_ensembling_ = False
+            self.base_model.train()
+            x = self._forward_single(x)
+
+            # Store the last mean, median and variance
+            self.last_mean = x
+            self.last_median = x
+            self.last_variance = torch.zeros_like(x)
+
+            return x
+        
+        # Otherwise, in eval() mode, run ensembling
+        # Enable dropout by keeping the model in training mode but no grad)
+        self._enable_ensembling_ = True
+        self.base_model.train()
+
+        with torch.no_grad():
+            if B == 1:
+                # Single input, expand to tensor in batch size
+                x_repeated = x.expand(self.ensemble_size, -1) # Output keeps the shape shape if B == 1
+                x = self._forward_single(x=x_repeated)  # [T, out]
+
+            else:
+                x = torch.stack([
+                    self._forward_single(x=x) for _ in range(self.ensemble_size)
+                ])  # [T, B, out]
+
+        # Compute mean, median and variance
+        # NOTE: batch dimension is always preserved, no need to do manual squeeze
+        self.last_mean = x.mean(dim=0)
+        self.last_median = x.median(dim=0).values
+        self.last_variance = x.var(dim=0)
+
+        if B == 1:
+            # If input was a single sample, return the mean
+            self.last_mean = self.last_mean.unsqueeze(0)
+            self.last_median = self.last_median.unsqueeze(0)
+            self.last_variance = self.last_variance.unsqueeze(0)
+
+        return self.last_mean
+        
+
 # %% Image normalization classes
 class NormalizeImg(nn.Module):
-    def __init__(self, normaliz_value : float = 255.0):
+    def __init__(self, normaliz_factor : float = 255.0):
         super(NormalizeImg, self).__init__()
-        self.normaliz_value = normaliz_value
+
+        # Register parameters as non-trainable (constant)
+        self.register_buffer('normaliz_value', 
+                             torch.tensor(normaliz_factor))
 
     def forward(self, x):
-        return x / self.normaliz_value  # Normalize to [0, 1]
+        return x / self.normaliz_value  # [0, normaliz_value] -> [0, 1]
 
-# Define the ReNormalize layer
-class ReNormalizeImg(nn.Module):
-    def __init__(self, normaliz_value: float = 255.0):
-        super(ReNormalizeImg, self).__init__()
-        self.normaliz_value = normaliz_value
+# Define the Denormalize layer
+class DenormalizeImg(nn.Module):
+    def __init__(self, normaliz_factor: float = 255.0):
+        super(DenormalizeImg, self).__init__()
+        
+        # Register parameters as non-trainable (constant)
+        self.register_buffer('normaliz_value', torch.tensor(normaliz_factor))
 
     def forward(self, x):
-        return x * self.normaliz_value  # Re-normalize to [0, 255]
-
-# %% TEMPORARY DEV
-# TODO: make this function generic!
-def ReloadModelFromOptuna(trial: optuna.trial.FrozenTrial, other_params: dict, modelName: str, filepath: str) -> nn.Module:
-
-    num_of_epochs = 125
-    # other_params = dict()
-
-    # Sample decision parameters space
-    # Optimization strategy
-    initial_lr = trial.suggest_float('initial_lr', 1e-4, 1e-2, log=True)
-    batch_size = trial.suggest_int('batch_size', 2, 40, step=8)
-
-    # initial_lr = 5e-4
-    # other_params['initial_lr'] = initial_lr
-    # batch_size = 20
-    # other_params['batch_size'] = batch_size
-
-    # Model
-    # use_default_size = trial.suggest_int('use_default_size', 0, 1)
-    # efficient_net_ID = trial.suggest_int('efficient_net_ID', 0, 1)
-
-    try:
-        regressor_arch_version = trial.suggest_int(
-            'regressor_arch_version', 1, 2)
-    except:
-        other_params['regressor_arch_version'] = 1
-        regressor_arch_version = other_params['regressor_arch_version']
-
-    # dropout_coeff_multiplier = trial.suggest_int('dropout_coeff_multiplier', 0, 10, step=1)
-    dropout_coeff_multiplier = 0
-    use_batchnorm = 0
-
-    try:
-        image_adapter_strategy = trial.suggest_categorical(
-            'image_adapter_strategy', ['resize_copy', 'conv_adapter'])
-    except:
-        other_params['image_adapter_strategy'] = 'resize_copy'
-        image_adapter_strategy = other_params['image_adapter_strategy']
-
-    try:
-        mutate_to_groupnorm = trial.suggest_int('mutate_to_groupnorm', 0, 1)
-    except:
-        other_params['mutate_to_groupnorm'] = 1
-        mutate_to_groupnorm = other_params['mutate_to_groupnorm']
-
-    loss_type = trial.suggest_categorical('loss_type', ['mse', 'huber'])
-
-    # use_batchnorm = trial.suggest_int('use_batchnorm', 0, 1)
-    num_of_regressor_layers_H1 = trial.suggest_int(
-        'num_of_regressor_layers_H1', 3, 7)
-    num_of_regressor_layers_H2 = trial.suggest_int(
-        'num_of_regressor_layers_H2', 3, 7)
-
-    scheduler = trial.suggest_categorical(
-        'lr_scheduler_name', ['cosine_annealing_restarts', 'exponential_decay'])
-
-    if scheduler == 'cosine_annealing_restarts':
-        T0_WarmAnnealer = trial.suggest_int('T0_WarmAnnealer', np.floor(
-            0.85 * num_of_epochs), 3*num_of_epochs, step=5)
-        lr_min = trial.suggest_float('lr_min', 1e-8, 1e-5, log=True)
-
-    elif scheduler == 'exponential_decay':
-        gamma = trial.suggest_float('gamma', 0.900, 0.999, step=0.005)
-
-    # Define regressor architecture for centroid prediction
-    out_channels_sizes_H1 = []
-    out_channels_sizes_H1.append(2)  # Output layer
-
-    for i in range(num_of_regressor_layers_H1):
-        out_channels_sizes_H1.append(2**(i+5))
-
-    out_channels_sizes_H1.reverse()
-    other_params['out_channels_sizes_H1'] = out_channels_sizes_H1
-
-    out_channels_sizes_H2 = []
-    out_channels_sizes_H2.append(2)  # Output layer
-
-    # Define regressor architecture for range prediction
-    for i in range(num_of_regressor_layers_H2):
-        out_channels_sizes_H2.append(2**(i+5))
-
-    out_channels_sizes_H2.reverse()
-    other_params['out_channels_sizes_H2'] = out_channels_sizes_H2
-
-    # Build regression layers with decreasing number of channels as powers of 2
-    other_params['model_definition_mode'] = 'multihead'
-    model_definition_mode = other_params['model_definition_mode']
-
-    # Print the parameters
-    print(f"Parameters: \n"
-          f"initial_lr: {initial_lr}\n"
-          f"batch_size: {batch_size}\n"
-          f"dropout_coeff_multiplier: {dropout_coeff_multiplier}\n"
-          f"use_batchnorm: {use_batchnorm}\n"
-          f"mutate_to_groupnorm: {mutate_to_groupnorm}\n"
-          f"loss_type: {loss_type}\n"
-          f"num_of_regressor_layers_H1: {num_of_regressor_layers_H1}\n"
-          f"num_of_regressor_layers_H2: {num_of_regressor_layers_H2}\n"
-          f"lr_scheduler_name: {scheduler}\n"
-          f"out_channels_sizes_H1: {out_channels_sizes_H1}\n"
-          f"out_channels_sizes_H2: {out_channels_sizes_H2}\n"
-          f"model_definition_mode: {model_definition_mode}\n"
-          f"image_adapter_strategy: {image_adapter_strategy}\n"
-          f"regressor_arch_version: {regressor_arch_version}\n")
-
-    if scheduler == 'cosine_annealing_restarts':
-        print(f"T0_WarmAnnealer: {T0_WarmAnnealer}\n"
-              f"lr_min: {lr_min}\n")
-    elif scheduler == 'exponential_decay':
-        print(f"gamma: {gamma}\n")
-
-    # Define model
-    model = DefineModel(trial, other_params)
-
-    # Load model parameters
-    model = LoadModel(model, os.path.join(filepath, modelName), False)
-
-    # Loading validation
-    ValidateDictLoading(model, modelName, filepath)
-
-    return model
-
-
-def ValidateDictLoading(model: nn.Module | nn.ModuleDict | nn.ModuleList, modelName: str, filepath: str):
-
-    # Load the saved state dict (just to compare)
-    checkpoint = torch.load(os.path.join(filepath, modelName+'.pth'))
-    saved_state_dict = checkpoint['state_dict'] if 'state_dict' in checkpoint else checkpoint
-
-    # Get the current state dict from the model
-    current_state_dict = model.state_dict()
-
-    # Check if the model's parameters match the saved parameters
-    for param_name in current_state_dict:
-        if not torch.equal(current_state_dict[param_name], saved_state_dict[param_name]):
-            raise ValueError(f"Mismatch found in parameter: {param_name}")
-
-    else:
-        print("All model parameters are correctly loaded.")
-
+        return x * self.normaliz_value  # [0, 1] -> [0, normaliz_value]

@@ -25,6 +25,8 @@
   - [x] Implement Scaler adapter to store scaling factors for standalone input scaling (directly in forward)
   - [x] Add prototype of automatic MC dropout wrapper for NNs with dropout layers
   - [ ] Upgrade PTAF trainer and loss function interfaces to support image segmentation tasks
+  - [ ] Review implementations and modify model parameters using register buffer/parameter where needed.
+  - [ ] Upgrade api.torch to save model packages
 
 - [ ] v0.2.1
   - [ ] Modify DataLoaderIndex to accept datasets directly and a combination of datasets and dataloaders. If dataset is input, use default specifications for dataloader

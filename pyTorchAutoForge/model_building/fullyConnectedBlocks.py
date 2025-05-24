@@ -92,3 +92,23 @@ class FullyConnectedBlock(nn.Module):
         x = self.regularizer(x)
 
         return x
+
+
+
+class FullyConnectedBlockStack(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        
+    def forward(self, x):
+        for block in self.children():
+            x = block(x)
+        return x
+    
+
+class FullyConnectedResidualBlockStack(nn.Module):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, x):
+        pass

@@ -244,9 +244,6 @@ def LoadModel(model: torch.nn.Module | None, model_filename: str, load_as_traced
         print('Model correctly loaded.')
         return model.eval()
 
-
-
-
 # %% Function to save Dataset object - 01-06-2024
 def SaveDataset(datasetObj: Dataset, datasetFilePath: str = '', datasetName: str = 'dataset') -> None:
 
@@ -261,4 +258,27 @@ def SaveDataset(datasetObj: Dataset, datasetFilePath: str = '', datasetName: str
 # %% Function to load Dataset object - 01-06-2024
 def LoadDataset(datasetFilePath: str, datasetName: str = 'dataset') -> Dataset:
     return torch.load(os.path.join(datasetFilePath, datasetName + ".pt"))
+
+
+# %% Auxiliary functions
+
+def ValidateDictLoading(model: torch.nn.Module | torch.nn.ModuleDict | torch.nn.ModuleList,
+                        model_name: str, 
+                        filepath: str):
+
+    # Load the saved state dict (just to compare)
+    checkpoint = torch.load(os.path.join(filepath, model_name +'.pth'))
+    saved_state_dict = checkpoint['state_dict'] if 'state_dict' in checkpoint else checkpoint
+
+    # Get the current state dict from the model
+    current_state_dict = model.state_dict()
+
+    # Check if the model's parameters match the saved parameters
+    for param_name in current_state_dict:
+        if not torch.equal(current_state_dict[param_name], saved_state_dict[param_name]):
+            raise ValueError(f"Mismatch found in parameter: {param_name}")
+
+    else:
+        print("All model parameters are correctly loaded.")
+
 
