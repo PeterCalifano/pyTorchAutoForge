@@ -159,7 +159,7 @@ class TemplateConvNet2dConfig(TemplateConvNetConfig):
             self.pool_kernel_sizes = [
                 self.pool_kernel_sizes] * len(self.kernel_sizes)
 
-        assert (isinstance(conv_stride, int)
+        assert (isinstance(self.conv_stride, int)
                 ), "conv_stride must be a scalar integer for ConvolutionalBlock2d"
 
         # TODO add check on conv sizes if reference_input_size is passed, to ensure kernel and pool sizes are compatible
