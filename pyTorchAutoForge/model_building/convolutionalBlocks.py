@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import torch
 from torch import nn
 from typing import Literal
@@ -5,6 +6,7 @@ from typing import Literal
 # TODO implement an optional "residual connection" feature
 
 from pyTorchAutoForge.model_building.factories.block_factories import _activation_factory, _initialize_convblock_weights, _pooling_factory, _regularizer_factory, activ_types, pooling_types, regularizer_types, init_methods, pooling_types_1d, pooling_types_2d, pooling_types_3d
+
 
 class ConvolutionalBlock1d(nn.Module):
     """
@@ -62,13 +64,14 @@ class ConvolutionalBlock1d(nn.Module):
 
         # Activation selection
         self.activ: nn.Module | nn.Identity = nn.Identity()
-        self.activ = _activation_factory(activ_type, out_channels, prelu_params)
+        self.activ = _activation_factory(
+            activ_type, out_channels, prelu_params)
 
         # Pooling selection
         self.pool: nn.Module | nn.Identity = nn.Identity()
-        self.pool = _pooling_factory(pool_type, 
-                                pool_kernel_size, 
-                                target_res=kwargs.get("target_res", None))
+        self.pool = _pooling_factory(pool_type,
+                                     pool_kernel_size,
+                                     target_res=kwargs.get("target_res", None))
 
         # Regularizer selection
         self.regularizer: nn.Module | nn.Identity = nn.Identity()
@@ -81,7 +84,7 @@ class ConvolutionalBlock1d(nn.Module):
         self.__initialize_weights__(init_method_type)
 
     def __initialize_weights__(self,
-                           init_method_type: init_methods = "xavier_uniform"):
+                               init_method_type: init_methods = "xavier_uniform"):
         """
         Initialize weights using specified method.
         """
@@ -151,18 +154,19 @@ class ConvolutionalBlock2d(nn.Module):
 
         # Activation selection
         self.activ: nn.Module | nn.Identity = nn.Identity()
-        self.activ = _activation_factory(activ_type, out_channels, prelu_params)
+        self.activ = _activation_factory(
+            activ_type, out_channels, prelu_params)
 
         # Pooling selection
         self.pool: nn.Module | nn.Identity = nn.Identity()
-        self.pool = _pooling_factory(pool_type, 
-                                     pool_kernel_size, 
+        self.pool = _pooling_factory(pool_type,
+                                     pool_kernel_size,
                                      target_res=kwargs.get("target_res", None))
 
         # Regularizer selection
         self.regularizer: nn.Module | nn.Identity = nn.Identity()
-        self.regularizer = _regularizer_factory(ndims=2, 
-                                                regularizer_type=regularizer_type, 
+        self.regularizer = _regularizer_factory(ndims=2,
+                                                regularizer_type=regularizer_type,
                                                 out_channels=out_channels,
                                                 regularizer_param=regularizer_param)
 
@@ -170,7 +174,7 @@ class ConvolutionalBlock2d(nn.Module):
         self.__initialize_weights__(init_method_type)
 
     def __initialize_weights__(self,
-                           init_method_type: init_methods = "xavier_uniform"):
+                               init_method_type: init_methods = "xavier_uniform"):
         """
         Initialize weights using specified method.
         """
@@ -185,6 +189,7 @@ class ConvolutionalBlock2d(nn.Module):
         x = self.pool(x)
 
         return x
+
 
 class ConvolutionalBlock3d(nn.Module):
     """
@@ -253,20 +258,20 @@ class ConvolutionalBlock3d(nn.Module):
 
         # Regularizer selection
         self.regularizer: nn.Module | nn.Identity = nn.Identity()
-        self.regularizer = _regularizer_factory(ndims=3, 
-                                    regularizer_type=regularizer_type, 
-                                    out_channels=out_channels,
-                                    regularizer_param=regularizer_param)
-                
-        # Initialize weights of all blocks 
+        self.regularizer = _regularizer_factory(ndims=3,
+                                                regularizer_type=regularizer_type,
+                                                out_channels=out_channels,
+                                                regularizer_param=regularizer_param)
+
+        # Initialize weights of all blocks
         self.__initialize_weights__(init_method_type)
 
     def __initialize_weights__(self,
-                           init_method_type: Literal["xavier_uniform",
-                                                     "kaiming_uniform",
-                                                     "xavier_normal",
-                                                     "kaiming_normal",
-                                                     "orthogonal"] = "xavier_uniform"):
+                               init_method_type: Literal["xavier_uniform",
+                                                         "kaiming_uniform",
+                                                         "xavier_normal",
+                                                         "kaiming_normal",
+                                                         "orthogonal"] = "xavier_uniform"):
         """
         Initialize weights using specified method.
         """
@@ -286,3 +291,207 @@ class ConvolutionalBlockNd(nn.Module):
     def __init__(self):
         raise NotImplementedError(
             'Torch does not have NDim convolutions by default. Implementation needs to rely on custom code or existing modules. TODO')
+
+
+# %% Feature map fusion blocks
+# EXPERIMENTAL
+fuser_type = Literal["feature_add", "channel_concat", "multihead_attention"]
+
+@dataclass
+class FeatureMapFuserConfig():
+    """
+    Configuration for a feature-map fusion operation.
+
+    Attributes:
+        fuser_type: 'feature_add', 'channel_concat', or 'multihead_attention'
+        in_channels: number of channels in x
+        num_skip_channels: channels in skip tensor (required for 'concat')
+        num_attention_heads: number of heads for attention (only for 'attn')
+    """
+    in_channels: int
+    num_skip_channels: int
+    num_dims : int = 4
+    fuser_type: fuser_type = "channel_concat"
+    num_attention_heads: int | None = None
+
+
+class FeatureMapFuser(nn.Module):
+    """
+    FeatureMapFuser _summary_
+
+    _extended_summary_
+
+    :param nn: _description_
+    :type nn: _type_
+    """
+
+    def __init__(self,
+                 num_dims: int,  # Number of dims of the input tensor
+                 fuser_type: fuser_type,
+                 in_channels: int,
+                 num_skip_channels: int | None = None,
+                 num_attention_heads: int | None = None,
+                 **kwargs):
+
+        super().__init__()
+        self.fuser_type = fuser_type
+
+        # Build the actual operator and assign it to self.fuse
+        if fuser_type == 'feature_add':
+            import torch.nn.functional as F
+
+            # Preselect the appropriate fusion function at initialization so that the returned
+            # function contains no conditionals during forward.
+            num_dims = kwargs.get("ndims", 4)
+
+            if num_dims == 2:  # 1D inputs: [B, L]
+                mode = kwargs.get("mode", "linear")
+
+                def _feature_add_fuser(x: torch.Tensor, skip: torch.Tensor):
+                    out: torch.Tensor = x + \
+                        F.interpolate(
+                            skip, size=x.shape[1:], mode=mode, align_corners=True, antialias=False)
+                    return out
+
+            elif num_dims == 4:  # 2D inputs: [B,C,H,W]
+                mode = kwargs.get("mode", "bicubic")
+
+                def _feature_add_fuser(x: torch.Tensor, skip: torch.Tensor):
+                    out: torch.Tensor = x + \
+                        F.interpolate(
+                            skip, size=x.shape[1:], mode=mode, align_corners=True, antialias=False)
+                    return out
+
+            elif num_dims == 5:  # 3D inputs: [B,C,D,H,W]
+                mode = kwargs.get("mode", "trilinear")
+
+                def _feature_add_fuser(x: torch.Tensor, skip: torch.Tensor):
+                    out: torch.Tensor = x + \
+                        F.interpolate(
+                            skip, size=x.shape[2:], mode=mode, align_corners=True, antialias=False)
+                    return out
+
+            else:
+                raise ValueError(
+                    "Invalid input dimensions. Expected a 4D tensor (for 2D inputs) or a 5D tensor (for 3D inputs).")
+
+            self.fuser = _feature_add_fuser
+
+        elif fuser_type == 'channel_concat':
+            assert num_skip_channels is not None, "num_skip_channels arg is required for concat"
+
+            if num_dims == 4:
+                self.proj: nn.Conv2d | nn.Conv3d = nn.Conv2d(in_channels=in_channels + num_skip_channels,
+                                                             out_channels=in_channels,
+                                                             kernel_size=1)
+            elif num_dims == 5:
+                self.proj = nn.Conv3d(in_channels=in_channels + num_skip_channels,
+                                      out_channels=in_channels,
+                                      kernel_size=1)
+            else:
+                raise ValueError(
+                    f"Invalid num_dims for channel_concat fuser. Expected 4 (2D) or 5 (3D), found {num_dims}.")
+
+            def _channel_concat_fuser(x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+                """
+                Concatenate the input tensor and skip tensor along the channel dimension,
+                then project the result to the original number of channels.
+                """
+                # Concatenate along channel dimension
+                concatenated: torch.Tensor = torch.cat([x, skip], dim=1)
+                # Project back to original number of channels
+                out: torch.Tensor = self.proj(concatenated)
+                return out
+
+            self.fuser = _channel_concat_fuser
+
+        elif fuser_type == 'multihead_attention':
+            assert num_attention_heads is not None, "num_attention_heads arg is required for attention fuser"
+
+            # Retrieve additional arguments for multi-head attention from kwargs
+            dropout = kwargs.get("dropout", 0.0)
+            bias = kwargs.get("bias", True)
+            add_bias_kv = kwargs.get("add_bias_kv", False)
+            add_zero_attn = kwargs.get("add_zero_attn", False)
+            kdim = kwargs.get("kdim", in_channels)
+            vdim = kwargs.get("vdim", in_channels)
+
+            # Define multi-head attention
+            self._attention_fuser = nn.MultiheadAttention(embed_dim=in_channels,
+                                                          num_heads=num_attention_heads,
+                                                          dropout=dropout,
+                                                          bias=bias,
+                                                          add_bias_kv=add_bias_kv,
+                                                          add_zero_attn=add_zero_attn,
+                                                          kdim=kdim,
+                                                          vdim=vdim,
+                                                          batch_first=False)
+
+            def _attn_fuse(x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+
+                b, c, h, w = x.shape
+
+                # Flatten to [sequence_len, batch, embed]
+                x_flat = x.flatten(2).permute(2, 0, 1)
+                skip_flat = skip.flatten(2).permute(2, 0, 1)
+                fused_flat, _ = self._attention_fuser(
+                    x_flat, skip_flat, skip_flat)
+
+                # Reshape back to [batch, channel, h, w]
+                fused_flat: torch.Tensor = fused_flat.permute(
+                    1, 2, 0).reshape(b, c, h, w)
+
+                return fused_flat
+
+            self.fuser = _attn_fuse
+
+        else:
+            raise ValueError(f"Unknown fuse mode: {fuser_type}")
+
+    def forward(self, x: torch.Tensor, skip_features: torch.Tensor) -> torch.Tensor:
+        # Call fuser module
+        fused_x: torch.Tensor = self.fuser(x, skip_features)
+        return fused_x
+
+
+# FeatureMapFuser factory
+def _feature_map_fuser_factory(config: FeatureMapFuserConfig,
+                               **kwargs
+                               ) -> FeatureMapFuser:
+    """
+    Factory function to create a FeatureMapFuser instance based on the provided configuration.
+
+    This factory reads from a FeatureMapFuserConfig instance and instantiates a
+    FeatureMapFuser that fuses skip connections with the main input by using one of three methods:
+    feature addition, channel concatenation, or multi-head attention. The choice of fuser is determined by
+    config.fuser_type and the provided num_dims parameter. This abstraction allows customization of
+    the fusion operation while supporting additional mode arguments and multi-head attention parameters.
+
+    Args:
+        config (FeatureMapFuserConfig): 
+            Configuration for the feature map fuser. Must contain the following attributes:
+                - in_channels: Number of input channels.
+                - num_skip_channels: Number of channels in the skip tensor (required for channel concatenation).
+                - fuser_type: The type of fusion operation ("feature_add", "channel_concat", or "multihead_attention").
+                - num_attention_heads: Number of attention heads (only required for multi-head attention).
+        num_dims (int): 
+            The dimensionality of the input tensor. Expected values:
+                - 2 for 1D inputs,
+                - 4 for 2D inputs (e.g., images),
+                - 5 for 3D inputs (e.g., volumetric data).
+            Default is 4.
+        **kwargs: 
+            Additional keyword arguments for the fuser. For example:
+                - mode: Upsampling mode for 'feature_add' (e.g., "linear", "bicubic", or "trilinear").
+                - dropout, bias, add_bias_kv, add_zero_attn, kdim, vdim: Advanced settings for multi-head attention.
+
+    Returns:
+        FeatureMapFuser: A configured feature map fuser instance that fuses an input tensor with skip features
+        according to the specified fusion method.
+    """
+    return FeatureMapFuser(num_dims=config.num_dims,
+                           fuser_type=config.fuser_type,
+                           in_channels=config.in_channels,
+                           num_skip_channels=config.num_skip_channels,
+                           num_attention_heads=config.num_attention_heads,
+                           **kwargs)
