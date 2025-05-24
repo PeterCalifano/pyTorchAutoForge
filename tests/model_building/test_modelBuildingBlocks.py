@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, TemplateConvNetConfig2d, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d
+from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNetConfig2d, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d
 from torch import nn
 from pyTorchAutoForge.model_building.modelBuildingBlocks import DropoutEnsemblingNetworkWrapper
 
@@ -19,14 +19,14 @@ def test_autoforge_module_custom_name():
 
 # %% Image normalization classes tests
 def test_normalize_img_forward():
-    norm = NormalizeImg(normaliz_value=10.0)
+    norm = NormalizeImg(normaliz_factor=10.0)
     x = torch.tensor([10.0, 20.0, 30.0])
     out = norm(x)
     # Should divide every element by 10
     assert torch.allclose(out, torch.tensor([1.0, 2.0, 3.0]))
 
 def test_renormalize_img_forward():
-    renorm = ReNormalizeImg(normaliz_value=5.0)
+    renorm = DenormalizeImg(normaliz_factor=5.0)
     x = torch.tensor([1.0, 2.0, 3.0])
     out = renorm(x)
     # Should multiply every element by 5
