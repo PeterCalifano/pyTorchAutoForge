@@ -148,11 +148,9 @@ def test_pooling_factory_case_insensitive():
     assert layer.stride == 2
     assert layer.padding == 1
 
-
 def test_pooling_factory_unsupported_adaptive_type():
     with pytest.raises(ValueError):
         _pooling_factory("Adapt_UnknownPool1d", kernel_size=2, target_res=5)
-
 
 @pytest.mark.parametrize("ndims", [0, 4])
 def test_regularizer_dropout_ndims_unsupported(ndims):

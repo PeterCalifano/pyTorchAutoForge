@@ -1,10 +1,10 @@
 import pytest
 import torch
 
-from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNetConfig2d, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d
+from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNet2dConfig, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d, TemplateFullyConnectedNetConfig, TemplateFullyConnectedNet
+
 from torch import nn
 from pyTorchAutoForge.model_building.modelBuildingBlocks import DropoutEnsemblingNetworkWrapper
-
 
 # %% AutoForgeModule tests
 def test_autoforge_module_default_name():
@@ -32,9 +32,9 @@ def test_renormalize_img_forward():
     # Should multiply every element by 5
     assert torch.allclose(out, torch.tensor([5.0, 10.0, 15.0]))
 
-# %% TemplateConvNetConfig2d tests
+# %% TemplateConvNet2dConfig tests
 def test_template_convnet_config2d_valid_lists():
-    cfg = TemplateConvNetConfig2d(
+    cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3, 5],
         pool_type="MaxPool2d",
         pool_kernel_sizes=[2, 2],
@@ -50,7 +50,7 @@ def test_template_convnet_config2d_valid_lists():
 @pytest.mark.parametrize("bad_pool", ["MaxPool3d", "AvgPool1d", "Adapt_MaxPool1d"])
 def test_template_convnet_config2d_invalid_pool_type(bad_pool):
     with pytest.raises(TypeError) as exc:
-        TemplateConvNetConfig2d(
+        TemplateConvNet2dConfig(
             kernel_sizes=[3],
             pool_type=bad_pool,
             pool_kernel_sizes=[2],
@@ -61,7 +61,7 @@ def test_template_convnet_config2d_invalid_pool_type(bad_pool):
 
 def test_template_convnet_config2d_kernel_none():
     with pytest.raises(ValueError) as exc:
-        TemplateConvNetConfig2d(
+        TemplateConvNet2dConfig(
             kernel_sizes=None,
             pool_type="MaxPool2d",
             pool_kernel_sizes=[2],
@@ -72,7 +72,7 @@ def test_template_convnet_config2d_kernel_none():
 
 def test_template_convnet_config2d_pool_none():
     with pytest.raises(ValueError) as exc:
-        TemplateConvNetConfig2d(
+        TemplateConvNet2dConfig(
             kernel_sizes=[3],
             pool_type="MaxPool2d",
             pool_kernel_sizes=None,
@@ -83,7 +83,7 @@ def test_template_convnet_config2d_pool_none():
 
 def test_template_convnet_config2d_out_channels_none():
     with pytest.raises(ValueError) as exc:
-        TemplateConvNetConfig2d(
+        TemplateConvNet2dConfig(
             kernel_sizes=[3],
             pool_type="MaxPool2d",
             pool_kernel_sizes=[2],
@@ -95,7 +95,7 @@ def test_template_convnet_config2d_out_channels_none():
 def test_template_convnet_config2d_length_mismatch():
     # kernel_sizes and pool_kernel_sizes length mismatch
     with pytest.raises(ValueError) as exc1:
-        TemplateConvNetConfig2d(
+        TemplateConvNet2dConfig(
             kernel_sizes=[3, 5],
             pool_type="MaxPool2d",
             pool_kernel_sizes=[2],
@@ -106,7 +106,7 @@ def test_template_convnet_config2d_length_mismatch():
 
     # kernel_sizes and out_channels_sizes length mismatch
     with pytest.raises(ValueError) as exc2:
-        TemplateConvNetConfig2d(
+        TemplateConvNet2dConfig(
             kernel_sizes=[3],
             pool_type="MaxPool2d",
             pool_kernel_sizes=[2],
@@ -118,7 +118,7 @@ def test_template_convnet_config2d_length_mismatch():
 
 # %% TemplateConvNet2d tests
 def test_template_convnet2d_build_and_forward_default_no_skips():
-    cfg = TemplateConvNetConfig2d(
+    cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3, 5],
         pool_kernel_sizes=[2, 2],
         out_channels_sizes=[4, 8],
@@ -141,7 +141,7 @@ def test_template_convnet2d_build_and_forward_default_no_skips():
 
 
 def test_template_convnet2d_forward_with_intermediate_features():
-    cfg = TemplateConvNetConfig2d(
+    cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3, 3, 3],
         pool_kernel_sizes=[2, 2, 2],
         out_channels_sizes=[2, 4, 6],
@@ -162,7 +162,7 @@ def test_template_convnet2d_forward_with_intermediate_features():
     ([3], None, "must not be none"),
 ])
 def test_template_convnet2d_none_kernel_or_pool_raises(kernels, pools, msg):
-    cfg = TemplateConvNetConfig2d(
+    cfg = TemplateConvNet2dConfig(
         kernel_sizes=kernels,
         pool_kernel_sizes=pools,
         out_channels_sizes=[4],
@@ -174,7 +174,7 @@ def test_template_convnet2d_none_kernel_or_pool_raises(kernels, pools, msg):
 
 
 def test_template_convnet2d_mismatched_kernel_pool_length():
-    cfg = TemplateConvNetConfig2d(
+    cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3, 5],
         pool_kernel_sizes=[2],
         out_channels_sizes=[4, 8],
@@ -186,7 +186,7 @@ def test_template_convnet2d_mismatched_kernel_pool_length():
 
 
 def test_template_convnet2d_scalar_pool_raises():
-    cfg = TemplateConvNetConfig2d(
+    cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3],
         pool_kernel_sizes=2,
         out_channels_sizes=[4],
@@ -199,7 +199,7 @@ def test_template_convnet2d_scalar_pool_raises():
 
 def test_template_convnet2d_output_shape_simple():
     # Single-block network: check computed output size matches formula
-    cfg = TemplateConvNetConfig2d(
+    cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3],
         pool_kernel_sizes=[2],
         out_channels_sizes=[4],
@@ -259,6 +259,20 @@ def test_dropout_ensembling_forward_eval_mode_batch_size_1():
     assert wrapper.last_median.shape == (1, base.linear.out_features)
     assert wrapper.last_variance.shape == (1, base.linear.out_features)
 
+def test_dropout_ensembling_randomness():
+    base = DummyModel()
+    wrapper = DropoutEnsemblingNetworkWrapper(base, ensemble_size=5)
+    wrapper.eval()
+    x = torch.randn(1, 3)
+    # Perform two forward passes; due to randomness from dropout,
+    # the aggregated mean outputs should differ between passes.
+    _ = wrapper(x)
+    mean1 = wrapper.last_mean.clone()
+    _ = wrapper(x)
+    mean2 = wrapper.last_mean.clone()
+    # Assert that the means are not exactly equal.
+    assert not torch.allclose(mean1, mean2, atol=1e-6), "Outputs are identical across trials, dropout randomness not observed."
+
 def test_dropout_ensembling_forward_eval_mode_batch_size_gt1():
     base = DummyModel()
     wrapper = DropoutEnsemblingNetworkWrapper(base, ensemble_size=4)
@@ -271,5 +285,175 @@ def test_dropout_ensembling_forward_eval_mode_batch_size_gt1():
     assert wrapper.last_median.shape == (3, base.linear.out_features)
     assert wrapper.last_variance.shape == (3, base.linear.out_features)
 
+# %% TemplateFullyConnectedNetConfig tests
+def test_template_fcnet_config_valid_defaults():
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[10, 20, 30],
+        input_layer_size=5,
+        output_layer_size=15,
+        regularized_param=0.1,
+        regularization_layer_type="dropout",
+        dropout_ensemble_size=3
+    )
+    assert cfg.out_channels_sizes == [10, 20, 30]
+    assert cfg.input_layer_size == 5
+    assert cfg.output_layer_size == 15
+    assert cfg.regularized_param == 0.1
+    assert cfg.regularization_layer_type == "dropout"
+    assert cfg.dropout_ensemble_size == 3
+
+def test_template_fcnet_config_out_channels_none():
+    with pytest.raises(ValueError) as exc:
+        TemplateFullyConnectedNetConfig(
+            input_layer_size=4
+        )
+    assert "out_channels_sizes" in str(exc.value)
+
+def test_template_fcnet_config_input_layer_none():
+    with pytest.raises(ValueError) as exc:
+        TemplateFullyConnectedNetConfig(
+            out_channels_sizes=[5, 6]
+        )
+    assert "input_layer_size" in str(exc.value)
+
+def test_template_fcnet_config_output_layer_defaults_to_last(capsys):
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[7, 8, 9],
+        input_layer_size=3
+    )
+    captured = capsys.readouterr()
+    assert cfg.output_layer_size == 9
+    assert "Setting to last value of 'out_channels_sizes'" in captured.out
+
+def test_template_fcnet_config_dropout_ensemble_invalid():
+    with pytest.raises(ValueError):
+        TemplateFullyConnectedNetConfig(
+            out_channels_sizes=[4, 5],
+            input_layer_size=2,
+            dropout_ensemble_size=2
+        )
+
+def test_template_fcnet_config_input_skip_index_length_exceeds():
+    with pytest.raises(ValueError) as exc:
+        TemplateFullyConnectedNetConfig(
+            out_channels_sizes=[3, 4],
+            input_layer_size=2,
+            input_skip_index=list(range(10))
+        )
+    assert "input_skip_index" in str(exc.value)
+
+def test_template_fcnet_config_input_skip_index_valid():
+    skip_idx = [0, 1]
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[3, 4, 5],
+        input_layer_size=2,
+        input_skip_index=skip_idx
+    )
+    assert cfg.input_skip_index == skip_idx
+
+# %% TemplateFullyConnectedNet tests
+def test_fcnet_forward_simple():
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[8, 4],
+        input_layer_size=3,
+        output_layer_size=4,
+    )
+    model = TemplateFullyConnectedNet(cfg)
+    x = torch.randn(5, 3)
+    out = model(x)
+    assert isinstance(out, torch.Tensor)
+    assert out.shape == (5, 4)
+
+def test_fcnet_forward_with_empty_skip():
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[6],
+        input_layer_size=2,
+        output_layer_size=6,
+    )
+    model = TemplateFullyConnectedNet(cfg)
+    x = torch.randn(4, 2)
+    skips = torch.empty(0, 2)
+    out = model((x, skips))
+    # skip empty => no change in batch size
+    assert out.shape == (4, 6)
+
+def test_fcnet_forward_with_nonempty_skip():
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[5],
+        input_layer_size=2,
+        output_layer_size=5,
+    )
+    model = TemplateFullyConnectedNet(cfg)
+    x = torch.randn(3, 2)
+    skips = torch.randn(2, 2)
+    out = model((x, skips))
+    # batch size increases by len(skips)
+    assert out.shape == (5, 5)
+def test_net_forward_shape_and_layers():
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[7, 5],
+        input_layer_size=4,
+        regularization_layer_type="none",
+    )
+    model = TemplateFullyConnectedNet(cfg)
+    # Expect layers: Flatten, Linear(4->7), PReLU, Linear(7->5)
+    x = torch.randn(2, 4)
+    out = model(x)
+    assert isinstance(out, torch.Tensor)
+    assert out.shape == (2, 5)
+
+# %% DropoutEnsemblingNetworkWrapper tests with TemplateFullyConnectedNet
+def test_wrapper_requires_nn_module():
+    with pytest.raises(TypeError):
+        DropoutEnsemblingNetworkWrapper(model=123, ensemble_size=5)
+
+def test_wrapper_get_last_stats_no_forward():
+    # wrap a simple linear model
+    base = nn.Linear(2, 2)
+    wrapper = DropoutEnsemblingNetworkWrapper(base, ensemble_size=3)
+    with pytest.raises(ValueError):
+        wrapper.get_last_stats()
+
+
+@pytest.mark.parametrize("batch_size", [1, 4])
+def test_wrapper_train_and_eval_stats(batch_size):
+    torch.manual_seed(0)
+    base = nn.Sequential(nn.Linear(2, 2), nn.ReLU(), nn.Dropout(0.5))
+    wrapper = DropoutEnsemblingNetworkWrapper(base, ensemble_size=10)
+    x = torch.randn(batch_size, 2)
+
+    # in training mode: no ensembling, output equals base(x)
+    wrapper.train()
+    out_train = wrapper(x)
+    mean_t, med_t, var_t = wrapper.get_last_stats()
+    assert torch.allclose(out_train, mean_t)
+    assert torch.allclose(out_train, med_t)
+    assert torch.all(var_t == 0), "Variance in training should be zero"
+
+    # in eval mode: ensembling enabled
+    wrapper.eval()
+    out_eval = wrapper(x)
+    m, med, v = wrapper.get_last_stats()
+    # mean returned should match out_eval
+    assert torch.allclose(out_eval, m)
+    # median and variance should have same shape
+    assert med.shape == out_eval.shape
+    assert v.shape == out_eval.shape
+
+def test_build_dropout_ensemble_static():
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[4],
+        input_layer_size=2,
+        regularization_layer_type="dropout",
+        regularized_param=0.2,
+        dropout_ensemble_size=5,
+    )
+    wrapper = TemplateFullyConnectedNet.build_dropout_ensemble(
+        TemplateFullyConnectedNet, cfg)
+    assert isinstance(wrapper, DropoutEnsemblingNetworkWrapper)
+    # ensemble size propagated
+    assert wrapper.ensemble_size == 5
+
+# %% MANUAL CALL
 if __name__ == "__main__":
     pytest.main([__file__])
