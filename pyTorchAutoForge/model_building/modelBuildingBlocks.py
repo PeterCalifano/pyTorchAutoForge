@@ -893,8 +893,6 @@ class NormalizeImg(nn.Module):
         return x / self.normaliz_value  # [0, normaliz_value] -> [0, 1]
 
 # Define the Denormalize layer
-
-
 class DenormalizeImg(nn.Module):
     def __init__(self, normaliz_factor: float = 255.0):
         super(DenormalizeImg, self).__init__()

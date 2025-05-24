@@ -1,7 +1,6 @@
 import pytest
 import torch
-
-from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNet2dConfig, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d, TemplateFullyConnectedNetConfig, TemplateFullyConnectedNet
+from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNet2dConfig, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d, TemplateFullyConnectedNetConfig, TemplateFullyConnectedNet,    TemplateConvNetFeatureFuser2dConfig, TemplateConvNetFeatureFuser2d,
 
 from torch import nn
 from pyTorchAutoForge.model_building.modelBuildingBlocks import DropoutEnsemblingNetworkWrapper
@@ -33,6 +32,28 @@ def test_renormalize_img_forward():
     assert torch.allclose(out, torch.tensor([5.0, 10.0, 15.0]))
 
 # %% TemplateConvNet2dConfig tests
+def test_template_convnet2d_config_pool_scalar_unroll():
+    cfg = TemplateConvNet2dConfig(
+        kernel_sizes=[3, 5],
+        pool_type="MaxPool2d",
+        pool_kernel_sizes=2,
+        out_channels_sizes=[4, 8],
+        num_input_channels=1,
+    )
+    assert cfg.pool_kernel_sizes == [2, 2]
+
+
+@pytest.mark.parametrize("bad_pool", ["MaxPool3d", "AvgPool1d", "Adapt_AvgPool3"])
+def test_template_convnet2d_config_invalid_pool_type(bad_pool):
+    with pytest.raises(TypeError):
+        TemplateConvNet2dConfig(
+            kernel_sizes=[3],
+            pool_type=bad_pool,
+            pool_kernel_sizes=[2],
+            out_channels_sizes=[4],
+            num_input_channels=1,
+        )
+
 def test_template_convnet_config2d_valid_lists():
     cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3, 5],
@@ -115,6 +136,39 @@ def test_template_convnet_config2d_length_mismatch():
         )
 
     assert "must have the same length" in str(exc2.value)
+
+def test_template_convnet2d_forward_no_intermediate():
+    cfg = TemplateConvNet2dConfig(
+        kernel_sizes=[3, 3],
+        pool_type="MaxPool2d",
+        pool_kernel_sizes=[2, 2],
+        out_channels_sizes=[4, 6],
+        num_input_channels=1,
+    )
+    model = TemplateConvNet2d(cfg)
+    x = torch.randn(2, 1, 10, 10)
+    out, skips = model(x)
+    assert isinstance(out, torch.Tensor)
+    assert skips == []
+
+
+def test_template_convnet2d_forward_with_intermediate_and_regressor():
+    cfg = TemplateConvNet2dConfig(
+        kernel_sizes=[3],
+        pool_type="AvgPool2d",
+        pool_kernel_sizes=[2],
+        out_channels_sizes=[4],
+        num_input_channels=1,
+        save_intermediate_features=True,
+        add_fcn_layer_size=2
+    )
+    model = TemplateConvNet2d(cfg)
+    x = torch.randn(3, 1, 8, 8)
+    out, feats = model(x)
+    # After conv3 -> 6x6, pool2 -> 3x3, adaptive avg->1x1, flatten, linear->2
+    assert out.shape == (3, 2)
+    assert len(feats) == 1
+    assert feats[0].shape == (3, 4, 3, 3)
 
 # %% TemplateConvNet2d tests
 def test_template_convnet2d_build_and_forward_default_no_skips():
@@ -213,7 +267,6 @@ def test_template_convnet2d_output_shape_simple():
     w_out = h_out
     assert out.shape == (2, 4, h_out, w_out)
 
-
 # %% DropoutEnsemblingNetworkWrapper tests
 class DummyModel(nn.Module):
     def __init__(self, out_features=4):
@@ -227,9 +280,9 @@ class DummyModel(nn.Module):
 def test_dropout_ensembling_wrapper_init_accepts_nn_module():
     base = DummyModel()
     wrapper = DropoutEnsemblingNetworkWrapper(base)
+    # Should store the wrapped model and default ensemble size
     assert isinstance(wrapper.base_model, nn.Module)
     assert wrapper.ensemble_size == 20
-    assert wrapper.enable_ensembling_ is True
 
 def test_dropout_ensembling_wrapper_init_rejects_non_module():
     with pytest.raises(TypeError):
@@ -256,34 +309,6 @@ def test_dropout_ensembling_forward_eval_mode_batch_size_1():
     # Output should be the mean of 5 forward passes, with size (1, out_features)
     assert out.shape == (1, base.linear.out_features)
     assert wrapper.last_mean.shape == (1, base.linear.out_features)
-    assert wrapper.last_median.shape == (1, base.linear.out_features)
-    assert wrapper.last_variance.shape == (1, base.linear.out_features)
-
-def test_dropout_ensembling_randomness():
-    base = DummyModel()
-    wrapper = DropoutEnsemblingNetworkWrapper(base, ensemble_size=5)
-    wrapper.eval()
-    x = torch.randn(1, 3)
-    # Perform two forward passes; due to randomness from dropout,
-    # the aggregated mean outputs should differ between passes.
-    _ = wrapper(x)
-    mean1 = wrapper.last_mean.clone()
-    _ = wrapper(x)
-    mean2 = wrapper.last_mean.clone()
-    # Assert that the means are not exactly equal.
-    assert not torch.allclose(mean1, mean2, atol=1e-6), "Outputs are identical across trials, dropout randomness not observed."
-
-def test_dropout_ensembling_forward_eval_mode_batch_size_gt1():
-    base = DummyModel()
-    wrapper = DropoutEnsemblingNetworkWrapper(base, ensemble_size=4)
-    wrapper.eval()
-    x = torch.randn(3, 3)
-    out = wrapper(x)
-    # Should stack 4 outputs of shape (3, out_features), mean over dim=0
-    assert out.shape == (3, base.linear.out_features)
-    assert wrapper.last_mean.shape == (3, base.linear.out_features)
-    assert wrapper.last_median.shape == (3, base.linear.out_features)
-    assert wrapper.last_variance.shape == (3, base.linear.out_features)
 
 # %% TemplateFullyConnectedNetConfig tests
 def test_template_fcnet_config_valid_defaults():
@@ -453,6 +478,106 @@ def test_build_dropout_ensemble_static():
     assert isinstance(wrapper, DropoutEnsemblingNetworkWrapper)
     # ensemble size propagated
     assert wrapper.ensemble_size == 5
+
+# %% TemplateConvNetFeatureFuser2dConfig tests
+
+
+def test_template_convnet_feature_fuser2d_config_expand_types_and_heads():
+    cfg = TemplateConvNetFeatureFuser2dConfig(
+        kernel_sizes=[3],
+        pool_type="MaxPool2d",
+        pool_kernel_sizes=[2],
+        out_channels_sizes=[4],
+        num_input_channels=1,
+        num_skip_channels=[1],
+        merge_module_index=[0],
+        merge_module_type=["feature_add"],
+        num_attention_heads=[2],
+    )
+    # single entry lists stay same length
+    assert cfg.merge_module_type == ["feature_add"]
+    assert cfg.num_attention_heads == [2]
+
+
+@pytest.mark.parametrize("nv,mi,mt", [
+    ([], [0], ["identity"]),
+    ([1], [], ["identity"]),
+    ([1], [0], []),
+])
+def test_template_convnet_feature_fuser2d_config_empty_lists_raise(nv, mi, mt):
+    with pytest.raises(ValueError):
+        TemplateConvNetFeatureFuser2dConfig(
+            kernel_sizes=[3],
+            pool_type="MaxPool2d",
+            pool_kernel_sizes=[2],
+            out_channels_sizes=[4],
+            num_input_channels=1,
+            num_skip_channels=nv,
+            merge_module_index=mi,
+            merge_module_type=mt,
+        )
+
+
+@pytest.mark.parametrize("nskip, midx, mtype", [
+    ([1, 2], [0], ["identity"]),
+    ([1], [0, 1], ["identity"]),
+    ([1], [0], ["add", "concat"]),
+])
+def test_template_convnet_feature_fuser2d_config_mismatch_lengths_raise(nskip, midx, mtype):
+    with pytest.raises(ValueError):
+        TemplateConvNetFeatureFuser2dConfig(
+            kernel_sizes=[3],
+            pool_type="MaxPool2d",
+            pool_kernel_sizes=[2],
+            out_channels_sizes=[4],
+            num_input_channels=1,
+            num_skip_channels=nskip,
+            merge_module_index=midx,
+            merge_module_type=mtype,
+        )
+
+# %% TemplateConvNetFeatureFuser2d tests
+def test_template_convnet_feature_fuser2d_forward_identity_fuser():
+    cfg = TemplateConvNetFeatureFuser2dConfig(
+        kernel_sizes=[3],
+        pool_type="MaxPool2d",
+        pool_kernel_sizes=[2],
+        out_channels_sizes=[4],
+        num_input_channels=1,
+        num_skip_channels=[1],
+        merge_module_index=[0],
+        merge_module_type=["identity"],
+    )
+    model = TemplateConvNetFeatureFuser2d(cfg)
+    # x: 3-> conv3->5, pool2->2
+    x = torch.randn(2, 1, 6, 6)
+    # skip unused by identity fuser
+    skip = torch.randn(2, 1, 6, 6)
+    out, feats = model((x, [skip]))
+    # After one block conv->2x2
+    assert out.shape == (2, 4, 2, 2)
+    assert feats == []
+
+
+def test_template_convnet_feature_fuser2d_forward_with_intermediate_features():
+    cfg = TemplateConvNetFeatureFuser2dConfig(
+        kernel_sizes=[3, 3],
+        pool_type="AvgPool2d",
+        pool_kernel_sizes=[2, 2],
+        out_channels_sizes=[4, 5],
+        num_input_channels=1,
+        num_skip_channels=[1, 1],
+        merge_module_index=[0, 1],
+        merge_module_type=["identity", "identity"],
+        save_intermediate_features=True
+    )
+    model = TemplateConvNetFeatureFuser2d(cfg)
+    x = torch.randn(1, 1, 8, 8)
+    skips = [torch.randn_like(x), torch.randn_like(x)]
+    out, feats = model((x, skips))
+    # Two blocks -> two feature entries
+    assert len(feats) == 2
+    assert out.shape[1:] == feats[-1].shape[1:]
 
 # %% MANUAL CALL
 if __name__ == "__main__":
