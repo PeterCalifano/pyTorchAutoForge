@@ -142,3 +142,109 @@ def ReloadModelFromOptuna(trial: optuna.trial.FrozenTrial, other_params: dict, m
     ValidateDictLoading(model, modelName, filepath)
 
     return model
+
+
+# EXPERIMENTAL: DEVNOTE: test definition of template DNN using build_activation_layer factory function
+
+
+class TemplateFullyConnectedDeepNetConfig_experimental(AutoForgeModule):
+    '''Template class for a fully parametric Deep NN model in PyTorch. Inherits from AutoForgeModule class (nn.Module enhanced class).'''
+
+    def __init__(self, parametersConfig) -> None:
+        super().__init__()
+
+        # TODO try to replace with build_normalization_layer function
+        useBatchNorm = parametersConfig.get('useBatchNorm', False)
+        # Can be either scalar (apply to all) or list (apply to specific layers)
+        alphaDropCoeffLayers = parametersConfig.get(
+            'alphaDropCoeffLayers', None)
+        # alphaLeaky = parametersConfig.get('alphaLeaky', 0)
+        out_channels_sizes = parametersConfig.get('out_channels_sizes', [])
+
+        if alphaDropCoeffLayers is not None:
+            assert len(alphaDropCoeffLayers) == len(out_channels_sizes) - \
+                1, 'Length of alphaDropCoeffLayers must match number of layers in out_channels_sizes'
+
+        # Define activation function parameters (default: PReLU)
+        self.activation_fcn_name = parametersConfig.get(
+            'activation_fcn_name', 'PReLU')
+        act_fcn_params_dict = parametersConfig.get(
+            'act_fcn_params_dict', {'num_parameters': 'all'})
+
+        # Initialize input size for first layer
+        input_size = parametersConfig.get('input_size')
+
+        # Model parameters
+        self.out_channels_sizes = out_channels_sizes
+        self.useBatchNorm = useBatchNorm
+
+        self.num_layers = len(self.out_channels_sizes)
+
+        # Model architecture
+        self.layers = nn.ModuleList()
+        idLayer = 0
+
+        # Fully Connected autobuilder
+        self.layers.append(nn.Flatten())
+
+        for i in range(idLayer, self.num_layers+idLayer-1):
+
+            # Build Linear layer
+            self.layers.append(
+                nn.Linear(input_size, self.out_channels_sizes[i], bias=True))
+
+            # Build activation layer
+            if self.activation_fcn_name == 'PReLU':
+                act_fcn_params_dict['num_parameters'] = self.out_channels_sizes[i]
+
+            self.layers.append(build_activation_layer(
+                self.activation_fcn_name, False, **act_fcn_params_dict))
+
+            # Add dropout layer if required
+            if alphaDropCoeffLayers is not None:
+                if len(alphaDropCoeffLayers) > 0 and len(alphaDropCoeffLayers) == 1:
+                    # Add to all layers
+                    self.layers.append(nn.Dropout(alphaDropCoeffLayers[0]))
+
+                if alphaDropCoeffLayers[i] > 0:
+                    # Add to layer as specified by user
+                    self.layers.append(nn.Dropout(alphaDropCoeffLayers[i]))
+
+            # Add batch normalization layer if required
+            if self.useBatchNorm:
+                self.layers.append(nn.BatchNorm1d(
+                    self.out_channels_sizes[i], eps=1E-5, momentum=0.1, affine=True))
+
+            # Update input size for next layer
+            input_size = self.out_channels_sizes[i]
+
+        # Add output layer
+        self.layers.append(
+            nn.Linear(input_size, self.out_channels_sizes[-1], bias=True))
+
+        # Initialize weights of layers
+        self.__initialize_weights__()
+
+    def __initialize_weights__(self):
+        '''Weights Initialization function for layers of the model. Xavier --> layers with tanh and sigmoid, Kaiming --> layers with ReLU activation'''
+
+        for layer in self.layers:
+
+            # Check if layer is a Linear layer
+            if isinstance(layer, nn.Linear):
+                # Apply Kaiming initialization
+                if self.activation_fcn_name.lower() in ['relu', 'leakyrelu', 'prelu']:
+                    nn.init.kaiming_uniform_(
+                        layer.weight, nonlinearity='leaky_relu')
+                elif self.activation_fcn_name.lower() in ['tanh', 'sigmoid']:
+                    nn.init.xavier_uniform_(layer.weight)
+
+                if layer.bias is not None:
+                    # Initialize bias to zero if present
+                    nn.init.constant_(layer.bias, 0)
+
+    def forward(self, x):
+        # Perform forward pass iterating through all layers of DNN
+        for layer in self.layers:
+            x = layer(x)
+        return x
