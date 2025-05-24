@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, TemplateConvNetConfig2d, TemplateNetBaseConfig, NormalizeImg, ReNormalizeImg, TemplateConvNet2d
+from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, TemplateConvNetConfig2d, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d
 from torch import nn
 from pyTorchAutoForge.model_building.modelBuildingBlocks import DropoutEnsemblingNetworkWrapper
 
