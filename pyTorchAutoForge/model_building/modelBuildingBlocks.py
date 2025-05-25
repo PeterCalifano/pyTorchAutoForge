@@ -472,7 +472,7 @@ class TemplateConvNet2d(AutoForgeModule):
 class FeatureMapFuserConv2dBlock(nn.Module):
     def __init__(self, 
                  fuser_module : FeatureMapFuser, 
-                 conv2d_block:ConvolutionalBlock2d):
+                 conv2d_block : ConvolutionalBlock2d):
         super().__init__()
         self.fuser = fuser_module
         self.conv = conv2d_block

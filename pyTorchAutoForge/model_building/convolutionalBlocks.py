@@ -305,7 +305,7 @@ class FeatureMapFuserConfig():
     Configuration for a feature-map fusion operation.
 
     Attributes:
-        fuser_type: 'feature_add', 'channel_concat', or 'multihead_attention'
+        fuser_module_type: 'feature_add', 'channel_concat', or 'multihead_attention'
         in_channels: number of channels in x
         num_skip_channels: channels in skip tensor (required for 'concat')
         num_attention_heads: number of heads for attention (only for 'attn')
@@ -313,7 +313,7 @@ class FeatureMapFuserConfig():
     in_channels: int
     num_skip_channels: int
     num_dims : int = 4
-    fuser_type: fuser_type = "channel_concat"
+    fuser_module_type: fuser_type = "channel_concat"
     num_attention_heads: int | None = None
     resample_before_attention : bool = False
 
@@ -353,7 +353,7 @@ class FeatureMapFuser(nn.Module):
                 """
                 return x_feat1
             
-            self.fuser = _identity_fuser 
+            self.fuser : Callable = _identity_fuser 
             return
 
         # TODO does conv/attention requires upsampling of one of the two entries?
@@ -392,7 +392,7 @@ class FeatureMapFuser(nn.Module):
                 out: torch.Tensor = x_feat1 + _resample_xfeat2(x_feat1, x_feat2)
                 return out
 
-            self.fuser : Callable = _feature_add_fuser
+            self.fuser = _feature_add_fuser
 
         elif fuser_type == 'channel_concat':
             assert num_skip_channels is not None, "num_skip_channels arg is required for concat"
@@ -524,7 +524,7 @@ def _feature_map_fuser_factory(config: FeatureMapFuserConfig,
         according to the specified fusion method.
     """
     return FeatureMapFuser(num_dims=config.num_dims,
-                           fuser_type=config.fuser_type,
+                           fuser_type=config.fuser_module_type,
                            in_channels=config.in_channels,
                            num_skip_channels=config.num_skip_channels,
                            num_attention_heads=config.num_attention_heads,
