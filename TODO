@@ -20,7 +20,7 @@
   - [x] Update Trainer to save checkpoints in subfolder with mlflow experiment name
   - [ ] Upgrade translation augmentation to support translation of multiple (key)points
   - [ ] Implement custom rotation augmentation to support rotation of multiple (key)points, through warping
-  - [ ] Update parametric template of CNN class for different uses
+  - [x] Update parametric template of CNN class for different uses
   - [ ] Add semi-automatic function to run model inference on sample input and save to disk with resulting predictions
   - [x] Implement Scaler adapter to store scaling factors for standalone input scaling (directly in forward)
   - [x] Add prototype of automatic MC dropout wrapper for NNs with dropout layers
