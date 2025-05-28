@@ -258,6 +258,7 @@ class ModelHandlerONNx:
         if onnx_filepath == "": 
             onnx_filepath = self.onnx_filepath
 
+        # BUG onnx_filepath appears to be incorrect (unneeded trailing 0)
         self.onnx_model = onnx.load(onnx_filepath)
 
         return self.onnx_model
