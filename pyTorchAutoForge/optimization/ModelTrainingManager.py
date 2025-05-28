@@ -94,6 +94,7 @@ from enum import Enum
 
 # Key class to use tensorboard with PyTorch. VSCode will automatically ask if you want to load tensorboard in the current session.
 import torch.optim as optim
+import inspect
 
 
 class TaskType(Enum):
@@ -442,14 +443,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         if self.model is None:
             raise ValueError('Model is not defined. Cannot reinstantiate optimizer.')
-
         optim_class = self.optimizer.__class__
         optim_params = self.optimizer.param_groups[0]
-        optimizer_hyperparams = {key: value for key, value in optim_params.items() if (
-            (key != 'params') and (key != 'initial_lr'))}
         
-        self.optimizer = optim_class(
-            self.model.parameters(), **optimizer_hyperparams)
+        # Determine which keys __init__ actually accepts
+        class_signature_ = inspect.signature(optim_class.__init__)
+        valid_keys = set(class_signature_.parameters) - {'self', 'params'}
+        
+        filtered_params = {k: v for k, v in optim_params.items() if k in valid_keys}
+
+        # Reinstantiate with valid kwargs arguments
+        self.optimizer = optim_class(self.model.parameters(), **filtered_params)
 
         if self.lr_scheduler is not None:
             # Reset initial_lr of each group
