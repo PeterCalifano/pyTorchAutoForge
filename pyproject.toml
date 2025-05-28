@@ -13,7 +13,7 @@ authors = [
     { name = "Pietro Califano (PC)", email = "petercalifano.gs@gmail.com" }
 ]
 dependencies = [
-    "torch-tb-profiler<=0.4.3",
+    "torch-tb-profiler",
     "scikit-learn<=1.6.1",
     "dacite",
     "captum",
@@ -21,25 +21,26 @@ dependencies = [
     "numpy<=2.2.1",
     "onnx<=1.17.0",
     "onnxscript<=0.2.0",
-    "onnxruntime<=1.20.0",
+    "onnxruntime<=1.22.0",
     "inputimeout",
-    "optuna<=4.1.1",
-    "mlflow<=2.19.1",
-    "kornia<=0.7.4",
-    "albumentations<=1.4.25",
+    "optuna<=4.3.0",
+    "mlflow",
+    "kornia",
+    "albumentations",
     "pytest<=8.3.5",
-    "mypy<=1.15.0",
+    "mypy",
     "seaborn<=0.13.3",
     "matplotlib<=3.10.0",
-    "colorama<=0.4.6",
+    "colorama",
     "msgpack<=1.1.0",
-    "torchinfo<=1.8.0",
-    "torch<=2.6.0; platform_machine == 'x86_64'", # Only for x86_64. Jetson requires nvidia version
-    "torchvision<=0.21.0; platform_machine == 'x86_64'", # Only for x86_64. Jetson requires nvidia version
+    "torchinfo",
+    "torch<=2.7.0; platform_machine == 'x86_64'", # Only for x86_64. Jetson requires nvidia version
+    "torchvision<=0.22.0; platform_machine == 'x86_64'", # Only for x86_64. Jetson requires nvidia version
     "lietorch<=0.6.2.post1; platform_machine == 'x86_64'",
     "norse; platform_machine == 'x86_64'",
     "tonic; platform_machine == 'x86_64'",
-    "expelliarmus; platform_machine == 'x86_64'"
+    "expelliarmus; platform_machine == 'x86_64'",
+    "statsmodels"
 ]
 
 classifiers=[
@@ -52,7 +53,7 @@ classifiers=[
 
 # pyproject.toml (if using PEP 621)
 [project.optional-dependencies]
-cuda_related = [
+cuda_all = [
     "pynvml; platform_machine == 'x86_64'", 
     "pycuda; platform_machine == 'x86_64'", 
 ]
