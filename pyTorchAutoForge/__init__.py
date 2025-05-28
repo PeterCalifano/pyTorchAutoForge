@@ -1,5 +1,5 @@
 # Import scripts of the library at initialization
-
+# TODO remove * imports, no need to have these here, user must not be able to import everything directly from pyTorchAutoForge handle
 from .utils import *
 from .optimization import *
 from .model_building import *

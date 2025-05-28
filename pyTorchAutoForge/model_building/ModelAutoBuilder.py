@@ -3,7 +3,6 @@ import numpy as np
 from torch import nn, Tensor, cat
 # Auxiliar functions
 
-from pyTorchAutoForge.model_building.modelBuildingFunctions import *
 inputAllowedTypes = tuple | list | np.ndarray | Tensor
 
 
@@ -167,8 +166,8 @@ class MultiHeadRegressor(nn.Module):
 # %% ModelAutoBuilder class implementation
 
 class ModelAutoBuilder():
-    def __init__(self, modelConfig: ModelConfig):
-        self.modelConfig = modelConfig
+    def __init__(self, cfg):
+        self.cfg = cfg
 
     def build(self):
         pass  # TODO
