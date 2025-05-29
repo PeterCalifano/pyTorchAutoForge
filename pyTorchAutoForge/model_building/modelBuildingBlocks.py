@@ -407,9 +407,8 @@ class TemplateConvNet2d(AutoForgeModule):
             in_channels = out_channels
             idLayer += 1
 
+        self.regressor_sequential = nn.ModuleList()
         if cfg.add_fcn_layer_size is not None:
-
-            self.regressor_sequential = nn.ModuleList()
             if in_channels != cfg.add_fcn_layer_size:
                 # Add convolutional "expander"
                 self.regressor_sequential.append(
