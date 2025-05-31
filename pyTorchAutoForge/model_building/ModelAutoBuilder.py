@@ -144,20 +144,28 @@ class MultiHeadRegressor(nn.Module):
 
         # Define function to pack output depending on the output_mode
         if self.output_mode == EnumMultiHeadOutMode.Concatenate:
-
-            def pack_output(predictions: list):
-                # Concatenate along 2nd dimension
-                return cat(tensors=predictions, dim=1)
+            self.pack_output = self._pack_output_concat
 
         elif self.output_mode == EnumMultiHeadOutMode.Append:
-            def pack_output(predictions: list):
-                return predictions
-
+            self.pack_output = self._pack_output_append
         else:
             raise NotImplementedError(
                 f"Output mode {self.output_mode} not implemented yet >.<")
 
-        self.pack_output = pack_output
+
+    def _pack_output_append(self, predictions: list):
+        """
+        Packs the predictions into a list. Used when the output mode is set to Append.
+        """
+        return predictions
+   
+    def _pack_output_concat(self, predictions: list):
+        """
+        Packs the predictions into a single tensor by concatenating them along the second dimension.
+        Used when the output mode is set to Concatenate.
+        """
+        # Concatenate along 2nd dimension
+        return cat(tensors=predictions, dim=1)
 
     def forward(self, X):
 
