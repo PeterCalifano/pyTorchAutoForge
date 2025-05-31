@@ -2,6 +2,7 @@ from enum import Enum
 import numpy as np
 from torch import nn, Tensor, cat
 # Auxiliar functions
+from typing import Any
 
 inputAllowedTypes = tuple | list | np.ndarray | Tensor
 
@@ -38,8 +39,6 @@ def ComputePooling2dOutputSize(inputSize: inputAllowedTypes, kernelSize: int = 2
     return int(((inputSize[0] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1), int(((inputSize[1] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1)
 
 # ConvBlock 2D and flatten sizes computation (SINGLE BLOCK)
-
-
 def ComputeConvBlockOutputSize(inputSize: inputAllowedTypes, outChannelsSize: int,
                                convKernelSize: int = 3, poolingkernelSize: int = 2,
                                convStrideSize: int = 1, poolingStrideSize: int | None = None,
@@ -69,7 +68,7 @@ def ComputeConvBlockOutputSize(inputSize: inputAllowedTypes, outChannelsSize: in
 
     return convBlockOutputSize, conv2dFlattenOutputSize
 
-
+# TODO function requiring extensive rework
 def AutoComputeConvBlocksOutput(self, kernelSizes: inputAllowedTypes, poolingKernelSize: inputAllowedTypes | None = None):
     """
     Automatically compute the output size of a series of ConvBlock layers.
@@ -105,29 +104,24 @@ def AutoComputeConvBlocksOutput(self, kernelSizes: inputAllowedTypes, poolingKer
 
     return convBlockOutputSize
 
-
-
 # %% MultiHeadRegressor class implementation
 class EnumMultiHeadOutMode(Enum):
     Concatenate = 0
     Append = 1
-    Sum = 2
-    Average = 3
+    Sum = 2 # TODO not implemented yet
+    Average = 3 # TODO not implemented yet
 
-
+# TODO (PC) rework to make class more ONNx friendly
+# Specifically: make pack_output definition in __init__ to remove if statement in it
 class MultiHeadRegressor(nn.Module):
-    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module | dict, output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate, *args, **kwargs):
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module, output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate, *args, **kwargs):
         
         # Initialize nn.Module base class
         super(MultiHeadRegressor, self).__init__()
         self.heads = nn.ModuleList()
         self.output_mode = output_mode
 
-        if isinstance(model_heads, dict):
-            raise NotImplementedError(
-                "Dictionary input not supported yet. TBD if a class for constraining how the model should be specified is required, likely")
-
-        elif isinstance(model_heads, nn.ModuleList):
+        if isinstance(model_heads, nn.ModuleList):
             # Unpack list and append to heads module List
             for module in model_heads:
                 self.heads.append(module)
@@ -141,30 +135,33 @@ class MultiHeadRegressor(nn.Module):
         elif isinstance(model_heads, nn.Module):
             self.heads.append(model_heads)
 
+        # Define function to pack output depending on the output_mode
+        if self.output_mode == EnumMultiHeadOutMode.Concatenate:  
+
+            def pack_output(predictions: list):
+                return cat(tensors=predictions, dim=1) # Concatenate along 2nd dimension
+
+        elif self.output_mode == EnumMultiHeadOutMode.Append:
+            def pack_output(predictions: list):
+                return predictions
+
+        else:
+            raise NotImplementedError(f"Output mode {self.output_mode} not implemented yet >.<")
+
+        self.pack_output = pack_output
+
     def forward(self, X):
 
         # Perform forward pass for each head and append to list
-        predictions = []
+        predictions = []  # TODO this should be initializer statically based on output specifications
 
         for head in self.heads:
             predictions.append(head(X))
 
         return self.pack_output(predictions)
 
-    def pack_output(self, predictions: list):
 
-        # Define output object depending on self.output_mode
-        if self.output_mode == EnumMultiHeadOutMode.Concatenate:
-            return cat(predictions, 1)  # Concatenate along 2nd dimension
-
-        if self.output_mode == EnumMultiHeadOutMode.Append:
-            return predictions
-
-        else:
-            raise NotImplementedError(f"Output mode {self.output_mode} not implemented yet >.<")
-
-# %% ModelAutoBuilder class implementation
-
+# %% ModelAutoBuilder class implementation (# DEVNOTE TBD, old idea, not sure it was a good one)
 class ModelAutoBuilder():
     def __init__(self, cfg):
         self.cfg = cfg
