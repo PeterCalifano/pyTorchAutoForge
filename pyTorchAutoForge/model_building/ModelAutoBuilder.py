@@ -39,11 +39,12 @@ def ComputePooling2dOutputSize(inputSize: inputAllowedTypes, kernelSize: int = 2
     return int(((inputSize[0] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1), int(((inputSize[1] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1)
 
 # ConvBlock 2D and flatten sizes computation (SINGLE BLOCK)
+
+
 def ComputeConvBlockOutputSize(inputSize: inputAllowedTypes, outChannelsSize: int,
                                convKernelSize: int = 3, poolingkernelSize: int = 2,
                                convStrideSize: int = 1, poolingStrideSize: int | None = None,
                                convPaddingSize: int = 0, poolingPaddingSize: int = 0) -> tuple[tuple[int, int], int]:
-        
 
     # TODO: modify interface to use something like a dictionary with the parameters, to make it more fexible and avoid the need to pass all the parameters
     '''Compute output size and number of features maps (channels, i.e. volume) of a ConvBlock layer.
@@ -57,7 +58,8 @@ def ComputeConvBlockOutputSize(inputSize: inputAllowedTypes, outChannelsSize: in
         inputSize, convKernelSize, convStrideSize, convPaddingSize)
 
     if conv2dOutputSize[0] < poolingkernelSize or conv2dOutputSize[1] < poolingkernelSize:
-        raise ValueError('Pooling kernel size is larger than output size of Conv2d layer. Check configuration.')
+        raise ValueError(
+            'Pooling kernel size is larger than output size of Conv2d layer. Check configuration.')
 
     convBlockOutputSize = ComputePooling2dOutputSize(
         conv2dOutputSize, poolingkernelSize, poolingStrideSize, poolingPaddingSize)
@@ -69,6 +71,8 @@ def ComputeConvBlockOutputSize(inputSize: inputAllowedTypes, outChannelsSize: in
     return convBlockOutputSize, conv2dFlattenOutputSize
 
 # TODO function requiring extensive rework
+
+
 def AutoComputeConvBlocksOutput(self, kernelSizes: inputAllowedTypes, poolingKernelSize: inputAllowedTypes | None = None):
     """
     Automatically compute the output size of a series of ConvBlock layers.
@@ -93,8 +97,8 @@ def AutoComputeConvBlocksOutput(self, kernelSizes: inputAllowedTypes, poolingKer
     for idL in range(self.numOfConvLayers):
 
         convBlockOutputSize = ComputeConvBlockOutputSize(outputMapSize, self.outChannelsSizes[idL], kernelSizes[idL], poolingKernelSize[idL],
-                                                                              convStrideSize=1, poolingStrideSize=poolingKernelSize[idL],
-                                                                              convPaddingSize=0, poolingPaddingSize=0)
+                                                         convStrideSize=1, poolingStrideSize=poolingKernelSize[idL],
+                                                         convPaddingSize=0, poolingPaddingSize=0)
 
         print(('Output size of ConvBlock ID: {ID}: {outSize}').format(
             ID=idL, outSize=convBlockOutputSize))
@@ -108,14 +112,17 @@ def AutoComputeConvBlocksOutput(self, kernelSizes: inputAllowedTypes, poolingKer
 class EnumMultiHeadOutMode(Enum):
     Concatenate = 0
     Append = 1
-    Sum = 2 # TODO not implemented yet
-    Average = 3 # TODO not implemented yet
+    Sum = 2  # TODO not implemented yet
+    Average = 3  # TODO not implemented yet
 
-# TODO (PC) rework to make class more ONNx friendly
-# Specifically: make pack_output definition in __init__ to remove if statement in it
+
+# TODO (PC) move to modelBuildingBlocks module (or maybe a new one, it is already quite large)
 class MultiHeadRegressor(nn.Module):
-    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module, output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate, *args, **kwargs):
-        
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module,
+                 output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate,
+                 *args,
+                 **kwargs):
+
         # Initialize nn.Module base class
         super(MultiHeadRegressor, self).__init__()
         self.heads = nn.ModuleList()
@@ -136,17 +143,19 @@ class MultiHeadRegressor(nn.Module):
             self.heads.append(model_heads)
 
         # Define function to pack output depending on the output_mode
-        if self.output_mode == EnumMultiHeadOutMode.Concatenate:  
+        if self.output_mode == EnumMultiHeadOutMode.Concatenate:
 
             def pack_output(predictions: list):
-                return cat(tensors=predictions, dim=1) # Concatenate along 2nd dimension
+                # Concatenate along 2nd dimension
+                return cat(tensors=predictions, dim=1)
 
         elif self.output_mode == EnumMultiHeadOutMode.Append:
             def pack_output(predictions: list):
                 return predictions
 
         else:
-            raise NotImplementedError(f"Output mode {self.output_mode} not implemented yet >.<")
+            raise NotImplementedError(
+                f"Output mode {self.output_mode} not implemented yet >.<")
 
         self.pack_output = pack_output
 
@@ -168,6 +177,3 @@ class ModelAutoBuilder():
 
     def build(self):
         pass  # TODO
-
-
-
