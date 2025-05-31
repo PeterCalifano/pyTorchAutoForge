@@ -478,8 +478,7 @@ def test_build_dropout_ensemble_static():
         regularized_param=0.2,
         dropout_ensemble_size=5,
     )
-    wrapper = TemplateFullyConnectedNet.build_dropout_ensemble(
-        TemplateFullyConnectedNet, cfg)
+    wrapper = TemplateFullyConnectedNet.build_dropout_ensemble(cfg)
     assert isinstance(wrapper, DropoutEnsemblingNetworkWrapper)
     # ensemble size propagated
     assert wrapper.ensemble_size == 5

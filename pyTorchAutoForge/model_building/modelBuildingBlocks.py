@@ -751,7 +751,7 @@ class TemplateFullyConnectedNet(AutoForgeModule):
 
         return x
 
-    @staticmethod
+    @classmethod
     def build_dropout_ensemble(cls, cfg: TemplateFullyConnectedNetConfig) -> DropoutEnsemblingNetworkWrapper:
         base_model = cls(cfg)
         return DropoutEnsemblingNetworkWrapper(base_model,
