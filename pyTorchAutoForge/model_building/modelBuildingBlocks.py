@@ -408,13 +408,15 @@ class TemplateConvNet2d(AutoForgeModule):
             idLayer += 1
 
         self.regressor_sequential = nn.ModuleList()
+
         if cfg.add_fcn_layer_size is not None:
+
             if in_channels != cfg.add_fcn_layer_size:
                 # Add convolutional "expander"
                 self.regressor_sequential.append(
                     nn.Conv2d(in_channels, cfg.add_fcn_layer_size, 1, 1))
 
-            # Fully Connected regressor
+            # Fully Connected regressor layer
             self.regressor_sequential.append(nn.AdaptiveAvgPool2d((1, 1)))
             self.regressor_sequential.append(module=nn.Flatten())
             self.regressor_sequential.append(nn.Linear(in_channels,
@@ -582,15 +584,17 @@ class TemplateConvNetFeatureFuser2d(AutoForgeModule):
             in_channels = out_channels
             idLayer += 1
 
+        # Add output layers if specified in config
+        self.regressor_sequential = nn.ModuleList()
+
         if cfg.add_fcn_layer_size is not None:
 
-            self.regressor_sequential = nn.ModuleList()
             if in_channels != cfg.add_fcn_layer_size:
                 # Add convolutional "expander"
                 self.regressor_sequential.append(
                     nn.Conv2d(in_channels, cfg.add_fcn_layer_size, 1, 1))
 
-            # Fully Connected regressor
+            # Fully Connected regressor layer
             self.regressor_sequential.append(nn.AdaptiveAvgPool2d((1, 1)))
             self.regressor_sequential.append(module=nn.Flatten())
             self.regressor_sequential.append(nn.Linear(in_channels,
