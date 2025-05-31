@@ -288,6 +288,7 @@ def test_dropout_ensembling_wrapper_init_rejects_non_module():
         DropoutEnsemblingNetworkWrapper(model="not_a_module")
 
 def test_dropout_ensembling_forward_training_mode():
+    """ Test forward in training mode with dropout ensembling """
     base = DummyModel()
     wrapper = DropoutEnsemblingNetworkWrapper(base)
     wrapper.train()
@@ -309,8 +310,11 @@ def test_dropout_ensembling_forward_eval_mode_batch_size_1():
     assert out.shape == (1, base.linear.out_features)
     assert wrapper.last_mean.shape == (1, base.linear.out_features)
 
+
 # %% TemplateFullyConnectedNetConfig tests
 def test_template_fcnet_config_valid_defaults():
+    """ Test default values and valid configuration for TemplateFullyConnectedNetConfig """
+    
     cfg = TemplateFullyConnectedNetConfig(
         out_channels_sizes=[10, 20, 30],
         input_layer_size=5,
@@ -319,6 +323,7 @@ def test_template_fcnet_config_valid_defaults():
         regularization_layer_type="dropout",
         dropout_ensemble_size=3
     )
+    
     assert cfg.out_channels_sizes == [10, 20, 30]
     assert cfg.input_layer_size == 5
     assert cfg.output_layer_size == 15
@@ -358,6 +363,7 @@ def test_template_fcnet_config_dropout_ensemble_invalid():
         )
 
 def test_template_fcnet_config_input_skip_index_length_exceeds():
+    """Test that input_skip_index length exceeds input_layer_size raises error"""
     with pytest.raises(ValueError) as exc:
         TemplateFullyConnectedNetConfig(
             out_channels_sizes=[3, 4],
@@ -367,6 +373,7 @@ def test_template_fcnet_config_input_skip_index_length_exceeds():
     assert "input_skip_index" in str(exc.value)
 
 def test_template_fcnet_config_input_skip_index_valid():
+    """Test that input_skip_index can be set to a valid list"""
     skip_idx = [0, 1]
     cfg = TemplateFullyConnectedNetConfig(
         out_channels_sizes=[3, 4, 5],
@@ -374,6 +381,7 @@ def test_template_fcnet_config_input_skip_index_valid():
         input_skip_index=skip_idx
     )
     assert cfg.input_skip_index == skip_idx
+
 
 # %% TemplateFullyConnectedNet tests
 def test_fcnet_forward_simple():
@@ -395,6 +403,7 @@ def test_fcnet_forward_simple():
     assert out.shape == (5, 4)
 
 def test_fcnet_forward_with_empty_skip():
+    """ Test forward with empty skip tensor """
     cfg = TemplateFullyConnectedNetConfig(
         out_channels_sizes=[6],
         input_layer_size=2,
@@ -408,24 +417,32 @@ def test_fcnet_forward_with_empty_skip():
     assert out.shape == (4, 6)
 
 def test_fcnet_forward_with_nonempty_skip():
+    """ Test forward with non-empty skip tensor """
     cfg = TemplateFullyConnectedNetConfig(
         out_channels_sizes=[5],
         input_layer_size=2,
         output_layer_size=5,
     )
+
     model = TemplateFullyConnectedNet(cfg)
     x = torch.randn(3, 2)
     skips = torch.randn(2, 2)
     out = model((x, skips))
-    # batch size increases by len(skips)
+    
+    # Batch size increases by len(skips)
     assert out.shape == (5, 5)
+
 def test_net_forward_shape_and_layers():
+    """ Test forward shape and layers of TemplateFullyConnectedNet """
+
     cfg = TemplateFullyConnectedNetConfig(
         out_channels_sizes=[7, 5],
         input_layer_size=4,
         regularization_layer_type="none",
     )
+
     model = TemplateFullyConnectedNet(cfg)
+    
     # Expect layers: Flatten, Linear(4->7), PReLU, Linear(7->5)
     x = torch.randn(2, 4)
     out = model(x)
@@ -471,6 +488,8 @@ def test_wrapper_train_and_eval_stats(batch_size):
     assert v.shape == out_eval.shape
 
 def test_build_dropout_ensemble_static():
+    """ Test building a dropout ensemble with static build method """
+
     cfg = TemplateFullyConnectedNetConfig(
         out_channels_sizes=[4],
         input_layer_size=2,
@@ -478,14 +497,14 @@ def test_build_dropout_ensemble_static():
         regularizer_param=0.2,
         dropout_ensemble_size=5,
     )
+    
     wrapper = TemplateFullyConnectedNet.build_dropout_ensemble(cfg)
+    
     assert isinstance(wrapper, DropoutEnsemblingNetworkWrapper)
-    # ensemble size propagated
+    # Check ensemble size
     assert wrapper.ensemble_size == 5
 
 # %% TemplateConvNetFeatureFuser2dConfig tests
-
-
 def test_template_convnet_feature_fuser2d_config_expand_types_and_heads():
     cfg = TemplateConvNetFeatureFuser2dConfig(
         kernel_sizes=[3],
@@ -587,4 +606,5 @@ def test_template_convnet_feature_fuser2d_forward_with_intermediate_features():
 if __name__ == "__main__":
     #pytest.main([__file__])
     #test_fcnet_forward_simple()
-    test_build_dropout_ensemble_static()
+    #test_build_dropout_ensemble_static()
+    pass
