@@ -156,8 +156,7 @@ class TemplateConvNet2dConfig(TemplateConvNetConfig):
         # Automagic configuration post-processing
         # If pooling kernel size is scalar, unroll to number of layers
         if isinstance(self.pool_kernel_sizes, int):
-            self.pool_kernel_sizes = [
-                self.pool_kernel_sizes] * len(self.kernel_sizes)
+            self.pool_kernel_sizes = [self.pool_kernel_sizes] * len(self.kernel_sizes)
 
         assert (isinstance(self.conv_stride, int)
                 ), "conv_stride must be a scalar integer for ConvolutionalBlock2d"
@@ -220,25 +219,25 @@ class TemplateFullyConnectedNetConfig(TemplateNetBaseConfig):
     def __post_init__(self):
         if self.out_channels_sizes is None:
             raise ValueError(
-                "TemplateFullyConnectedDeepNetConfig: 'out_channels_sizes' cannot be None")
+                "TemplateFullyConnectedNetConfig: 'out_channels_sizes' cannot be None")
         if self.input_layer_size is None:
             raise ValueError(
-                "TemplateFullyConnectedDeepNetConfig: 'input_layer_size' cannot be None")
+                "TemplateFullyConnectedNetConfig: 'input_layer_size' cannot be None")
 
         if self.output_layer_size is None:
             # Assume last layer is given by last entry of out_channels_sizes
             self.output_layer_size = self.out_channels_sizes[-1]
             # Print warning for this in orange
-            print("\033[33m[Warning] TemplateFullyConnectedDeepNetConfig: 'output_layer_size' is None. Setting to last value of 'out_channels_sizes':",
+            print("\033[33m[Warning] TemplateFullyConnectedNetConfig: 'output_layer_size' is None. Setting to last value of 'out_channels_sizes':",
                   self.output_layer_size, "\033[0m")
 
         if self.dropout_ensemble_size > 1 and (self.regularizer_param == 0.0 or self.regularization_layer_type != 'dropout'):
             raise ValueError(
-                "TemplateFullyConnectedDeepNetConfig: 'use_dropout_ensembling' is True but either 'regularizer_param' is 0.0 or 'regularization_layer_type' is not set to 'dropout'. Please set 'regularization_layer_type' to 'dropout' and provide a non-zero value for 'regularizer_param'.")
+                "TemplateFullyConnectedNetConfig: 'use_dropout_ensembling' is True but either 'regularizer_param' is 0.0 or 'regularization_layer_type' is not set to 'dropout'. Please set 'regularization_layer_type' to 'dropout' and provide a non-zero value for 'regularizer_param'.")
 
         if self.input_skip_index is not None:
             if len(self.input_skip_index) > self.output_layer_size:
-                raise ValueError("TemplateFullyConnectedDeepNetConfig: 'input_skip_index' cannot be longer than 'output_layer_size'. Please check your configuration.")
+                raise ValueError("TemplateFullyConnectedNetConfig: 'input_skip_index' cannot be longer than 'output_layer_size'. Please check your configuration.")
 
         # If activation type is a relu one and init method not changed set it to kaiming
         if "elu" in self.activ_type and self.init_method_type == "xavier_normal":
@@ -353,8 +352,7 @@ class TemplateConvNet2d(AutoForgeModule):
 
         if isinstance(pool_kernel_sizes, list):
             if len(kernel_sizes) != len(pool_kernel_sizes):
-                raise ValueError(
-                    'Kernel and pooling kernel sizes must have the same length')
+                raise ValueError('Kernel and pooling kernel sizes must have the same length')
         else:
             raise ValueError('pool_kernel_sizes cannot be scalar')
 
@@ -659,14 +657,14 @@ class TemplateFullyConnectedNet(AutoForgeModule):
 
         if self.cfg.out_channels_sizes is None:
             raise ValueError(
-                'TemplateFullyConnectedDeepNetConfig: out_channels_sizes cannot be None')
+                'TemplateFullyConnectedNetConfig: out_channels_sizes cannot be None')
 
         if in_channels is None:
             raise ValueError(
-                "TemplateFullyConnectedDeepNetConfig: 'input_layer_size' cannot be None")
+                "TemplateFullyConnectedNetConfig: 'input_layer_size' cannot be None")
         if output_layer_size is None:
             raise ValueError(
-                "TemplateFullyConnectedDeepNetConfig: 'output_layer_size' cannot be None")
+                "TemplateFullyConnectedNetConfig: 'output_layer_size' cannot be None")
 
         # Model architecture
         self.blocks = nn.ModuleList()
