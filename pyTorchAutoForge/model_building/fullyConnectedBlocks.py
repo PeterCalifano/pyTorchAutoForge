@@ -36,7 +36,7 @@ class FullyConnectedBlock(nn.Module):
                  regularizer_type: regularizer_types = "none",
                  regularizer_param: float | int = 0.0,
                  prelu_params: Literal["all", "unique"] = "unique",
-                 init_method: init_methods = "xavier_normal",
+                 init_method_type: init_methods = "xavier_normal",
                  **kwargs
                  ):
         super().__init__()
@@ -66,9 +66,9 @@ class FullyConnectedBlock(nn.Module):
             nn.init.zeros_(self.linear.bias)
 
         # Call layers weights init
-        self.__initialize_weights(init_method)
+        self.__initialize_weights__(init_method_type)
 
-    def __initialize_weights(self, init_method: Literal["xavier_uniform",
+    def __initialize_weights__(self, init_method_type: Literal["xavier_uniform",
                                                         "kaiming_uniform",
                                                         "xavier_normal",
                                                         "kaiming_normal",
@@ -76,7 +76,7 @@ class FullyConnectedBlock(nn.Module):
         """
         Initializes the weights of the linear layer using the specified initialization method.
         """
-        _initialize_fcnblock_weights(self, init_method_type=init_method)
+        _initialize_fcnblock_weights(self, init_method_type=init_method_type)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
 
