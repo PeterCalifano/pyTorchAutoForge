@@ -41,6 +41,10 @@ class FullyConnectedBlock(nn.Module):
                  ):
         super().__init__()
 
+        # Save input/output dimensions for interfaces specification
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
         # Define linear layer
         self.linear = nn.Linear(in_features=in_channels,
                                 out_features=out_channels,
