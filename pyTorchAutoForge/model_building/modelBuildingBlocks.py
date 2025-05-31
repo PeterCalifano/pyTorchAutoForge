@@ -93,7 +93,7 @@ class TemplateConvNetConfig(TemplateNetBaseConfig):
     activ_type: activ_types = "prelu"
 
     regularizer_type: regularizer_types = "none"
-    regularized_param: int | float = 0.0
+    regularizer_param: int | float = 0.0
 
     conv_stride: int | tuple[int, int, int] = 1
     conv_padding: int | tuple[int, int, int] = 0
@@ -210,7 +210,7 @@ class TemplateFullyConnectedNetConfig(TemplateNetBaseConfig):
     # Architecture definition
     input_layer_size: int | None = None
     output_layer_size: int | None = None
-    regularized_param: int | float = 0.0
+    regularizer_param: int | float = 0.0
 
     activ_type: activ_types = "prelu"
 
@@ -232,9 +232,9 @@ class TemplateFullyConnectedNetConfig(TemplateNetBaseConfig):
             print("\033[33m[Warning] TemplateFullyConnectedDeepNetConfig: 'output_layer_size' is None. Setting to last value of 'out_channels_sizes':",
                   self.output_layer_size, "\033[0m")
 
-        if self.dropout_ensemble_size > 1 and (self.regularized_param == 0.0 or self.regularization_layer_type != 'dropout'):
+        if self.dropout_ensemble_size > 1 and (self.regularizer_param == 0.0 or self.regularization_layer_type != 'dropout'):
             raise ValueError(
-                "TemplateFullyConnectedDeepNetConfig: 'use_dropout_ensembling' is True but either 'regularized_param' is 0.0 or 'regularization_layer_type' is not set to 'dropout'. Please set 'regularization_layer_type' to 'dropout' and provide a non-zero value for 'regularized_param'.")
+                "TemplateFullyConnectedDeepNetConfig: 'use_dropout_ensembling' is True but either 'regularizer_param' is 0.0 or 'regularization_layer_type' is not set to 'dropout'. Please set 'regularization_layer_type' to 'dropout' and provide a non-zero value for 'regularizer_param'.")
 
         if self.input_skip_index is not None:
             if len(self.input_skip_index) > self.output_layer_size:
@@ -385,7 +385,7 @@ class TemplateConvNet2d(AutoForgeModule):
             pool_type = cfg.pool_type
             activ_type_ = cfg.activ_type
             regularization_layer_type_ = cfg.regularization_layer_type
-            regularized_param_ = cfg.regularized_param
+            regularizer_param_ = cfg.regularizer_param
             conv_stride_ = cfg.conv_stride
 
             # Convolutional blocks
@@ -396,7 +396,7 @@ class TemplateConvNet2d(AutoForgeModule):
                                          pool_type=pool_type,  # type:ignore
                                          activ_type=activ_type_,
                                          regularizer_type=regularization_layer_type_,
-                                         regularized_param=regularized_param_,
+                                         regularizer_param=regularizer_param_,
                                          conv_stride=conv_stride_,  # type:ignore
                                          init_method_type=cfg.init_method_type,
                                          prelu_params=cfg.prelu_params)
@@ -540,7 +540,7 @@ class TemplateConvNetFeatureFuser2d(AutoForgeModule):
             pool_type = cfg.pool_type
             activ_type_ = cfg.activ_type
             regularization_layer_type_ = cfg.regularization_layer_type
-            regularized_param_ = cfg.regularized_param
+            regularizer_param_ = cfg.regularizer_param
             conv_stride_ = cfg.conv_stride
 
             # Determine if fuser is defined for ith index (looking up the self.cfg.merge_module_index)
@@ -570,7 +570,7 @@ class TemplateConvNetFeatureFuser2d(AutoForgeModule):
                                          pool_type=pool_type,  # type:ignore
                                          activ_type=activ_type_,
                                          regularizer_type=regularization_layer_type_,
-                                         regularized_param=regularized_param_,
+                                         regularizer_param=regularizer_param_,
                                          conv_stride=conv_stride_,  # type:ignore
                                          init_method_type=cfg.init_method_type,
                                          prelu_params=cfg.prelu_params)
@@ -673,14 +673,14 @@ class TemplateFullyConnectedNet(AutoForgeModule):
             # Get data for ith block
             activ_type_ = cfg.activ_type
             regularization_layer_type_ = cfg.regularization_layer_type
-            regularized_param_ = cfg.regularized_param
+            regularizer_param_ = cfg.regularizer_param
 
             # Build ith block
             block = FullyConnectedBlock(in_channels=in_channels,
                                         out_channels=out_channels,
                                         activ_type=activ_type_,
                                         regularizer_type=regularization_layer_type_,
-                                        regularized_param=regularized_param_,
+                                        regularizer_param=regularizer_param_,
                                         init_method_type=cfg.init_method_type,
                                         prelu_params=cfg.prelu_params,)
 
@@ -695,7 +695,7 @@ class TemplateFullyConnectedNet(AutoForgeModule):
                                                output_layer_size,
                                                activ_type="none",
                                                regularizer_type="none",
-                                               regularized_param=0.0,
+                                               regularizer_param=0.0,
                                                init_method_type=cfg.init_method_type,
                                                prelu_params=cfg.prelu_params))
         idLayer += 1
@@ -771,7 +771,7 @@ class TemplateFullyConnectedDeepNet(AutoForgeModule):
         self.model_name = cfg.model_name
 
         regularization_layer_type = cfg.regularization_layer_type
-        dropout_probability = cfg.regularized_param
+        dropout_probability = cfg.regularizer_param
 
         if regularization_layer_type == 'batchnorm':
             self.use_batchnorm = True

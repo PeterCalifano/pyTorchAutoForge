@@ -315,14 +315,14 @@ def test_template_fcnet_config_valid_defaults():
         out_channels_sizes=[10, 20, 30],
         input_layer_size=5,
         output_layer_size=15,
-        regularized_param=0.1,
+        regularizer_param=0.1,
         regularization_layer_type="dropout",
         dropout_ensemble_size=3
     )
     assert cfg.out_channels_sizes == [10, 20, 30]
     assert cfg.input_layer_size == 5
     assert cfg.output_layer_size == 15
-    assert cfg.regularized_param == 0.1
+    assert cfg.regularizer_param == 0.1
     assert cfg.regularization_layer_type == "dropout"
     assert cfg.dropout_ensemble_size == 3
 
@@ -475,7 +475,7 @@ def test_build_dropout_ensemble_static():
         out_channels_sizes=[4],
         input_layer_size=2,
         regularization_layer_type="dropout",
-        regularized_param=0.2,
+        regularizer_param=0.2,
         dropout_ensemble_size=5,
     )
     wrapper = TemplateFullyConnectedNet.build_dropout_ensemble(cfg)
@@ -583,7 +583,8 @@ def test_template_convnet_feature_fuser2d_forward_with_intermediate_features():
     assert len(feats) == 2
     assert out.shape[1:] == feats[-1].shape[1:]
 
-# %% MANUAL CALL
+# %% MANUAL DEBUG CALL
 if __name__ == "__main__":
     #pytest.main([__file__])
-    test_fcnet_forward_simple()
+    #test_fcnet_forward_simple()
+    test_build_dropout_ensemble_static()
