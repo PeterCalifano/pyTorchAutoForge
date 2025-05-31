@@ -377,14 +377,20 @@ def test_template_fcnet_config_input_skip_index_valid():
 
 # %% TemplateFullyConnectedNet tests
 def test_fcnet_forward_simple():
+    """ Simple forward test for TemplateFullyConnectedNet """
     cfg = TemplateFullyConnectedNetConfig(
         out_channels_sizes=[8, 4],
         input_layer_size=3,
         output_layer_size=4,
     )
+
     model = TemplateFullyConnectedNet(cfg)
+
+    print("Model layout:\n", model)
+
     x = torch.randn(5, 3)
     out = model(x)
+
     assert isinstance(out, torch.Tensor)
     assert out.shape == (5, 4)
 
@@ -580,4 +586,5 @@ def test_template_convnet_feature_fuser2d_forward_with_intermediate_features():
 
 # %% MANUAL CALL
 if __name__ == "__main__":
-    pytest.main([__file__])
+    #pytest.main([__file__])
+    test_fcnet_forward_simple()

@@ -82,7 +82,7 @@ def test_invalid_regularizer():
 # Test initialization methods
 @pytest.mark.parametrize("init_method", ["xavier_uniform", "kaiming_uniform", "xavier_normal", "kaiming_normal", "orthogonal"])
 def test_init_methods(init_method):
-    block = FullyConnectedBlock(10, 5, init_method=init_method)
+    block = FullyConnectedBlock(10, 5, init_method_type=init_method)
     x = torch.randn(3, 10)
     out = block(x)
     assert out.shape == (3, 5)

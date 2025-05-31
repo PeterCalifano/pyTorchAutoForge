@@ -377,7 +377,7 @@ def test_feature_map_fuser_factory_creates_correct_instance():
         in_channels=5,
         num_skip_channels=2,
         num_dims=4,
-        fuser_type="channel_concat",
+        fuser_module_type="channel_concat",
         num_attention_heads=None
     )
     fuser = _feature_map_fuser_factory(cfg)
@@ -387,7 +387,7 @@ def test_factory_passes_kwargs_to_underlying():
     cfg = FeatureMapFuserConfig(in_channels=1,
                                 num_skip_channels=1,
                                 num_dims=2,
-                                fuser_type="feature_add")
+                                fuser_module_type="feature_add")
     fuser = _feature_map_fuser_factory(cfg, mode="linear")
     # should perform 1D feature-add with 'linear' mode
     x = torch.randn(2, 4)

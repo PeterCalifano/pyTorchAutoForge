@@ -6,8 +6,8 @@ import pytest
 import numpy as np
 
 import matplotlib
-# Set the backend to 'Agg' for non-interactive use
-matplotlib.use('TkAgg')
+# NOTE: Set the backend to 'Agg' for non-interactive use
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 from pyTorchAutoForge.model_building.backbones.input_adapters import (
