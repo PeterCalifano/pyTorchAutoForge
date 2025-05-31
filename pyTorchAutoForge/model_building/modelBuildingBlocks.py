@@ -736,13 +736,14 @@ class TemplateFullyConnectedNet(AutoForgeModule):
         """
 
         # Initialize output
-        x: torch.Tensor = X[0]
-
         if not torch.is_tensor(X):
+            x = X[0]
             X_skips = X[1]
 
             # Flatten and concatenate to input X along batch dimension
             x = torch.cat((x, X_skips), dim=0)
+        else:
+            x = X
 
         # Forward through each block
         for block in self.blocks:
