@@ -142,6 +142,10 @@ def test_template_convnet2d_forward_no_intermediate():
 
 
 def test_template_convnet2d_forward_with_intermediate_and_regressor():
+    """ Test forward with intermediate features and regressor in TemplateConvNet2d """
+
+    linear_out_size = 4
+
     cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3],
         pool_type="AvgPool2d",
@@ -149,13 +153,17 @@ def test_template_convnet2d_forward_with_intermediate_and_regressor():
         out_channels_sizes=[4],
         num_input_channels=1,
         save_intermediate_features=True,
-        add_fcn_layer_size=2
+        linear_output_layer_size=linear_out_size
     )
+
     model = TemplateConvNet2d(cfg)
+    model.eval()
+
     x = torch.randn(3, 1, 8, 8)
     out, feats = model(x)
+    
     # After conv3 -> 6x6, pool2 -> 3x3, adaptive avg->1x1, flatten, linear->2
-    assert out.shape == (3, 2)
+    assert out.shape == (3, linear_out_size)
     assert len(feats) == 1
     assert feats[0].shape == (3, 4, 3, 3)
 
@@ -192,8 +200,11 @@ def test_template_convnet2d_forward_with_intermediate_features():
         save_intermediate_features=True,
     )
     model = TemplateConvNet2d(cfg)
+    model.eval()
+
     x = torch.randn(1, 1, 20, 20)
     out, skips = model(x)
+
     # Should collect one intermediate feature per block
     assert len(skips) == 3
     # Final output channel matches last out_channels_sizes
@@ -201,42 +212,44 @@ def test_template_convnet2d_forward_with_intermediate_features():
 
 
 @pytest.mark.parametrize("kernels,pools,msg", [
-    (None, [2], "must not be none"),
-    ([3], None, "must not be none"),
+    (None, [2], r".*must.*not.*none.*"),
+    ([3], None, r".*must.*not.*none.*"),
 ])
+
 def test_template_convnet2d_none_kernel_or_pool_raises(kernels, pools, msg):
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValueError, match=msg):
         cfg = TemplateConvNet2dConfig(
             kernel_sizes=kernels,
             pool_kernel_sizes=pools,
             out_channels_sizes=[4],
             num_input_channels=1,
         )
+        
         TemplateConvNet2d(cfg)
-    assert msg in str(exc.value)
 
 
 def test_template_convnet2d_mismatched_kernel_pool_length():
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(ValueError, match=r".*must have the same length.*") as exc:
         TemplateConvNet2dConfig(
             kernel_sizes=[3, 5],
             pool_kernel_sizes=[2],
             out_channels_sizes=[4, 8],
             num_input_channels=1,
         )
-    assert "must have the same length" in str(exc.value)
 
 
-def test_template_convnet2d_scalar_pool_raises():
-    with pytest.raises(ValueError) as exc:
-        cfg = TemplateConvNet2dConfig(
-            kernel_sizes=[3],
-            pool_kernel_sizes=2,
-            out_channels_sizes=[4],
-            num_input_channels=1,
-        )
-        TemplateConvNet2d(cfg)
-    assert "cannot be scalar" in str(exc.value)
+def test_template_convnet2d_scalar_pool_expansion():
+    """ Test that scalar pool_kernel_sizes is expanded to match kernel_sizes length """
+
+    cfg = TemplateConvNet2dConfig(
+        kernel_sizes=[3, 4],
+        pool_kernel_sizes=2,
+        out_channels_sizes=[4, 5],
+        num_input_channels=1,
+    )
+
+    # Check that pool_kernel_sizes has been expanded to match kernel_sizes length
+    assert len(cfg.pool_kernel_sizes) == len(cfg.kernel_sizes), 'Automatic expansion of pool_kernel_sizes list to kernel_sizes length failed.'
 
 
 def test_template_convnet2d_output_shape_simple():
@@ -605,6 +618,7 @@ def test_template_convnet_feature_fuser2d_forward_with_intermediate_features():
     )
 
     model = TemplateConvNetFeatureFuser2d(cfg)
+    model.eval()
 
     x = torch.randn(1, 1, 8, 8)
     skips = [torch.randn_like(x), torch.randn_like(x)]
