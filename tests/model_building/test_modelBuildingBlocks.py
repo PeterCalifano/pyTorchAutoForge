@@ -2,7 +2,7 @@ import pytest
 import torch
 from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNet2dConfig, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d, TemplateFullyConnectedNetConfig, TemplateFullyConnectedNet,    TemplateConvNetFeatureFuser2dConfig, TemplateConvNetFeatureFuser2d
 
-from pyTorchAutoForge.model_building.ModelAutoBuilder import ComputeConvBlock2dOutputSize
+from pyTorchAutoForge.model_building.ModelAutoBuilder import ComputeConvBlock2dOutputSize, AutoComputeConvBlocksOutput
 
 from torch import nn
 from pyTorchAutoForge.model_building.modelBuildingBlocks import DropoutEnsemblingNetworkWrapper
@@ -192,6 +192,7 @@ def test_template_convnet2d_build_and_forward_default_no_skips():
 
 
 def test_template_convnet2d_forward_with_intermediate_features():
+
     cfg = TemplateConvNet2dConfig(
         kernel_sizes=[3, 3, 3],
         pool_kernel_sizes=[2, 2, 2],
@@ -199,16 +200,38 @@ def test_template_convnet2d_forward_with_intermediate_features():
         num_input_channels=1,
         save_intermediate_features=True,
     )
+
     model = TemplateConvNet2d(cfg)
     model.eval()
 
-    x = torch.randn(1, 1, 20, 20)
+    x = torch.randn(1, 1, 224, 224)
     out, skips = model(x)
+
+    # Get expected output feature map size
+    expected_out_hw_size, flattened_out_sizes, intermediate_feat_sizes = AutoComputeConvBlocksOutput(
+        first_input_size=(224, 224),
+        out_channels_sizes=[2, 4, 6],
+        kernel_sizes=[3, 3, 3],
+        pooling_kernel_sizes=[2, 2, 2],
+        conv_stride_sizes=[1, 1, 1],
+        pooling_stride_sizes=[2, 2, 2],
+        conv2d_padding_sizes=[0, 0, 0],
+        pooling_padding_sizes=[0, 0, 0]
+    )
 
     # Should collect one intermediate feature per block
     assert len(skips) == 3
-    # Final output channel matches last out_channels_sizes
-    assert out.shape[1] == 6
+
+    # Check output shape matches expected (batch, channels, H, W)
+    assert out.shape == (1, 6, expected_out_hw_size[0], expected_out_hw_size[1])
+
+    # Check each intermediate feature shape and flattened size
+    for i, feat in enumerate(skips):
+
+        ch = cfg.out_channels_sizes[i]
+        h, w = intermediate_feat_sizes[i]
+        assert feat.shape == (1, ch, h, w)
+        assert feat.numel() == flattened_out_sizes[i]
 
 
 @pytest.mark.parametrize("kernels,pools,msg", [
@@ -605,34 +628,59 @@ def test_template_convnet_feature_fuser2d_forward_identity_fuser():
 
 def test_template_convnet_feature_fuser2d_forward_with_intermediate_features():
     """ Test forward with intermediate features in TemplateConvNetFeatureFuser2d """
+
     cfg = TemplateConvNetFeatureFuser2dConfig(
-        kernel_sizes=[3, 3],
+        kernel_sizes=[3, 3, 3],
         pool_type="AvgPool2d",
-        pool_kernel_sizes=[2, 2],
-        out_channels_sizes=[4, 5],
+        pool_kernel_sizes=[2, 2, 2],
+        out_channels_sizes=[2, 4, 6],
         num_input_channels=1,
-        num_skip_channels=[1, 1],
-        merge_module_index=[0, 1],
-        merge_module_type=["identity", "identity"],
-        save_intermediate_features=True
+        num_skip_channels=[1, 1, 1],
+        merge_module_index=[0, 1, 2],
+        merge_module_type=["identity", "identity", "identity"],
+        save_intermediate_features=True,
     )
 
     model = TemplateConvNetFeatureFuser2d(cfg)
     model.eval()
 
-    x = torch.randn(1, 1, 8, 8)
-    skips = [torch.randn_like(x), torch.randn_like(x)]
+    x = torch.randn(1, 1, 224, 224)
+    skips = [torch.randn_like(x) for _ in range(3)]
     out, feats = model((x, skips))
 
-    # Two blocks -> two feature entries
-    assert len(feats) == 2
-    assert out.shape[1:] == feats[-1].shape[1:]
+    # Get expected output feature map size
+    expected_out_hw_size, flattened_out_sizes, intermediate_feat_sizes = AutoComputeConvBlocksOutput(
+        first_input_size=(224, 224),
+        out_channels_sizes=[2, 4, 6],
+        kernel_sizes=[3, 3, 3],
+        pooling_kernel_sizes=[2, 2, 2],
+        conv_stride_sizes=[1, 1, 1],
+        pooling_stride_sizes=[2, 2, 2],
+        conv2d_padding_sizes=[0, 0, 0],
+        pooling_padding_sizes=[0, 0, 0]
+    )
+
+    # Should collect one intermediate feature per block
+    assert len(feats) == 3
+
+    # Check output shape matches expected (batch, channels, H, W)
+    assert out.shape == (1, 6, expected_out_hw_size[0], expected_out_hw_size[1])
+
+    # Check each intermediate feature shape and flattened size
+    for i, feat in enumerate(feats):
+        ch = cfg.out_channels_sizes[i]
+        h, w = intermediate_feat_sizes[i]
+        assert feat.shape == (1, ch, h, w)
+        assert feat.numel() == flattened_out_sizes[i]
+
+
 
 # %% MANUAL DEBUG CALL
 if __name__ == "__main__":
     #pytest.main([__file__])
     #test_fcnet_forward_simple()
     #test_build_dropout_ensemble_static()
-    test_template_convnet_feature_fuser2d_forward_identity_fuser()
-    test_template_convnet2d_output_shape_simple()
+    #test_template_convnet_feature_fuser2d_forward_identity_fuser()
+    #test_template_convnet2d_output_shape_simple()
+    #test_template_convnet_feature_fuser2d_forward_with_intermediate_features()
     pass
