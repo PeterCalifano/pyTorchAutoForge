@@ -405,6 +405,12 @@ class FeatureMapFuser(nn.Module):
         elif fuser_type == 'multihead_attention':
             assert num_attention_heads is not None, "num_attention_heads arg is required for attention fuser"
 
+            # TODO (PC, UM) add check on number of attention heads, must be multiple of embed_dim? If so, override user input and also print warning in orange.
+
+            # Check in_channels >= num_attention_heads
+            if num_attention_heads > in_channels or in_channels % num_attention_heads != 0:
+                raise ValueError(f"num_attention_heads ({num_attention_heads}) must be less than or equal to in_channels ({in_channels}) and evenly divide in_channels")
+
             # Retrieve additional arguments for multi-head attention from kwargs
             dropout = kwargs.get("dropout", 0.0)
             bias = kwargs.get("bias", True)
