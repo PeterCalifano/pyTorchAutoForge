@@ -100,50 +100,80 @@ def ComputeConvBlock2dOutputSize(input_size: conv_size_autocomp_input_types,
 
     return conv_block_output_size, conv2d_flattened_output_size
 
-# TODO function requiring extensive rework
-
-
-def AutoComputeConvBlocksOutput(self, 
+### AutoComputeConvBlocksOutput
+def AutoComputeConvBlocksOutput(first_input_size: int | list[int], 
+                                out_channels_sizes: conv_size_autocomp_input_types,
                                 kernel_sizes: conv_size_autocomp_input_types, 
-                                pooling_kernel_size: conv_size_autocomp_input_types | None = None):
+                                pooling_kernel_sizes: conv_size_autocomp_input_types | None = None,
+                                conv_stride_sizes: conv_size_autocomp_input_types | None = None,
+                                pooling_stride_sizes: conv_size_autocomp_input_types | None = None,
+                                conv2d_padding_sizes: conv_size_autocomp_input_types | None = None,
+                                pooling_padding_sizes: conv_size_autocomp_input_types | None = None) -> tuple[tuple[int, int], list[int], list[int]]:
     """
     Automatically compute the output size of a series of ConvBlock layers.
 
     Args:
-        kernelSizes (list): A list of kernel sizes for each convolutional layer.
-        poolingKernelSize (list, optional): A list of pooling kernel sizes for each convolutional layer. 
-                                            If None, defaults to a list of ones with the same length as kernelSizes.
+        first_input_size (int or list[int]): The initial input size, either as an integer (assumed square) or a list [height, width].
+        out_channels_sizes (tuple[int, ...] | list[int] | NDArray[np.integer]): Number of output channels for each ConvBlock.
+        kernel_sizes (tuple[int, ...] | list[int] | NDArray[np.integer]): Kernel sizes for each ConvBlock.
+        pooling_kernel_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Pooling kernel sizes for each ConvBlock. Defaults to ones if None.
+        conv_stride_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Stride sizes for each ConvBlock. Defaults to ones if None.
+        pooling_stride_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Stride sizes for pooling layers. Defaults to pooling_kernel_sizes if None.
+        conv2d_padding_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Padding sizes for Conv2d layers. Defaults to zeros if None.
+        pooling_padding_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Padding sizes for pooling layers. Defaults to zeros if None.
 
     Returns:
-        list: The output size of the last ConvBlock layer in the format [height, width].
+        tuple:
+            - tuple[int, int]: Output size [height, width] of the last ConvBlock.
+            - list[int]: Flattened output sizes for each ConvBlock.
+            - list[tuple[int, int]]: Intermediate output sizes [height, width] for each ConvBlock.
     """
-    # NOTE: stride and padding are HARDCODED in this version
-    outputMapSize = [self.patchSize, self.patchSize]
+    if isinstance(first_input_size, int):
+        first_input_size = [first_input_size, first_input_size]
 
-    if pooling_kernel_size is None:
-        pooling_kernel_size = list(np.ones(len(kernel_sizes)))
+    # Handle None defaults
+    if pooling_kernel_sizes is None:
+        pooling_kernel_sizes = list(np.ones(len(kernel_sizes)))
 
-    assert (self.numOfConvLayers == len(
-            kernel_sizes) == len(pooling_kernel_size))
+    if conv_stride_sizes is None:
+        conv_stride_sizes = list(np.ones(len(kernel_sizes)))
 
-    for idL in range(self.numOfConvLayers):
+    if pooling_stride_sizes is None:
+        pooling_stride_sizes = pooling_kernel_sizes.copy() if isinstance(pooling_kernel_sizes, list) else list(pooling_kernel_sizes)
 
-        convBlockOutputSize = ComputeConvBlock2dOutputSize(input_size=outputMapSize,
-                                                            out_channels_size=self.outChannelsSizes[idL], conv2d_kernel_size=kernel_sizes[idL], 
-                                                            pooling_kernel_size=pooling_kernel_size[idL],
-                                                            conv_stride_size=1, 
-                                                            pooling_stride_size=pooling_kernel_size[idL],
-                                                            conv2d_padding_size=0, 
-                                                            pooling_padding_size=0)
+    if conv2d_padding_sizes is None:
+        conv2d_padding_sizes = list(np.zeros(len(kernel_sizes)))
 
-        print(('Output size of ConvBlock ID: {ID}: {outSize}').format(
-            ID=idL, outSize=convBlockOutputSize))
-        
+    if pooling_padding_sizes is None:
+        pooling_padding_sizes = list(np.zeros(len(kernel_sizes)))
+
+    # Loop over input lists 
+    flattened_sizes = []
+    intermediated_maps_sizes = []
+
+    for idL in range(len(kernel_sizes)):
+
+        conv_block_map_output_size, flattened_feats = ComputeConvBlock2dOutputSize(input_size=first_input_size,
+            out_channels_size=out_channels_sizes[idL], 
+            conv2d_kernel_size=kernel_sizes[idL], 
+            pooling_kernel_size=pooling_kernel_sizes[idL],
+            conv_stride_size=conv_stride_sizes[idL], 
+            pooling_stride_size=pooling_stride_sizes[idL],
+            conv2d_padding_size=conv2d_padding_sizes[idL], 
+            pooling_padding_size=pooling_padding_sizes[idL]
+        )
+
+        print((f'Output size of ConvBlock ID: {idL}: {conv_block_map_output_size}. Output channels: {out_channels_sizes[idL]}, flattened features size: {flattened_feats}'))
+
         # Get size from previous convolutional block
-        outputMapSize[0] = convBlockOutputSize[0][0]
-        outputMapSize[1] = convBlockOutputSize[0][1]
+        first_input_size[0] = conv_block_map_output_size[0]
+        first_input_size[1] = conv_block_map_output_size[1]
 
-    return convBlockOutputSize
+        # Compute intermediate sizes and flattened sizes
+        intermediated_maps_sizes.append(conv_block_map_output_size)
+        flattened_sizes.append(flattened_feats)
+
+    return conv_block_map_output_size, flattened_sizes, intermediated_maps_sizes
 
 # %% MultiHeadRegressor class implementation
 class EnumMultiHeadOutMode(Enum):
