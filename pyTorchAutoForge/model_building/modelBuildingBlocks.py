@@ -119,9 +119,8 @@ class TemplateConvNet2dConfig(TemplateConvNetConfig):
     num_input_channels: int = 3  # Default is 3
 
     # If specified, a convolution using out_channels as this number is added
-    output_linear_layer_size: int | None = None
-
-    add_fcn_layer_size: int | None = None  # By default, no linear output layer
+    linear_input_layer_size: int | None = None # By default, input size is in_channels
+    linear_output_layer_size: int | None = None  # By default, no linear output layer --> no linear regressor
     size_skip_to_linear_output: int | None = None
 
     def __post_init__(self):
@@ -152,6 +151,21 @@ class TemplateConvNet2dConfig(TemplateConvNetConfig):
             if len(self.kernel_sizes) != len(self.pool_kernel_sizes):
                 raise ValueError(
                     "TemplateConvNet2dConfig: 'kernel_sizes' and 'pool_kernel_sizes' must have the same length. Alternatively, pool_kernel_sizes must be scalar integer.")
+
+        # Check if linear input layer size is specified if size_skip_to_linear_output is and check size
+        if self.size_skip_to_linear_output is not None:
+            
+            if self.linear_input_layer_size is None:
+                raise ValueError(
+                    f"TemplateConvNet2dConfig: 'linear_input_layer_size' must be specified when 'size_skip_to_linear_output' is set (got None, expected >= {self.size_skip_to_linear_output})."
+                )
+            
+            elif self.linear_input_layer_size < self.size_skip_to_linear_output:
+                raise ValueError(
+                    f"TemplateConvNet2dConfig: 'linear_input_layer_size' ({self.linear_input_layer_size}) must be >= 'size_skip_to_linear_output' ({self.size_skip_to_linear_output})."
+                )
+        else:
+            self.size_skip_to_linear_output = 0 # Override to zero for actual usage
 
         # Automagic configuration post-processing
         # If pooling kernel size is scalar, unroll to number of layers
@@ -330,12 +344,35 @@ class DropoutEnsemblingNetworkWrapper(AutoForgeModule):
 # TemplateConvNet2d
 class TemplateConvNet2d(AutoForgeModule):
     """
-    TemplateConvNet2d _summary_
+    TemplateConvNet2d is a configurable 2D convolutional neural network template.
 
-    _extended_summary_
+    This class builds a sequential stack of convolutional blocks based on the provided
+    configuration. It supports optional linear output layers and can save intermediate
+    feature maps during the forward pass.
 
-    :param AutoForgeModule: _description_
-    :type AutoForgeModule: _type_
+    Args:
+        cfg (TemplateConvNet2dConfig): Configuration dataclass specifying architecture parameters.
+
+    Attributes:
+        cfg (TemplateConvNet2dConfig): Stores the configuration.
+        blocks (nn.ModuleList): List of convolutional blocks.
+        regressor_sequential (nn.ModuleList): Optional regressor layers after convolutional blocks.
+        out_channels_sizes (list[int]): Output channels for each convolutional block.
+        num_of_conv_blocks (int): Number of convolutional blocks.
+
+    Raises:
+        ValueError: If required configuration fields are missing or inconsistent.
+
+    Example:
+        >>> cfg = TemplateConvNet2dConfig(
+        ...     kernel_sizes=[3, 3],
+        ...     pool_kernel_sizes=[2, 2],
+        ...     out_channels_sizes=[16, 32],
+        ...     num_input_channels=3
+        ... )
+        >>> model = TemplateConvNet2d(cfg)
+        >>> x = torch.randn(1, 3, 64, 64)
+        >>> out, features = model(x)
     """
     def __init__(self, cfg: TemplateConvNet2dConfig) -> None:
         super().__init__()
@@ -407,18 +444,31 @@ class TemplateConvNet2d(AutoForgeModule):
 
         self.regressor_sequential = nn.ModuleList()
 
-        if cfg.add_fcn_layer_size is not None:
+        # TODO (PC) add support for additional vector input to output layer block
+        # Specified size in cfg --> cfg.size_skip_to_linear_output size
 
-            if in_channels != cfg.add_fcn_layer_size:
+        if cfg.linear_output_layer_size is not None:
+            
+            if cfg.linear_input_layer_size is None:
+                cfg.linear_input_layer_size = in_channels
+
+            if in_channels != cfg.linear_input_layer_size:
+                
                 # Add convolutional "expander"
                 self.regressor_sequential.append(
-                    nn.Conv2d(in_channels, cfg.add_fcn_layer_size, 1, 1))
+                    nn.Conv2d(in_channels, 
+                              cfg.linear_input_layer_size, 
+                              1, 
+                              1))
 
             # Fully Connected regressor layer
             self.regressor_sequential.append(nn.AdaptiveAvgPool2d((1, 1)))
             self.regressor_sequential.append(module=nn.Flatten())
             self.regressor_sequential.append(nn.Linear(in_channels,
-                                                  cfg.add_fcn_layer_size, bias=True))
+                                                  cfg.linear_output_layer_size, bias=True))
+
+        # Update config
+        self.cfg = cfg
 
         # Initialize weights of layers
         self.__initialize_weights__(init_method_type=cfg.init_method_type)
@@ -585,18 +635,25 @@ class TemplateConvNetFeatureFuser2d(AutoForgeModule):
         # Add output layers if specified in config
         self.regressor_sequential = nn.ModuleList()
 
-        if cfg.add_fcn_layer_size is not None:
+        if cfg.linear_output_layer_size is not None:
 
-            if in_channels != cfg.add_fcn_layer_size:
+           # If user did not specify it, use in_channels size as linear input size
+            if cfg.linear_input_layer_size is None:
+                cfg.linear_input_layer_size = in_channels
+            
+            if in_channels != cfg.linear_input_layer_size:
                 # Add convolutional "expander"
                 self.regressor_sequential.append(
-                    nn.Conv2d(in_channels, cfg.add_fcn_layer_size, 1, 1))
+                    nn.Conv2d(in_channels, 
+                              cfg.linear_input_layer_size, 
+                              1, 
+                              1))
 
             # Fully Connected regressor layer
             self.regressor_sequential.append(nn.AdaptiveAvgPool2d((1, 1)))
             self.regressor_sequential.append(module=nn.Flatten())
-            self.regressor_sequential.append(nn.Linear(in_channels,
-                                                  cfg.add_fcn_layer_size, bias=True))
+            self.regressor_sequential.append(nn.Linear(cfg.linear_input_layer_size,
+                                                  cfg.linear_output_layer_size, bias=True))
 
         # Initialize weights of layers
         self.__initialize_weights__(init_method_type=cfg.init_method_type)
