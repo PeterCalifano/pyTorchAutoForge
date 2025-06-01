@@ -9,7 +9,7 @@ from pyTorchAutoForge.utils import torch_to_numpy, numpy_to_torch
 from PIL import Image
 import matplotlib.pyplot as plt
 
-def test_image_operators(image: np.ndarray | torch.Tensor):# -> tuple[Tensor | ndarray[Any, Any], Any | NDArray[numpy_typ...:
+def _run_image_operators(image: np.ndarray | torch.Tensor):# -> tuple[Tensor | ndarray[Any, Any], Any | NDArray[numpy_typ...:
     """
     Test image processing operators on input image.
     """
@@ -59,8 +59,8 @@ def run_all_single_image_(image_names, apply_augs, augmentation_module: ImageAug
             f"Testing image {image_name}: min {image_norm.min()}, max {image_norm.max()}, mean {image_norm.mean()}")
 
         # run operators
-        numpy_maps = test_image_operators(img_aug[0, 0].cpu().numpy())
-        torch_maps = test_image_operators(numpy_to_torch(img_aug).to('cuda'))
+        numpy_maps = _run_image_operators(img_aug[0, 0].cpu().numpy())
+        torch_maps = _run_image_operators(numpy_to_torch(img_aug).to('cuda'))
 
         # Compare numpy vs torch maps for unit test
         for i, (nm, tm) in enumerate(zip(numpy_maps, torch_maps)):
@@ -95,7 +95,7 @@ def run_all_single_image_(image_names, apply_augs, augmentation_module: ImageAug
     plt.close()
 
 
-def run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageAugmentationsHelper | None = None):
+def _run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageAugmentationsHelper | None = None):
     
     this_file_path = os.path.dirname(os.path.abspath(__file__))
 
@@ -140,7 +140,7 @@ def run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageA
     # Run non-batched for numpy (no support for batch)
     numpy_inputs = batch_np if not apply_augs else batch_torch[:, 0].cpu(
     ).numpy()
-    numpy_maps_per_image = [test_image_operators(im) for im in numpy_inputs]
+    numpy_maps_per_image = [_run_image_operators(im) for im in numpy_inputs]
     # Number of maps
     n_maps = len(numpy_maps_per_image[0])
     # stack per-map across images: list length n_maps of arrays (N,H,W)
@@ -150,7 +150,7 @@ def run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageA
     ]
 
     # ---- Run operators in batch ----
-    torch_maps = test_image_operators(batch_torch)
+    torch_maps = _run_image_operators(batch_torch)
 
     # ---- Verify all images/maps at once ----
     for i, (nm, tm) in enumerate(zip(numpy_maps, torch_maps), start=1):
@@ -188,7 +188,6 @@ def run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageA
     plt.show()
     plt.close()
 
-
 def test_all_operators():
     # ---- Configuration ----
     this_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -217,7 +216,7 @@ def test_all_operators():
     
     # Tests
     #run_all_single_image_(image_names, apply_augs, augmentation_module)
-    run_all_batched_images_(image_names, apply_augs, augmentation_module)
+    _run_all_batched_images_(image_names, apply_augs, augmentation_module)
 
 
 # Manual test execution
