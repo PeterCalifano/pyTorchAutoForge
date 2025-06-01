@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 from typing import Literal
+import torch.nn.functional as F
 
 # TODO implement an optional "residual connection" feature
 
@@ -296,6 +297,7 @@ class ConvolutionalBlockNd(nn.Module):
 # %% Feature map fusion blocks
 # EXPERIMENTAL
 from collections.abc import Callable
+from functools import partial
 fuser_type = Literal["feature_add", "channel_concat",
                      "multihead_attention", "identity"]
 
@@ -347,52 +349,41 @@ class FeatureMapFuser(nn.Module):
         self.fuser_type = fuser_type
 
         if fuser_type == "identity":
-            def _identity_fuser(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
-                """
-                Identity fuser that returns the first feature map unchanged.
-                """
-                return x_feat1
-            
-            self.fuser : Callable = _identity_fuser 
+            self.fuser : Callable = self._identity_fuser 
             return
 
         # TODO does conv/attention requires upsampling of one of the two entries?
 
         # Define interpolation operation
-        import torch.nn.functional as F
-
         if num_dims == 2:  # 1D inputs: [B, L]
             mode = kwargs.get("mode", "bilinear")
+            # DEVNOTE not sure partial is supported by ONNx export operation. If not, just assign mode to a self attribute and change the methods from static to instance methods
 
-            def _resample_xfeat2(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
-                return F.interpolate(input=x_feat2, size=x_feat1.shape[1:], mode=mode, align_corners=True, antialias=False)
+            self._feature_resampler: Callable = partial(FeatureMapFuser._resample_xfeat2_1d, 
+                                                        interp_mode=mode)
 
         elif num_dims == 4:  # 2D inputs: [B,C,H,W]
             mode = kwargs.get("mode", "bicubic")
-
-            def _resample_xfeat2(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
-                return F.interpolate(x_feat2, size=x_feat1.shape[2:], mode=mode, align_corners=True, antialias=False)
+            
+            self._feature_resampler: Callable = partial(FeatureMapFuser._resample_xfeat2_2d, 
+                                                        interp_mode=mode)
 
         elif num_dims == 5:  # 3D inputs: [B,C,D,H,W]
             mode = kwargs.get("mode", "trilinear")
 
-            def _resample_xfeat2(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
-                return F.interpolate(x_feat2, size=x_feat1.shape[3:], mode=mode, align_corners=True, antialias=False)
+            self._feature_resampler: Callable = partial(FeatureMapFuser._resample_xfeat2_3d, 
+                                                        interp_mode=mode)
 
         else:
             raise ValueError(
-                "Invalid input dimensions. Expected a 4D tensor (for 2D inputs) or a 5D tensor (for 3D inputs).")
+                "Invalid input dimensions. Expected a 4D tensor (for 2D inputs) or a 5D tensor (for 3D inputs). Corresponding num_dims = 2, 4, or 5.")
 
+
+        # DEVNOTE: Preselect the appropriate fusion function at initialization so that the returned function contains no conditionals during forward
 
         # Build the actual operator and assign it to self.fuse
         if fuser_type == 'feature_add':
-            # Preselect the appropriate fusion function at initialization so that the returned
-            # function contains no conditionals during forward
-            def _feature_add_fuser(x_feat1: torch.Tensor, x_feat2: torch.Tensor):
-                out: torch.Tensor = x_feat1 + _resample_xfeat2(x_feat1, x_feat2)
-                return out
-
-            self.fuser = _feature_add_fuser
+            self.fuser = self._feature_add_fuser
 
         elif fuser_type == 'channel_concat':
             assert num_skip_channels is not None, "num_skip_channels arg is required for concat"
@@ -408,23 +399,8 @@ class FeatureMapFuser(nn.Module):
             else:
                 raise ValueError(
                     f"Invalid num_dims for channel_concat fuser. Expected 4 (2D) or 5 (3D), found {num_dims}.")
-
-            def _channel_concat_fuser(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
-                """
-                Concatenate the input tensor and skip tensor along the channel dimension,
-                then project the result to the original number of channels.
-                """
-                # Resample x_feat2 to match shape of x_feat1
-                x_feat2_resampled = _resample_xfeat2(x_feat1, x_feat2)
-
-                # Concatenate along channel dimension
-                concatenated: torch.Tensor = torch.cat([x_feat1, x_feat2_resampled], dim=1)
-
-                # Project back to original number of channels
-                out: torch.Tensor = self.proj(concatenated)
-                return out
-
-            self.fuser = _channel_concat_fuser
+            
+            self.fuser = self._channel_concat_fuser
 
         elif fuser_type == 'multihead_attention':
             assert num_attention_heads is not None, "num_attention_heads arg is required for attention fuser"
@@ -438,7 +414,7 @@ class FeatureMapFuser(nn.Module):
             vdim = kwargs.get("vdim", in_channels)
 
             # Define multi-head attention
-            self._attention_fuser = nn.MultiheadAttention(embed_dim=in_channels,
+            self._attention_fusion_multihead = nn.MultiheadAttention(embed_dim=in_channels,
                                                           num_heads=num_attention_heads,
                                                           dropout=dropout,
                                                           bias=bias,
@@ -447,37 +423,13 @@ class FeatureMapFuser(nn.Module):
                                                           kdim=kdim,
                                                           vdim=vdim,
                                                           batch_first=False)
-
-            def attention_fuser_(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
-                b, c, h, w = x_feat1.shape
-
-                # Flatten to [sequence_len, batch, embed]
-                x_flat1 = x_feat1.flatten(2).permute(2, 0, 1)
-                x_flat2 = x_feat2.flatten(2).permute(2, 0, 1)
-                fused_flat, _ = self._attention_fuser(x_flat1, x_flat2, x_flat2)
-
-                # Reshape back to [batch, channel, h, w]
-                fused_flat: torch.Tensor = fused_flat.permute(
-                    1, 2, 0).reshape(b, c, h, w)
-
-                return fused_flat
         
             if resample_before_attention:
-                # Wrap attention_fuser to add resampling step before call
-                def _attention_fuser(x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
-                    """
-                    Resample x_feat2 to match shape of x_feat1, then apply multi-head attention.
-                    """
-                    # Resample x_feat2 to match shape of x_feat1
-                    x_feat2_resampled = _resample_xfeat2(x_feat1, x_feat2)
-
-                    # Apply attention
-                    return attention_fuser_(x_feat1, x_feat2_resampled)
+                # Assign function pointer to attention fuser with pre-resampling
+                self.fuser = self._attention_fuser_resampled
             else:
-                # Just assign function pointer
-                _attention_fuser = attention_fuser_
-                
-            self.fuser = _attention_fuser
+                # Assign function pointer to attention fuser with no pre-resampling                
+                self.fuser = self._attention_fuser
 
         else:
             raise ValueError(f"Unknown fuse mode: {fuser_type}")
@@ -486,6 +438,110 @@ class FeatureMapFuser(nn.Module):
         # Call fuser module
         fused_x: torch.Tensor = self.fuser(x, skip_features)
         return fused_x
+
+    # Internal methods (to support tracing/graph capture)
+    def _identity_fuser(self, x_feat1: torch.Tensor, x_feat2: torch.Tensor):
+        """
+        Identity fuser that returns the first feature map unchanged.
+        """
+        return x_feat1
+
+    @staticmethod
+    def _resample_xfeat2_1d(x_feat1: torch.Tensor, 
+                            x_feat2: torch.Tensor,
+                            interp_mode : str = "bilinear") -> torch.Tensor:
+        """
+        Resample x_feat2 to match the shape of x_feat1.
+        """
+        return F.interpolate(input=x_feat2, 
+                             size=x_feat1.shape[1:], 
+                             mode=interp_mode, 
+                             align_corners=True, 
+                             antialias=False)    
+    
+    @staticmethod
+    def _resample_xfeat2_2d(x_feat1: torch.Tensor, 
+    x_feat2: torch.Tensor,
+    interp_mode : str = "bicubic") -> torch.Tensor:
+        """
+        Resample x_feat2 to match the shape of x_feat1.
+        """
+        return F.interpolate(input=x_feat2,
+                              size=x_feat1.shape[2:], 
+                              mode=interp_mode, 
+                              align_corners=True, 
+                              antialias=False)
+    
+    @staticmethod
+    def _resample_xfeat2_3d(x_feat1: torch.Tensor, 
+    x_feat2: torch.Tensor,
+    interp_mode : str = "trilinear") -> torch.Tensor:
+        """
+        Resample x_feat2 to minput=atch the shape of x_feat1.
+        """
+        return F.interpolate(x_feat2, 
+                             size=x_feat1.shape[3:], 
+                             mode=interp_mode, 
+                             align_corners=True, 
+                             antialias=False)
+
+    def _feature_add_fuser(self, x_feat1: torch.Tensor, x_feat2: torch.Tensor):
+        out: torch.Tensor = x_feat1 + self._feature_resampler(x_feat1, x_feat2)
+        return out
+
+    def _channel_concat_fuser(self, 
+                              x_feat1: torch.Tensor, 
+                              x_feat2: torch.Tensor) -> torch.Tensor:
+        """
+        Concatenate the input tensor and skip tensor along the channel dimension,
+        then project the result to the original number of channels.
+        """
+        # Resample x_feat2 to match shape of x_feat1
+        x_feat2_resampled = self._feature_resampler(x_feat1, x_feat2)
+
+        # Concatenate along channel dimension
+        concatenated: torch.Tensor = torch.cat([x_feat1, x_feat2_resampled], dim=1)
+
+        # Project back to original number of channels
+        out: torch.Tensor = self.proj(concatenated)
+        return out
+
+    def _attention_fuser(self, 
+                         x_feat1: torch.Tensor, 
+                         x_feat2: torch.Tensor) -> torch.Tensor:
+        """
+        Applies multi-head attention fuser.
+
+        Args:
+            x_feat1 (torch.Tensor): The primary feature map.
+            x_feat2 (torch.Tensor): The secondary (skip) feature map to be fused.
+
+        Returns:
+            torch.Tensor: The fused feature map after applying multi-head attention.
+        """
+        b, c, h, w = x_feat1.shape
+
+        # Flatten to [sequence_len, batch, embed]
+        x_flat1 = x_feat1.flatten(2).permute(2, 0, 1)
+        x_flat2 = x_feat2.flatten(2).permute(2, 0, 1)
+
+        fused_flat, _ = self._attention_fusion_multihead(x_flat1, x_flat2, x_flat2)
+
+        # Reshape back to [batch, channel, h, w]
+        fused_flat: torch.Tensor = fused_flat.permute(
+            1, 2, 0).reshape(b, c, h, w)
+
+        return fused_flat
+    
+    def _attention_fuser_resampled(self, x_feat1: torch.Tensor, x_feat2: torch.Tensor) -> torch.Tensor:
+        """
+        Resample x_feat2 to match shape of x_feat1, then apply multi-head attention.
+        """
+        # Resample x_feat2 to match shape of x_feat1
+        x_feat2_resampled = self._feature_resampler(x_feat1, x_feat2)
+
+        # Apply attention
+        return self._attention_fuser(x_feat1, x_feat2_resampled)
 
 # FeatureMapFuser factory
 def _feature_map_fuser_factory(config: FeatureMapFuserConfig,
