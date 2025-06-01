@@ -101,35 +101,39 @@ def ComputeConvBlock2dOutputSize(input_size: conv_size_autocomp_input_types,
     return conv_block_output_size, conv2d_flattened_output_size
 
 ### AutoComputeConvBlocksOutput
-def AutoComputeConvBlocksOutput(first_input_size: int | list[int], 
+def AutoComputeConvBlocksOutput(first_input_size: int | list[int] | tuple[int, int], 
                                 out_channels_sizes: conv_size_autocomp_input_types,
                                 kernel_sizes: conv_size_autocomp_input_types, 
                                 pooling_kernel_sizes: conv_size_autocomp_input_types | None = None,
                                 conv_stride_sizes: conv_size_autocomp_input_types | None = None,
                                 pooling_stride_sizes: conv_size_autocomp_input_types | None = None,
                                 conv2d_padding_sizes: conv_size_autocomp_input_types | None = None,
-                                pooling_padding_sizes: conv_size_autocomp_input_types | None = None) -> tuple[tuple[int, int], list[int], list[int]]:
+                                pooling_padding_sizes: conv_size_autocomp_input_types | None = None) -> tuple[tuple[int, int], list[int], list[tuple[int,int]]]:
     """
-    Automatically compute the output size of a series of ConvBlock layers.
+    Computes the output size and flattened feature sizes for a sequence of ConvBlock layers.
 
     Args:
-        first_input_size (int or list[int]): The initial input size, either as an integer (assumed square) or a list [height, width].
-        out_channels_sizes (tuple[int, ...] | list[int] | NDArray[np.integer]): Number of output channels for each ConvBlock.
-        kernel_sizes (tuple[int, ...] | list[int] | NDArray[np.integer]): Kernel sizes for each ConvBlock.
-        pooling_kernel_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Pooling kernel sizes for each ConvBlock. Defaults to ones if None.
-        conv_stride_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Stride sizes for each ConvBlock. Defaults to ones if None.
-        pooling_stride_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Stride sizes for pooling layers. Defaults to pooling_kernel_sizes if None.
-        conv2d_padding_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Padding sizes for Conv2d layers. Defaults to zeros if None.
-        pooling_padding_sizes (tuple[int, ...] | list[int] | NDArray[np.integer] | None): Padding sizes for pooling layers. Defaults to zeros if None.
+        first_input_size (int | list[int] | tuple[int, int]): Initial input size, either as an integer (assumed square), a list [height, width], or a tuple (height, width).
+        out_channels_sizes (tuple[int, ...] | list[int] | np.ndarray): Number of output channels for each ConvBlock.
+        kernel_sizes (tuple[int, ...] | list[int] | np.ndarray): Kernel sizes for each ConvBlock.
+        pooling_kernel_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Pooling kernel sizes for each ConvBlock. Defaults to 1 if None.
+        conv_stride_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Stride sizes for each ConvBlock. Defaults to 1 if None.
+        pooling_stride_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Stride sizes for pooling layers. Defaults to pooling_kernel_sizes if None.
+        conv2d_padding_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Padding sizes for Conv2d layers. Defaults to 0 if None.
+        pooling_padding_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Padding sizes for pooling layers. Defaults to 0 if None.
 
     Returns:
-        tuple:
+        tuple[tuple[int, int], list[int], list[tuple[int, int]]]:
             - tuple[int, int]: Output size [height, width] of the last ConvBlock.
             - list[int]: Flattened output sizes for each ConvBlock.
             - list[tuple[int, int]]: Intermediate output sizes [height, width] for each ConvBlock.
     """
     if isinstance(first_input_size, int):
         first_input_size = [first_input_size, first_input_size]
+    elif isinstance(first_input_size, tuple):
+        first_input_size = list(first_input_size)
+    else:
+        raise TypeError("Invalid input size format.")
 
     # Handle None defaults
     if pooling_kernel_sizes is None:
