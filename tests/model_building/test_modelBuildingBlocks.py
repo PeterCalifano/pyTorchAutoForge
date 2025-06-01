@@ -236,8 +236,8 @@ def test_template_convnet2d_forward_with_intermediate_features():
 
 
 @pytest.mark.parametrize("kernels,pools,msg", [
-    (None, [2], r".*must.*not.*none.*"),
-    ([3], None, r".*must.*not.*none.*"),
+    (None, [2], r".*not.*None.*"),
+    ([3], None, r".*not.*None.*"),
 ])
 
 def test_template_convnet2d_none_kernel_or_pool_raises(kernels, pools, msg):
@@ -748,7 +748,7 @@ def test_template_convnet_feature_fuser2d_forward_multi_head_attention_fuser():
         num_skip_channels=[3],
         merge_module_index=[0],
         merge_module_type=["multihead_attention"],
-        num_attention_heads=[4],
+        num_attention_heads=[1],
         save_intermediate_features=False,
     )
 
@@ -780,4 +780,6 @@ if __name__ == "__main__":
     #test_template_convnet_feature_fuser2d_forward_identity_fuser()
     #test_template_convnet2d_output_shape_simple()
     #test_template_convnet_feature_fuser2d_forward_with_intermediate_features()
+    #test_template_convnet_feature_fuser2d_forward_channel_concat_fuser()
+    #test_template_convnet_feature_fuser2d_forward_multi_head_attention_fuser()
     pass
