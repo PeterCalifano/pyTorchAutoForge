@@ -253,14 +253,15 @@ def test_template_convnet2d_output_shape_simple():
     model = TemplateConvNet2d(cfg)
 
     # Input spatial size 10x10
-
     x = torch.randn(2, 3, 10, 10)
     out, _ = model(x)
 
-    h_out = (10 - 3 + 1) // 2  # (kernel removes 2) then pool halves
-    
-    w_out = h_out
-    assert out.shape == (2, 4, h_out, w_out)
+    out_hw_shape, flattened_out = ComputeConvBlock2dOutputSize(input_size=(10, 10), 
+                                                            out_channels_size=4, 
+                                                            conv2d_kernel_size=3, 
+                                                            pooling_kernel_size=2)
+
+    assert out.shape == (2, 4, out_hw_shape[0], out_hw_shape[1])
 
 # %% DropoutEnsemblingNetworkWrapper tests
 class DummyModel(nn.Module):
@@ -580,7 +581,12 @@ def test_template_convnet_feature_fuser2d_forward_identity_fuser():
     skip = torch.randn(2, 1, 6, 6)
     out, feats = block((x, [skip]))
     
-    assert out.shape == (2, 4, 3, 3)
+    out_hw_shape, flattened_out = ComputeConvBlock2dOutputSize(input_size=(6, 6), 
+                                            out_channels_size=4, 
+                                            conv2d_kernel_size=3, 
+                                            pooling_kernel_size=2)
+    
+    assert out.shape == (2, 4, out_hw_shape[0], out_hw_shape[1])
     assert feats == []
 
 
@@ -614,4 +620,5 @@ if __name__ == "__main__":
     #test_fcnet_forward_simple()
     #test_build_dropout_ensemble_static()
     test_template_convnet_feature_fuser2d_forward_identity_fuser()
+    test_template_convnet2d_output_shape_simple()
     pass
