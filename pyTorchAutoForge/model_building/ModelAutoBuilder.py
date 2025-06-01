@@ -1,13 +1,18 @@
 from enum import Enum
 import numpy as np
-from torch import nn, Tensor, cat
+from sympy import NDimArray
+from torch import nn, cat
 # Auxiliar functions
 from typing import Any
+from numpy.typing import NDArray
 
-inputAllowedTypes = tuple | list | np.ndarray | Tensor
+conv_size_autocomp_input_types = tuple[int,...] | list[int] | NDArray[np.integer]
 
-
-def ComputeConv2dOutputSize(inputSize: inputAllowedTypes, kernelSize: int = 3, strideSize: int = 1, paddingSize: int = 0) -> tuple[int, int]:
+# %% Auxiliary functions for output size computation
+def ComputeConv2dOutputSize(input_size: conv_size_autocomp_input_types, 
+                            kernel_size: int = 3,  
+                            stride_size: int = 1, 
+                            padding_size: int = 0) -> tuple[int, int]:
     """
     Compute the output size and number of feature maps (channels) of a 2D convolutional layer.
 
@@ -20,10 +25,13 @@ def ComputeConv2dOutputSize(inputSize: inputAllowedTypes, kernelSize: int = 3, s
     Returns:
         tuple: A tuple containing the height and width of the output feature map.
     """
-    return int(((inputSize[0] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1), int(((inputSize[1] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1)
+    return int(((input_size[0] + 2*padding_size - (kernel_size-1)-1) / stride_size) + 1), int(((input_size[1] + 2*padding_size - (kernel_size-1)-1) / stride_size) + 1)
 
 
-def ComputePooling2dOutputSize(inputSize: inputAllowedTypes, kernelSize: int = 2, strideSize: int = 2, paddingSize: int = 0) -> tuple[int, int]:
+def ComputePooling2dOutputSize(inputSize: conv_size_autocomp_input_types, 
+                               kernelSize: int = 2, 
+                               strideSize: int = 2, 
+                               paddingSize: int = 0) -> tuple[int, int]:
     """
     Compute the output size and number of feature maps (channels, i.e., volume) of a 2D max/avg pooling layer.
 
@@ -41,39 +49,63 @@ def ComputePooling2dOutputSize(inputSize: inputAllowedTypes, kernelSize: int = 2
 # ConvBlock 2D and flatten sizes computation (SINGLE BLOCK)
 
 
-def ComputeConvBlockOutputSize(inputSize: inputAllowedTypes, outChannelsSize: int,
-                               convKernelSize: int = 3, poolingkernelSize: int = 2,
-                               convStrideSize: int = 1, poolingStrideSize: int | None = None,
-                               convPaddingSize: int = 0, poolingPaddingSize: int = 0) -> tuple[tuple[int, int], int]:
+def ComputeConvBlock2dOutputSize(input_size: conv_size_autocomp_input_types, 
+                               out_channels_size: int,
+                               conv2d_kernel_size: int = 3, 
+                               pooling_kernel_size: int = 2,
+                               conv_stride_size: int = 1, 
+                               pooling_stride_size: int | None = None,
+                               conv2d_padding_size: int = 0, 
+                               pooling_padding_size: int = 0) -> tuple[tuple[int, int], int]:
 
-    # TODO: modify interface to use something like a dictionary with the parameters, to make it more fexible and avoid the need to pass all the parameters
-    '''Compute output size and number of features maps (channels, i.e. volume) of a ConvBlock layer.
-       Input size must be a list, numpy array or a torch tensor with 2 elements: [height, width].'''
+    """
+    Computes the output size and number of feature maps (channels, i.e., volume) of a ConvBlock layer.
 
-    if poolingStrideSize is None:
-        poolingStrideSize = poolingkernelSize
+    Args:
+        input_size (Union[list, tuple, np.ndarray, torch.Tensor]): Input size with 2 elements [height, width].
+        out_channels_size (int): Number of output channels for the Conv2d layer.
+        conv2d_kernel_size (int, optional): Size of the Conv2d kernel. Default is 3.
+        pooling_kernel_size (int, optional): Size of the pooling kernel. Default is 2.
+        conv_stride_size (int, optional): Stride size for the Conv2d layer. Default is 1.
+        pooling_stride_size (int or None, optional): Stride size for the pooling layer. If None, defaults to pooling_kernel_size.
+        conv2d_padding_size (int, optional): Padding size for the Conv2d layer. Default is 0.
+        pooling_padding_size (int, optional): Padding size for the pooling layer. Default is 0.
+
+    Returns:
+        tuple:
+            - tuple[int, int]: Output size [height, width] after ConvBlock.
+            - int: Flattened output size (height * width * out_channels_size).
+    """
+
+    if pooling_stride_size is None:
+        pooling_stride_size = pooling_kernel_size
 
     # Compute output size of Conv2d and Pooling2d layers
-    conv2dOutputSize = ComputeConv2dOutputSize(
-        inputSize, convKernelSize, convStrideSize, convPaddingSize)
+    conv2d_outsize = ComputeConv2dOutputSize(input_size,
+          conv2d_kernel_size, 
+          conv_stride_size, 
+          conv2d_padding_size)
 
-    if conv2dOutputSize[0] < poolingkernelSize or conv2dOutputSize[1] < poolingkernelSize:
-        raise ValueError(
-            'Pooling kernel size is larger than output size of Conv2d layer. Check configuration.')
+    if conv2d_outsize[0] < pooling_kernel_size or conv2d_outsize[1] < pooling_kernel_size:
+        raise ValueError('Pooling kernel size is larger than output size of Conv2d layer. Please check configuration validity.')
 
-    convBlockOutputSize = ComputePooling2dOutputSize(
-        conv2dOutputSize, poolingkernelSize, poolingStrideSize, poolingPaddingSize)
+    conv_block_output_size = ComputePooling2dOutputSize(conv2d_outsize,
+        pooling_kernel_size,
+          pooling_stride_size,
+            pooling_padding_size)
 
     # Compute total number of features after ConvBlock as required for the fully connected layers
-    conv2dFlattenOutputSize = convBlockOutputSize[0] * \
-        convBlockOutputSize[1] * outChannelsSize
+    conv2d_flattened_output_size = conv_block_output_size[0] * \
+        conv_block_output_size[1] * out_channels_size
 
-    return convBlockOutputSize, conv2dFlattenOutputSize
+    return conv_block_output_size, conv2d_flattened_output_size
 
 # TODO function requiring extensive rework
 
 
-def AutoComputeConvBlocksOutput(self, kernelSizes: inputAllowedTypes, poolingKernelSize: inputAllowedTypes | None = None):
+def AutoComputeConvBlocksOutput(self, 
+                                kernel_sizes: conv_size_autocomp_input_types, 
+                                pooling_kernel_size: conv_size_autocomp_input_types | None = None):
     """
     Automatically compute the output size of a series of ConvBlock layers.
 
@@ -88,20 +120,25 @@ def AutoComputeConvBlocksOutput(self, kernelSizes: inputAllowedTypes, poolingKer
     # NOTE: stride and padding are HARDCODED in this version
     outputMapSize = [self.patchSize, self.patchSize]
 
-    if poolingKernelSize is None:
-        poolingKernelSize = list(np.ones(len(kernelSizes)))
+    if pooling_kernel_size is None:
+        pooling_kernel_size = list(np.ones(len(kernel_sizes)))
 
     assert (self.numOfConvLayers == len(
-            kernelSizes) == len(poolingKernelSize))
+            kernel_sizes) == len(pooling_kernel_size))
 
     for idL in range(self.numOfConvLayers):
 
-        convBlockOutputSize = ComputeConvBlockOutputSize(outputMapSize, self.outChannelsSizes[idL], kernelSizes[idL], poolingKernelSize[idL],
-                                                         convStrideSize=1, poolingStrideSize=poolingKernelSize[idL],
-                                                         convPaddingSize=0, poolingPaddingSize=0)
+        convBlockOutputSize = ComputeConvBlock2dOutputSize(input_size=outputMapSize,
+                                                            out_channels_size=self.outChannelsSizes[idL], conv2d_kernel_size=kernel_sizes[idL], 
+                                                            pooling_kernel_size=pooling_kernel_size[idL],
+                                                            conv_stride_size=1, 
+                                                            pooling_stride_size=pooling_kernel_size[idL],
+                                                            conv2d_padding_size=0, 
+                                                            pooling_padding_size=0)
 
         print(('Output size of ConvBlock ID: {ID}: {outSize}').format(
             ID=idL, outSize=convBlockOutputSize))
+        
         # Get size from previous convolutional block
         outputMapSize[0] = convBlockOutputSize[0][0]
         outputMapSize[1] = convBlockOutputSize[0][1]
@@ -148,6 +185,7 @@ class MultiHeadRegressor(nn.Module):
 
         elif self.output_mode == EnumMultiHeadOutMode.Append:
             self.pack_output = self._pack_output_append
+
         else:
             raise NotImplementedError(
                 f"Output mode {self.output_mode} not implemented yet >.<")

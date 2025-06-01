@@ -1,5 +1,5 @@
 from pyTorchAutoForge.api.torch import *
-from pyTorchAutoForge.model_building.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize, EnumMultiHeadOutMode, MultiHeadRegressor
+from pyTorchAutoForge.model_building.ModelAutoBuilder import AutoComputeConvBlocksOutput, ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlock2dOutputSize, EnumMultiHeadOutMode, MultiHeadRegressor
 from typing import Literal
 
 from pyTorchAutoForge.utils import GetDeviceMulti

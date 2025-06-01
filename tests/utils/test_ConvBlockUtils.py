@@ -1,5 +1,5 @@
 # Import modules
-from pyTorchAutoForge.model_building.ModelAutoBuilder import ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlockOutputSize
+from pyTorchAutoForge.model_building.ModelAutoBuilder import ComputeConv2dOutputSize, ComputePooling2dOutputSize, ComputeConvBlock2dOutputSize
 
 # Test definition of ConvBlock
 outChannelsSizes = [16, 32, 75, 15]
@@ -33,7 +33,7 @@ def test_ComputePooling2dOutputSize():
 
 def test_ComputeConvBlockOutputSize_singleBlock():
     # %% Test computation of number of features after ConvBlock using default settings
-    convBlockOutputSize, flattenedOutput = ComputeConvBlockOutputSize(
+    convBlockOutputSize, flattenedOutput = ComputeConvBlock2dOutputSize(
         [7, 7], outChannelsSizes[0])
 
     assert convBlockOutputSize == (2, 2), "The 2d output size of ConvBlock (conv. + pooling) is incorrect."
@@ -50,7 +50,7 @@ def test_ComputeConvBlockOutputSize_multiBlock():
     poolingPaddingSize = [0, 0]
     
     for idBlock in range(2):
-        convBlockOutputSize, flattenedOutput = ComputeConvBlockOutputSize(
+        convBlockOutputSize, flattenedOutput = ComputeConvBlock2dOutputSize(
             outputMapSize,
             outChannelsSizes[idBlock],
             convkernelSizes[idBlock],
