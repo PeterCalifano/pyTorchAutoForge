@@ -604,7 +604,7 @@ class TemplateConvNetFeatureFuser2d(AutoForgeModule):
                 fuser_module = FeatureMapFuser(num_dims=4, 
                                             fuser_type=cfg.merge_module_type[fuser_idx],
                                             in_channels=in_channels,
-                                            skip_channels=cfg.num_skip_channels[fuser_idx],
+                                            num_skip_channels=cfg.num_skip_channels[fuser_idx],
                                             num_attention_heads=cfg.num_attention_heads[fuser_idx],
                                             )
             else:
