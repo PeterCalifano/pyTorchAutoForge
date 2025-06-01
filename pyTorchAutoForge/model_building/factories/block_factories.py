@@ -174,7 +174,7 @@ def _pooling_factory(pool_type: pooling_types,
         ValueError: If an unsupported pooling type is provided or target_res is required but not provided.
     """
     pool_type_lower: str = pool_type.lower()
-    default_stride = stride if stride is not None else 1
+    default_stride = stride if stride is not None else kernel_size
 
     match pool_type_lower:
         case "maxpool1d":
