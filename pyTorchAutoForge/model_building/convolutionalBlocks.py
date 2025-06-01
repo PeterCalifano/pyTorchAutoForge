@@ -355,8 +355,8 @@ class FeatureMapFuser(nn.Module):
         # TODO does conv/attention requires upsampling of one of the two entries?
 
         # Define interpolation operation
-        if num_dims == 2:  # 1D inputs: [B, L]
-            mode = kwargs.get("mode", "bilinear")
+        if num_dims == 2:  # 1D inputs: [B, N]
+            mode = kwargs.get("mode", "linear")
             # DEVNOTE not sure partial is supported by ONNx export operation. If not, just assign mode to a self attribute and change the methods from static to instance methods
 
             self._feature_resampler: Callable = partial(FeatureMapFuser._resample_xfeat2_1d, 
@@ -449,22 +449,29 @@ class FeatureMapFuser(nn.Module):
     @staticmethod
     def _resample_xfeat2_1d(x_feat1: torch.Tensor, 
                             x_feat2: torch.Tensor,
-                            interp_mode : str = "bilinear") -> torch.Tensor:
+                            interp_mode : str = "linear") -> torch.Tensor:
         """
-        Resample x_feat2 to match the shape of x_feat1.
+        Resample x_feat2 to match the shape of x_feat1 for 1D vectors of shape [B,N].
         """
-        return F.interpolate(input=x_feat2, 
-                             size=x_feat1.shape[1:], 
-                             mode=interp_mode, 
-                             align_corners=True, 
-                             antialias=False)    
-    
+
+        # Unsqueeze to [B, 1, N] to use torch.nn.functional.interpolate, which supports only >3D tensors
+        x_feat1_unsqueezed = x_feat1.unsqueeze(1)
+        x_feat2_unsqueezed = x_feat2.unsqueeze(1)
+
+        x_feat2_resampled = F.interpolate(input=x_feat2_unsqueezed, 
+                                       size=x_feat1_unsqueezed.shape[2:], 
+                                       mode=interp_mode, 
+                                       align_corners=True, 
+                                       antialias=False)    
+        
+        return x_feat2_resampled.squeeze(1)
+
     @staticmethod
     def _resample_xfeat2_2d(x_feat1: torch.Tensor, 
     x_feat2: torch.Tensor,
     interp_mode : str = "bicubic") -> torch.Tensor:
         """
-        Resample x_feat2 to match the shape of x_feat1.
+        Resample x_feat2 to match the shape of x_feat1 for 2D inputs of shape [B, C, H, W]. Resampling is performed along [H,W] dims.
         """
         return F.interpolate(input=x_feat2,
                               size=x_feat1.shape[2:], 
@@ -477,10 +484,12 @@ class FeatureMapFuser(nn.Module):
     x_feat2: torch.Tensor,
     interp_mode : str = "trilinear") -> torch.Tensor:
         """
-        Resample x_feat2 to minput=atch the shape of x_feat1.
+        Resample x_feat2 to match the shape of x_feat1 for 3D inputs of shape [B, C, D, H, W]. Resampling is performed along [D,H,W] dims.
         """
+        # DOUBT (PC): not sure which dimensions for resampling. To review, perhaps should be user defined.
+
         return F.interpolate(x_feat2, 
-                             size=x_feat1.shape[3:], 
+                             size=x_feat1.shape[2:], 
                              mode=interp_mode, 
                              align_corners=True, 
                              antialias=False)
