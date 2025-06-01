@@ -6,6 +6,7 @@ from pyTorchAutoForge.model_building.ModelAutoBuilder import ComputeConvBlock2dO
 
 from torch import nn
 from pyTorchAutoForge.model_building.modelBuildingBlocks import DropoutEnsemblingNetworkWrapper
+from pyTorchAutoForge.model_building.convolutionalBlocks import FeatureMapFuser
 
 # %% AutoForgeModule tests
 def test_autoforge_module_default_name():
@@ -625,7 +626,6 @@ def test_template_convnet_feature_fuser2d_forward_identity_fuser():
     assert out.shape == (2, 4, out_hw_shape[0], out_hw_shape[1])
     assert feats == []
 
-
 def test_template_convnet_feature_fuser2d_forward_with_intermediate_features():
     """ Test forward with intermediate features in TemplateConvNetFeatureFuser2d """
 
@@ -673,6 +673,103 @@ def test_template_convnet_feature_fuser2d_forward_with_intermediate_features():
         assert feat.shape == (1, ch, h, w)
         assert feat.numel() == flattened_out_sizes[i]
 
+def test_template_convnet_feature_fuser2d_forward_feature_add_fuser():
+    """ Test forward with feature_add fuser in TemplateConvNetFeatureFuser2d """
+    
+    cfg = TemplateConvNetFeatureFuser2dConfig(
+        kernel_sizes=[3],
+        pool_type="MaxPool2d",
+        pool_kernel_sizes=[2],
+        out_channels_sizes=[4],
+        num_input_channels=1,
+        num_skip_channels=[1],
+        merge_module_index=[0],
+        merge_module_type=["feature_add"],
+        save_intermediate_features=False,
+    )
+
+    model = TemplateConvNetFeatureFuser2d(cfg)
+
+    x = torch.randn(2, 1, 6, 6)
+    skip = torch.randn(2, 1, 10, 10)
+    out, feats = model((x, [skip]))
+
+    out_hw_shape, _ = ComputeConvBlock2dOutputSize(
+        input_size=(6, 6),
+        out_channels_size=4,
+        conv2d_kernel_size=3,
+        pooling_kernel_size=2
+    )
+
+    # Shape should match (batch, out_channels, H_out, W_out)
+    assert out.shape == (2, 4, out_hw_shape[0], out_hw_shape[1])
+    assert feats == []
+
+def test_template_convnet_feature_fuser2d_forward_channel_concat_fuser():
+    """ Test forward with channel_concat fuser in TemplateConvNetFeatureFuser2d """
+    
+    cfg = TemplateConvNetFeatureFuser2dConfig(
+        kernel_sizes=[3],
+        pool_type="MaxPool2d",
+        pool_kernel_sizes=[2],
+        out_channels_sizes=[4],
+        num_input_channels=2,
+        num_skip_channels=[3],
+        merge_module_index=[0],
+        merge_module_type=["channel_concat"],
+        save_intermediate_features=False,
+    )
+
+    model = TemplateConvNetFeatureFuser2d(cfg)
+
+    x = torch.randn(2, 2, 6, 6)
+    skip = torch.randn(2, 3, 9, 9)
+    out, feats = model((x, [skip]))
+
+    out_hw_shape, _ = ComputeConvBlock2dOutputSize(
+        input_size=(6, 6),
+        out_channels_size=4,
+        conv2d_kernel_size=3,
+        pooling_kernel_size=2
+    )
+
+    assert out.shape == (2, 4, out_hw_shape[0], out_hw_shape[1])
+    assert feats == []
+
+def test_template_convnet_feature_fuser2d_forward_multi_head_attention_fuser():
+    """ Test forward with multi-head attention fuser in TemplateConvNetFeatureFuser2d """
+
+    cfg = TemplateConvNetFeatureFuser2dConfig(
+        kernel_sizes=[3],
+        pool_type="MaxPool2d",
+        pool_kernel_sizes=[2],
+        out_channels_sizes=[4],
+        num_input_channels=3,
+        num_skip_channels=[3],
+        merge_module_index=[0],
+        merge_module_type=["multihead_attention"],
+        num_attention_heads=[4],
+        save_intermediate_features=False,
+    )
+
+    model = TemplateConvNetFeatureFuser2d(cfg)
+
+    # Create a dummy input and a matching skip feature tensor
+    x = torch.randn(2, 3, 6, 6)
+    skip = torch.randn(2, 3, 15, 15)
+    out, feats = model((x, [skip]))
+
+    # Calculate expected output spatial size
+    out_hw_shape, _ = ComputeConvBlock2dOutputSize(
+        input_size=(6, 6),
+        out_channels_size=4,
+        conv2d_kernel_size=3,
+        pooling_kernel_size=2
+    )
+
+    # Verify output shape and that no intermediate features were saved
+    assert out.shape == (2, 4, out_hw_shape[0], out_hw_shape[1])
+    assert feats == []
 
 
 # %% MANUAL DEBUG CALL
