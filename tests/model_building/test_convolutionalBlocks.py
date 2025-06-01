@@ -288,20 +288,28 @@ from pyTorchAutoForge.model_building.convolutionalBlocks import (
 
 # --- Feature-add fusion tests ---
 def test_feature_add_fuser_1d_same_shape():
+    """Test feature-add fuser for 1D inputs with same shape."""
+    
     fuser = FeatureMapFuser(num_dims=2, fuser_type="feature_add", in_channels=1)
     
     x = torch.randn(3, 5)
     skip = torch.randn_like(x)
     out = fuser(x, skip)
+
+    # Asserts
     assert out.shape == x.shape
     assert torch.allclose(out, x + skip)
 
 def test_feature_add_fuser_2d_same_shape():
+    """Test feature-add fuser for 2D inputs with same shape."""
+
     fuser = FeatureMapFuser(num_dims=4, fuser_type="feature_add", in_channels=3)
     
     x = torch.randn(2, 3, 4, 4)
     skip = torch.randn_like(x)
     out = fuser(x, skip)
+
+    # Assets
     assert out.shape == x.shape
     assert torch.allclose(out, x + skip)
 
@@ -311,11 +319,39 @@ def test_feature_add_fuser_3d_same_shape():
     x = torch.randn(1, 2, 3, 4, 5)
     skip = torch.randn_like(x)
     out = fuser(x, skip)
+    
+    # Asserts
     assert out.shape == x.shape
     assert torch.allclose(out, x + skip)
 
-# --- Channel-concat fusion tests ---
+# --- Add fuser with interpolation based resampling tests ---
+def test_identity_fuser_ignores_skip_and_returns_x():
+    # identity should return x unchanged, even if skip has different shape
+    fuser = FeatureMapFuser(num_dims=4, fuser_type="identity", in_channels=3)
+    x = torch.randn(2, 3, 5, 5)
+    skip = torch.randn(2, 3, 8, 8)
+    out = fuser(x, skip)
+    assert out.shape == x.shape
+    assert torch.allclose(out, x)
 
+def test_feature_add_fuser_interpolates_skip_2d():
+    # x zeros, skip ones at double spatial resolution => output should be ones
+    fuser = FeatureMapFuser(num_dims=4, fuser_type="feature_add", in_channels=1)
+    x = torch.zeros(1, 1, 2, 2)
+    skip = torch.ones(1, 1, 4, 4)
+    out = fuser(x, skip)
+    assert out.shape == x.shape
+    assert torch.allclose(out, torch.ones_like(x))
+
+def test_invalid_num_dims_for_fuser_raises_value_error():
+    # num_dims must be 2, 4, or 5
+    with pytest.raises(ValueError):
+        FeatureMapFuser(num_dims=3, fuser_type="feature_add", in_channels=1)
+    with pytest.raises(ValueError):
+        FeatureMapFuser(num_dims=3, fuser_type="multihead_attention",
+                        in_channels=2, num_attention_heads=1)
+
+# --- Channel-concat fusion tests ---
 def test_channel_concat_fuser_2d_shape_and_projection():
     in_ch, skip_ch = 4, 2
     fuser = FeatureMapFuser(num_dims=4,
@@ -352,6 +388,30 @@ def test_channel_concat_invalid_dims_raises():
                         in_channels=3,
                         num_skip_channels=1)
 
+def test_channel_concat_fuser_interpolation_and_projection():
+    # x zeros, skip ones at double spatial resolution
+    # proj weights pick only skip channels => each output element = sum(skip channels)=2
+    in_ch, skip_ch = 2, 2
+    fuser = FeatureMapFuser(num_dims=4,
+                                fuser_type="channel_concat",
+                                in_channels=in_ch,
+                                num_skip_channels=skip_ch)
+    
+    # Overwrite proj to pick only skip-ch inputs
+    with torch.no_grad():
+        # proj.weight shape [out_ch, in_tot, 1,1]
+        fuser.proj.weight.zero_()
+        # for each output channel, set weights for skip inputs to 1
+        fuser.proj.weight[:, in_ch:in_ch+skip_ch, 0, 0].fill_(1.0)
+        fuser.proj.bias.zero_()
+
+    x = torch.zeros(1, in_ch, 3, 3)
+    skip = torch.ones(1, skip_ch, 6, 6)
+    out = fuser(x, skip)
+    assert out.shape == x.shape
+    # each output value == sum of skip channels == 2
+    assert torch.allclose(out, torch.full_like(out, float(skip_ch)))
+
 # --- Multi-head attention fusion tests ---
 def test_multihead_attention_fuser_shape():
     in_ch = 3
@@ -370,6 +430,20 @@ def test_multihead_attention_missing_heads_raises():
         FeatureMapFuser(num_dims=4,
                         fuser_type="multihead_attention",
                         in_channels=3)
+
+def test_multihead_attention_fuser_with_resample_before_attention_runs_and_shapes():
+    # ensure that resample_before_attention path works without error
+    in_ch, heads = 3, 1
+    fuser = FeatureMapFuser(num_dims=4,
+                                fuser_type="multihead_attention",
+                                in_channels=in_ch,
+                                num_attention_heads=heads,
+                                resample_before_attention=True)
+    
+    x = torch.randn(2, in_ch, 2, 2)
+    skip = torch.randn(2, in_ch, 4, 4)
+    out = fuser(x, skip)
+    assert out.shape == x.shape
 
 # --- Factory tests ---
 def test_feature_map_fuser_factory_creates_correct_instance():
@@ -401,3 +475,8 @@ def test_unknown_fuser_type_raises_value_error():
                          fuser_type="unknown_mode",
                          in_channels=3,
                          num_skip_channels=1)
+
+# %% MANUAL CALLS FOR DEBUG
+if __name__ == "__main__":
+    #pytest.main([__file__])
+    test_feature_add_fuser_1d_same_shape()
