@@ -22,7 +22,21 @@ class AugsBaseClass(nn.Module, ABC):
         super(AugsBaseClass, self).__init__()
 
     @abstractmethod
-    def forward(self, imageAsDN: torch.Tensor | tuple[torch.Tensor], labels: torch.Tensor | tuple[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, 
+                x: torch.Tensor | tuple[torch.Tensor], # x = image_as_DN
+                labels: torch.Tensor | tuple[torch.Tensor] | None = None ) -> torch.Tensor | tuple[torch.Tensor, ...]:
+        """
+        forward _summary_
+
+        Applies the augmentation pipeline to the input tensor(s) and optionally processes labels.
+
+        Args:
+            x (torch.Tensor | tuple[torch.Tensor]): Input tensor(s), typically image data in digital number (integer or float).
+            labels (torch.Tensor | tuple[torch.Tensor] | None): Optional label tensor(s) to be processed alongside the input.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]: Tuple containing the augmented input tensor(s) and the processed label tensor(s).
+        """
         pass
 
 
