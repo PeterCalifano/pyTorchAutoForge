@@ -57,39 +57,54 @@ class PoissonShotNoise(AugsBaseClass):
         super().__init__()
         self.probability = probability
 
-        def forward(self, x: torch.Tensor | tuple[torch.Tensor],
-                    labels: torch.Tensor | tuple[torch.Tensor] | None = None) -> torch.Tensor | tuple[torch.Tensor, ...]:
-            """
-            Applies Poisson shot noise to the input batch of images.
+    def forward(self, 
+                x: torch.Tensor | tuple[torch.Tensor],
+                labels: torch.Tensor | tuple[torch.Tensor] | None = None) -> torch.Tensor | tuple[torch.Tensor, ...]:
+        """
+        Applies Poisson shot noise to the input batch of images.
 
-            Args:
-                x (torch.Tensor | tuple[torch.Tensor]): Input images as a tensor or tuple of tensors.
-                labels (torch.Tensor | tuple[torch.Tensor] | None, optional): Optional labels associated with the images.
+        Args:
+            x (torch.Tensor | tuple[torch.Tensor]): Input images as a tensor or tuple of tensors.
+            labels (torch.Tensor | tuple[torch.Tensor] | None, optional): Optional labels associated with the images.
 
-            Returns:
-                torch.Tensor | tuple[torch.Tensor, ...]: Images with Poisson shot noise applied, or a tuple containing such images.
+        Returns:
+            torch.Tensor | tuple[torch.Tensor, ...]: Images with Poisson shot noise applied, or a tuple containing such images.
 
-            """
+        """
 
-            # Randomly sample a boolean mask to index batch size
-            B = x.shape[0]
-            apply_mask = torch.rand(B) < self.probability
+        # TODO modify to handle tuple inputs 
 
-            # Pixel value is the variance of the Photon Shot Noise (higher where brighter).
-            # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel.
-            photon_shot_noise = torch.poisson(x[apply_mask])
+        # Randomly sample a boolean mask to index batch size
+        B = x.shape[0]
+        apply_mask = torch.rand(B) < self.probability
 
-            # Sum noise to the original images according to mask
-            x[apply_mask] += photon_shot_noise
+        # Pixel value is the variance of the Photon Shot Noise (higher where brighter).
+        # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel.
+        photon_shot_noise = torch.poisson(x[apply_mask])
 
-            return imgs_array
+        # Sum noise to the original images according to mask
+        x[apply_mask] += photon_shot_noise
+
+        return x
 
 
 class RandomGaussianNoiseVariableSigma(AugsBaseClass):
     """
     Applies per-sample Gaussian noise with variable sigma.
-    sigma_noise: scalar, (min,max) tuple, or per-sample (B,) or (B,2) array/tensor
-    gaussian_noise_aug_prob: probability to apply noise per sample
+    This augmentation adds Gaussian noise to each sample in a batch, where the standard deviation (sigma) can be a scalar, a (min, max) tuple for random sampling, or a per-sample array/tensor. The noise is applied to each sample with a specified probability.
+
+    Args:
+        sigma_noise (float or tuple[float, float]): Standard deviation of the Gaussian noise. Can be a scalar
+            or a tuple specifying the (min, max) range for random sampling per sample.
+        gaussian_noise_aug_prob (float, optional): Probability of applying noise to each sample. Defaults to 0.5.
+
+    Methods:
+        forward(x, labels=None):
+            Applies Gaussian noise to the input tensor with variable sigma per sample.
+
+    Example:
+        >>> aug = RandomGaussianNoiseVariableSigma(sigma_noise=(0.1, 0.5), gaussian_noise_aug_prob=0.7)
+        >>> noisy_imgs = aug(images)
     """
 
     def __init__(self, sigma_noise: float | tuple[float, float],
@@ -128,6 +143,14 @@ class RandomGaussianNoiseVariableSigma(AugsBaseClass):
 
 # TODO (PC) move translate_batch to this custom augmentation class, add rotation and extend for multiple points labels shift
 class RandomImageLabelsRotoTranslation(AugsBaseClass):
+    """
+    RandomImageLabelsRotoTranslation _summary_
+
+    _extended_summary_
+
+    :param AugsBaseClass: _description_
+    :type AugsBaseClass: _type_
+    """    
     def __init__(self,
                  angles: float | tuple[float, float] = (0.0, 360.0),
                  distribution_type: Literal["uniform", "normal"] = "uniform"):
@@ -141,7 +164,6 @@ class RandomImageLabelsRotoTranslation(AugsBaseClass):
         # TODO implement rotation
         raise NotImplementedError("Implementation todo")
         return x, labels
-
 
 def Flip_coords_X(coords: torch.Tensor,
                   image_width: int
@@ -160,21 +182,27 @@ def Flip_coords_X(coords: torch.Tensor,
         torch.Tensor: Tensor of the same shape as `coords` with x-coordinates flipped.
 
     Raises:
-        ValueError: If `coords` does not have shape (N, 2) or (B, N, 2).
+        ValueError: If `coords` does not have shape (N,2) or (B,N,2).
     """
     
     if coords.dim() == 2:
+        # Get x, y coordinates from (N,2)
         x = coords[:, 0]
         y = coords[:, 1]
+
+        # Compute new X coordinates
         new_x = (image_width - 1) - x
         return torch.stack([new_x, y], dim=1)
 
     elif coords.dim() == 3:
+        # Get x, y coordinates from (B,N,2)
         x = coords[..., 0]
         y = coords[..., 1]
-        new_x = (image_width - 1) - x
 
+        # Compute new X coordinates
+        new_x = (image_width - 1) - x
         return torch.stack([new_x, y], dim=-1)
+
     else:
         raise ValueError("coords must have shape (N,2) or (B,N,2)")
 
@@ -182,24 +210,43 @@ def Flip_coords_Y(coords: torch.Tensor,
                   image_height: int
                   ) -> torch.Tensor:
     """
-    (Same helper as before)
+    Flip y-coordinates vertically for a set of coordinates, given the image height.
+
+    This function flips the y-coordinates of points or batches of points vertically,
+    such that the topmost point becomes the bottommost and vice versa, relative to the image height.
+
+    Args:
+        coords (torch.Tensor): Tensor of shape (N, 2) or (B, N, 2) representing coordinates.
+        image_height (int): The height of the image.
+
+    Returns:
+        torch.Tensor: Tensor of the same shape as `coords` with y-coordinates flipped.
+
+    Raises:
+        ValueError: If `coords` does not have shape (N,2) or (B,N,2).
     """
     if coords.dim() == 2:
+        # Get x, y coordinates from (N,2)
         x = coords[:, 0]
         y = coords[:, 1]
+
+        # Compute new Y coords
         new_y = (image_height - 1) - y
         return torch.stack([x, new_y], dim=1)
+
     elif coords.dim() == 3:
+        # Get x, y coordinates from (B,N,2)
         x = coords[..., 0]
         y = coords[..., 1]
+
+        # Compute new Y coords
         new_y = (image_height - 1) - y
         return torch.stack([x, new_y], dim=-1)
+
     else:
         raise ValueError("coords must have shape (N,2) or (B,N,2)")
 
-# …existing code…
-
-
+# %% Kornia augmentations module
 if has_kornia:
     class RandomBrightness(AugsBaseClass):
         def __init__(self,
@@ -208,34 +255,57 @@ if has_kornia:
                      keepdim: bool = True,
                      clip_output: bool = False):
             super().__init__()
-            self.op = K.RandomBrightness(
+
+            # Define underlying operation
+            self.kornia_op = K.RandomBrightness(
                 brightness=brightness, p=p, keepdim=keepdim, clip_output=clip_output)
 
         def forward(self,
                     x: torch.Tensor,
                     labels: torch.Tensor | None = None
                     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-            x_out = self.op(x)
+
+            x_out = self.kornia_op(x)
             return x_out, labels
 
     class RandomContrast(AugsBaseClass):
+        """
+        RandomContrast _summary_
+
+        _extended_summary_
+
+        :param AugsBaseClass: _description_
+        :type AugsBaseClass: _type_
+        """        
         def __init__(self,
                      contrast: tuple[float, float],
                      p: float = 0.5,
                      keepdim: bool = True,
                      clip_output: bool = False):
             super().__init__()
-            self.op = K.RandomContrast(
+            
+            # Define underlying operation
+            self.kornia_op = K.RandomContrast(
                 contrast=contrast, p=p, keepdim=keepdim, clip_output=clip_output)
 
         def forward(self,
                     x: torch.Tensor,
                     labels: torch.Tensor | None = None
                     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-            x_out = self.op(x)
+            x_out = self.kornia_op(x)
             return x_out, labels
 
     class RandomGaussianBlur(AugsBaseClass):
+        """
+        RandomGaussianBlur _summary_
+
+        _extended_summary_
+
+        :param AugsBaseClass: _description_
+        :type AugsBaseClass: _type_
+        :return: _description_
+        :rtype: _type_
+        """        
         def __init__(self,
                      kernel_size: tuple[int, int],
                      sigma: tuple[float, float],
@@ -243,14 +313,15 @@ if has_kornia:
                      keepdim: bool = True):
             
             super().__init__()
-            self.op = K.RandomGaussianBlur(
+            self.kornia_op = K.RandomGaussianBlur(
                 kernel_size=kernel_size, sigma=sigma, p=p, keepdim=keepdim)
 
         def forward(self,
                     x: torch.Tensor,
                     labels: torch.Tensor | None = None
                     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-            x_out = self.op(x)
+
+            x_out = self.kornia_op(x)
             return x_out, labels
 
     class KorniaImageCoordsFlipHoriz(AugsBaseClass):  # type: ignore
@@ -401,7 +472,7 @@ class ImageAugmentationsHelper(nn.Module):
         augs_ops = nn.ModuleList()
         torch_vision_ops = nn.ModuleList()
 
-        # TODO: add rotation augmentation, for simple cases, it is sufficient to rotate the image and pad with zero. Do it before translation though.
+        # TODO: add rotation augmentation, for simple cases, it is sufficient to rotate the image and pad with zero. Do it before translation.
         # Geometric augmentations
         if augs_cfg.rotation_aug_prob > 0:
             rotation_aug = transforms.RandomRotation(degrees=augs_cfg.rotation_angle,
@@ -451,6 +522,7 @@ class ImageAugmentationsHelper(nn.Module):
         # Stack into nn.Sequential module
         # TODO replace with AugmentationSequential
         self.kornia_augs_module = nn.Sequential(*augs_ops)
+        
         self.torchvision_augs_module = nn.Sequential(
             *torch_vision_ops) if len(torch_vision_ops) > 0 else None
 
