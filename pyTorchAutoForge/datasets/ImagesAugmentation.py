@@ -320,21 +320,24 @@ class AugmentationConfig:
     same_on_batch : bool = False
     random_apply_minmax: tuple[int, int] = (1, -1)
 
-    # Rotation augmentation (torchvision)
+    # Affine roto-translation augmentation
+    affine_align_corners : bool = False
+    affine_fill_value: int = 0  # Fill value for empty pixels after rotation
+
     rotation_angle: float | tuple[float, float] = (0.0, 360.0)
     rotation_aug_prob: float = 0.0
-    # Default is None = image centre
-    rotation_centre: tuple[float, float] | None = None
-    rotation_interp_mode: transforms.InterpolationMode = transforms.InterpolationMode.BILINEAR
-    rotation_expand: bool = False  # If True, expands rotated image to fill size
-    rotation_fill_value: int = 0  # Fill value for empty pixels after rotation
 
     # Translation parameters (in pixels)
+    shift_aug_prob: float = 0.0
     max_shift: float | tuple[float, float] = (20.0, 20.0)
     translate_distribution_type: Literal["uniform", "normal"] = "uniform"
-    shift_aug_prob: float = 0.0
 
-    # Flip augmentation probability (alternative to translation)
+    # Default is None = image centre
+    #rotation_centre: tuple[float, float] | None = None
+    #rotation_interp_mode: transforms.InterpolationMode = transforms.InterpolationMode.BILINEAR
+    #rotation_expand: bool = False  # If True, expands rotated image to fill size
+
+    # Flip augmentation probability
     hflip_prob: float = 0.0
     vflip_prob: float = 0.0
 
@@ -454,17 +457,25 @@ class ImageAugmentationsHelper(nn.Module):
         if augs_cfg.shift_aug_prob > 0 or augs_cfg.rotation_aug_prob:
             
             # Define rotation angles
-            rotation_degrees = 0.0
+            if augs_cfg.rotation_aug_prob > 0:
+                rotation_degrees = augs_cfg.rotation_angle
+            else:
+                rotation_degrees = 0.0
 
             # Define translation value 
-            translate_shift = (0.0, 0.0)
+            if augs_cfg.shift_aug_prob > 0:
+                translate_shift = augs_cfg.max_shift if isinstance(augs_cfg.max_shift, tuple) else (augs_cfg.max_shift, augs_cfg.max_shift)
+            else:
+                translate_shift = (0.0, 0.0)
                 
             # Construct RandomAffine 
             augs_ops.append(K.RandomAffine(degrees=rotation_degrees,
                                             translate=translate_shift,
                                             p=augs_cfg.rotation_aug_prob,
-                                            keepdim=True))
-            
+                                            keepdim=True,
+                                            align_corners=augs_cfg.affine_align_corners,
+                                            same_on_batch=False))
+                        
         # Flip augmentation
         if augs_cfg.hflip_prob > 0:
             augs_ops.append(K.RandomHorizontalFlip(p=augs_cfg.hflip_prob))
@@ -537,15 +548,18 @@ class ImageAugmentationsHelper(nn.Module):
                 img_tensor = self.torchvision_augs_module(img_tensor)
 
             # Apply translation
-            if self.augs_cfg.shift_aug_prob > 0:
-                img_shifted, lbl_shifted = self.translate_batch_(
-                    img_tensor, labels) 
-            else:
-                img_shifted = img_tensor
-                lbl_shifted = numpy_to_torch(labels).float()
+            #if self.augs_cfg.shift_aug_prob > 0:
+            #    img_shifted, lbl_shifted = self.translate_batch_(
+            #        img_tensor, labels) 
+            #else:
+            #    img_shifted = img_tensor
+            #    lbl_shifted = numpy_to_torch(labels).float()
+
+            # DEVNOTE: temporary. This must be defined differently depending on input and datakeys
+            lbl_tensor = numpy_to_torch(labels).float()
 
             # Apply augmentations module
-            aug_img = self.kornia_augs_module(img_shifted, lbl_shifted)
+            aug_img, lbl_tensor = self.kornia_augs_module(img_tensor, lbl_tensor)
 
             # Apply inverse scaling if needed
             if scale_factor is not None and (self.augs_cfg.is_normalized or self.augs_cfg.enable_auto_input_normalization):
@@ -560,13 +574,12 @@ class ImageAugmentationsHelper(nn.Module):
 
             if self.augs_cfg.label_scaling_factors is not None:
                 # Apply inverse scaling to labels
-                lbl_shifted = lbl_shifted / \
-                    self.augs_cfg.label_scaling_factors.to(lbl_shifted.device)
+                lbl_tensor = lbl_tensor / self.augs_cfg.label_scaling_factors.to(lbl_tensor.device)
 
             # Convert back to numpy if was ndarray
             if to_numpy is True:
                 aug_img = torch_to_numpy(aug_img.permute(0, 2, 3, 1))
-                lbl_shifted = torch_to_numpy(lbl_shifted)
+                lbl_tensor = torch_to_numpy(lbl_tensor)
 
         if isinstance(images, tuple):
             # Pack all input data in a tuple again
@@ -574,7 +587,7 @@ class ImageAugmentationsHelper(nn.Module):
         else:
             aug_img_ = aug_img
 
-        return aug_img_, lbl_shifted
+        return aug_img_, lbl_tensor
 
     def preprocess_images_(self,
                            images: ndArrayOrTensor
