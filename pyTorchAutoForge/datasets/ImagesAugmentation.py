@@ -334,7 +334,7 @@ class AugmentationConfig:
     input_data_keys: list[DataKey]
     keepdim : bool = True
     same_on_batch : bool = False
-    random_apply_minmax: tuple[int, int] = (0, -1)
+    random_apply_minmax: tuple[int, int] = (1, -1)
 
     # Affine roto-translation augmentation
     affine_align_corners : bool = False

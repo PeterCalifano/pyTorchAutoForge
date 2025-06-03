@@ -196,17 +196,20 @@ def test_sample_images_augmentation():
     imgs = np.stack(imgs, axis=0)
 
     # Define augmentation helper
+    augs_datakey = [DataKey.IMAGE, DataKey.KEYPOINTS]
+    lbl_datakey = DataKey.KEYPOINTS
+
     cfg = AugmentationConfig(
-        max_shift_img_fraction=(250, 250),
-        shift_aug_prob=1.0,
+        max_shift_img_fraction=(0.5,0.5),
+        input_data_keys = augs_datakey,
+        shift_aug_prob=0.35,
         is_normalized=False,
         rotation_angle=(-180, 180),
         rotation_aug_prob=1.0,
-        rotation_interp_mode="bilinear",
         sigma_gaussian_noise_dn=15,
         gaussian_noise_aug_prob=1.0,
         gaussian_blur_aug_prob=1.0,
-        is_torch_layout=True,
+        is_torch_layout=False,
         min_max_brightness_factor=(0.6, 1.2),
         min_max_contrast_factor=(0.6, 1.2),
         brightness_aug_prob=1.0,
@@ -224,7 +227,7 @@ def test_sample_images_augmentation():
 
     for idTrial in range(num_trials):
 
-        out_imgs, out_lbls = augs_helper(numpy_to_torch(imgs), lbls)
+        out_imgs, out_lbls = augs_helper( numpy_to_torch(imgs, dtype=torch.float32), numpy_to_torch(lbls, dtype=torch.float32) )
         out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
 
         # Plot inputs and outputs in a 2×batch_size grid
@@ -341,6 +344,6 @@ def test_AugmentationSequential():
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
 
-    test_synthetic_mask_augmentation()
-    #test_sample_images_augmentation()
+    #test_synthetic_mask_augmentation()
+    test_sample_images_augmentation()
     #test_AugmentationSequential()
