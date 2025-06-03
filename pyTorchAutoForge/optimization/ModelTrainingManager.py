@@ -739,7 +739,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     if self.data_augmentation_module is not None:
                         # DEVNOTE current implementation limited to keypoints. 
                         # How to allow extraction of entries in Y? 
-                        inputs = (X,Y)
                         X, Y = self.augment_data_batch(X, Y)
 
                     # Perform FORWARD PASS

@@ -604,6 +604,7 @@ class ImageAugmentationsHelper(nn.Module):
             # Apply augmentations module
             aug_inputs = self.kornia_augs_module(*inputs)
 
+
             ##########
             # TODO find a way to actually get keypoints and other entries without to index those manually!
             # Concat additional entries to keypoints entry in aug_inputs
@@ -624,7 +625,7 @@ class ImageAugmentationsHelper(nn.Module):
             # Apply clamping to [0,1]
             aug_inputs[img_index] = torch.clamp(aug_inputs[img_index], 0.0, 1.0)
 
-            if self.augs_cfg.label_scaling_factors is not None and self.cfg.datakey_to_scale is not None:
+            if self.augs_cfg.label_scaling_factors is not None and self.augs_cfg.datakey_to_scale is not None:
                 lbl_index = self.augs_cfg.input_data_keys.index(self.augs_cfg.datakey_to_scale)
                 lbl_tensor = aug_inputs[lbl_index]
                 # Apply inverse scaling to labels
