@@ -582,25 +582,38 @@ class ImageAugmentationsHelper(nn.Module):
             #    img_shifted = img_tensor
             #    lbl_shifted = numpy_to_torch(labels).float()
 
-            # DEVNOTE: temporary. This must be defined differently depending on input and datakeys
-            #lbl_tensor = numpy_to_torch(labels).float()
-
             # Recompose inputs replacing image
             inputs = list(inputs)
             inputs[img_index] = img_tensor
 
+            ##########
             # Unsqueeze keypoints if input is [B, 2], must be [N, 2]
+            # DEVNOTE temporary code that requires extension to be more general!
+            # TODO find a way to actually get keypoints and other entries without to index those manually!
+
             lbl_to_unsqueeze = inputs[1].dim() == 2
             if lbl_to_unsqueeze: 
                 # Input is (B,2) --> unsqueeze
                 inputs[1] = inputs[1].unsqueeze(1)
 
+            keypoints = inputs[1][..., :2]
+            additional_entries = inputs[1][..., 2:] if inputs[1].shape[-1] > 2 else None
+            inputs[1] = keypoints
+            ##########
+
             # Apply augmentations module
             aug_inputs = self.kornia_augs_module(*inputs)
 
-            if lbl_to_unsqueeze: 
-                aug_inputs[1] = aug_inputs[1].squeeze(1)
+            ##########
+            # TODO find a way to actually get keypoints and other entries without to index those manually!
+            # Concat additional entries to keypoints entry in aug_inputs
+            if additional_entries is not None:
+                aug_inputs[1] = torch.cat([aug_inputs[1], additional_entries], dim=2)
 
+            if lbl_to_unsqueeze:
+                aug_inputs[1] = aug_inputs[1].squeeze(1)
+            ##########
+            
             # Apply inverse scaling if needed
             if scale_factor is not None and (self.augs_cfg.is_normalized or self.augs_cfg.enable_auto_input_normalization):
                 aug_inputs[img_index] = aug_inputs[img_index] / scale_factor
@@ -752,6 +765,7 @@ class ImageAugmentationsHelper(nn.Module):
         return scale_factor
 
     # TODO (PC) move method to dedicated custom augmentation class
+    # DEPRECATED, move outside for archive
     def translate_batch_(self,
                          images: torch.Tensor,
                          labels: ndArrayOrTensor
