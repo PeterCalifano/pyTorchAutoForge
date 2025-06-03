@@ -737,6 +737,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Run data agmentations
                     if self.data_augmentation_module is not None:
+                        # DEVNOTE current implementation limited to keypoints. 
+                        # How to allow extraction of entries in Y? 
+                        inputs = (X,Y)
                         X, Y = self.augment_data_batch(X, Y)
 
                     # Perform FORWARD PASS
@@ -1067,10 +1070,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Exit from program gracefully
             sys.exit(0)
 
-    def augment_data_batch(self, X, Y):
+    def augment_data_batch(self, *raw_inputs: torch.Tensor):
+
         if self.data_augmentation_module is None:
             print(f"{colorama.Fore.LIGHTRED_EX}Warning: augment_data_batch was called, but data_augmentation_module is None. No transformation was applied.")
-            return X, Y
+            return raw_inputs
 
         # Perform data augmentation on batch using kornia modules
         #if not isinstance(self.data_augmentation_module, #ImageAugmentationsHelper):
@@ -1087,9 +1091,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         #        X = (X, *other_data)
 
         # Apply ImageAugmentationsHelper forward method
-        X, Y = self.data_augmentation_module(X, Y)
+        aug_inputs = self.data_augmentation_module(*raw_inputs)
 
-        return X, Y
+        return aug_inputs
 
     def evalExample(self, num_samples: int = 128) -> None:
         # TODO Extend method distinguishing between regression and classification tasks

@@ -196,7 +196,7 @@ def test_all_operators():
 
     # common augmentation setup
     cfg = AugmentationConfig(
-        max_shift=(150, 150),
+        max_shift_img_fraction=(150, 150),
         is_normalized=True,
         shift_aug_prob=0.75,
         rotation_angle=(-179, 179),
