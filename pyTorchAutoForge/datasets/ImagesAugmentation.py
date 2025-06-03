@@ -318,6 +318,7 @@ class AugmentationConfig:
     input_data_keys: list[DataKey]
     keepdim : bool = True
     same_on_batch : bool = False
+    random_apply_minmax: tuple[int, int] = (1, -1)
 
     # Rotation augmentation (torchvision)
     rotation_angle: float | tuple[float, float] = (0.0, 360.0)
@@ -453,19 +454,23 @@ class ImageAugmentationsHelper(nn.Module):
         if augs_cfg.shift_aug_prob > 0 or augs_cfg.rotation_aug_prob:
             
             # Define rotation angles
-            if augs_cfg.rotation_aug_prob > 0:
-                pass
+            rotation_degrees = 0.0
 
             # Define translation value 
-            if augs_cfg.shift_aug_prob > 0:
-                pass
+            translate_shift = (0.0, 0.0)
+                
+            # Construct RandomAffine 
+            augs_ops.append(K.RandomAffine(degrees=rotation_degrees,
+                                            translate=translate_shift,
+                                            p=augs_cfg.rotation_aug_prob,
+                                            keepdim=True))
             
-            # Construct RandomAffine for rotation
-            pass
-
         # Flip augmentation
-            
+        if augs_cfg.hflip_prob > 0:
+            augs_ops.append(K.RandomHorizontalFlip(p=augs_cfg.hflip_prob))
 
+        if augs_cfg.vflip_prob > 0:
+            augs_ops.append(K.RandomVerticalFlip(p=augs_cfg.vflip_prob))
 
         # Build AugmentationSequential from nn.ModuleList
         min_num_augs = 1
