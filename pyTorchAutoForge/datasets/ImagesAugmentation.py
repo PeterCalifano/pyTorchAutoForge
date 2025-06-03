@@ -7,6 +7,9 @@ try:
     import kornia.augmentation as K
     import kornia.geometry as KG
     from kornia import augmentation as kornia_aug
+    from kornia.constants import DataKey
+    from kornia.augmentation.base import _AugmentationBase
+
     has_kornia = True
 
 except ImportError:
@@ -29,7 +32,9 @@ from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
 ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
 
 # %% Custom augmentation modules
-class PoissonShotNoise(AugsBaseClass):
+# TODO modify to be usable by AugmentationSequential? Inherint from _AugmentationBase. Search how to define custom augmentations in Kornia
+
+class PoissonShotNoise(_AugmentationBase):
     """
     Applies Poisson shot noise to a batch of images.
 
@@ -87,8 +92,7 @@ class PoissonShotNoise(AugsBaseClass):
 
         return x
 
-
-class RandomGaussianNoiseVariableSigma(AugsBaseClass):
+class RandomGaussianNoiseVariableSigma(_AugmentationBase):
     """
     Applies per-sample Gaussian noise with variable sigma.
     This augmentation adds Gaussian noise to each sample in a batch, where the standard deviation (sigma) can be a scalar, a (min, max) tuple for random sampling, or a per-sample array/tensor. The noise is applied to each sample with a specified probability.
@@ -140,9 +144,8 @@ class RandomGaussianNoiseVariableSigma(AugsBaseClass):
 
         return x + noise
 
-
 # TODO (PC) move translate_batch to this custom augmentation class, add rotation and extend for multiple points labels shift
-class RandomImageLabelsRotoTranslation(AugsBaseClass):
+class RandomImageLabelsRotoTranslation(_AugmentationBase):
     """
     RandomImageLabelsRotoTranslation _summary_
 
@@ -248,83 +251,7 @@ def Flip_coords_Y(coords: torch.Tensor,
 
 # %% Kornia augmentations module
 if has_kornia:
-    class RandomBrightness(AugsBaseClass):
-        def __init__(self,
-                     brightness: tuple[float, float],
-                     p: float = 0.5,
-                     keepdim: bool = True,
-                     clip_output: bool = False):
-            super().__init__()
-
-            # Define underlying operation
-            self.kornia_op = K.RandomBrightness(
-                brightness=brightness, p=p, keepdim=keepdim, clip_output=clip_output)
-
-        def forward(self,
-                    x: torch.Tensor,
-                    labels: torch.Tensor | None = None
-                    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-
-            x_out = self.kornia_op(x)
-            return x_out, labels
-
-    class RandomContrast(AugsBaseClass):
-        """
-        RandomContrast _summary_
-
-        _extended_summary_
-
-        :param AugsBaseClass: _description_
-        :type AugsBaseClass: _type_
-        """        
-        def __init__(self,
-                     contrast: tuple[float, float],
-                     p: float = 0.5,
-                     keepdim: bool = True,
-                     clip_output: bool = False):
-            super().__init__()
-            
-            # Define underlying operation
-            self.kornia_op = K.RandomContrast(
-                contrast=contrast, p=p, keepdim=keepdim, clip_output=clip_output)
-
-        def forward(self,
-                    x: torch.Tensor,
-                    labels: torch.Tensor | None = None
-                    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-            x_out = self.kornia_op(x)
-            return x_out, labels
-
-    class RandomGaussianBlur(AugsBaseClass):
-        """
-        RandomGaussianBlur _summary_
-
-        _extended_summary_
-
-        :param AugsBaseClass: _description_
-        :type AugsBaseClass: _type_
-        :return: _description_
-        :rtype: _type_
-        """        
-        def __init__(self,
-                     kernel_size: tuple[int, int],
-                     sigma: tuple[float, float],
-                     p: float = 0.5,
-                     keepdim: bool = True):
-            
-            super().__init__()
-            self.kornia_op = K.RandomGaussianBlur(
-                kernel_size=kernel_size, sigma=sigma, p=p, keepdim=keepdim)
-
-        def forward(self,
-                    x: torch.Tensor,
-                    labels: torch.Tensor | None = None
-                    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-
-            x_out = self.kornia_op(x)
-            return x_out, labels
-
-    class KorniaImageCoordsFlipHoriz(AugsBaseClass):  # type: ignore
+    class CustomImageCoordsFlipHoriz(AugsBaseClass):  # type: ignore
         def __init__(self) -> None:
             super().__init__()
 
@@ -350,7 +277,7 @@ if has_kornia:
             flipped_coords = Flip_coords_X(coords, image_width=W)
             return flipped_image, flipped_coords
 
-    class KorniaImageCoordsFlipVert(AugsBaseClass):  # type: ignore
+    class CustomImageCoordsFlipVert(AugsBaseClass):  # type: ignore
         def __init__(self) -> None:
             super().__init__()
 
@@ -373,12 +300,12 @@ if has_kornia:
             flipped_coords = Flip_coords_Y(coords, image_height=H)
             return flipped_image, flipped_coords
 else:
-    class KorniaImageCoordsFlipHoriz(AugsBaseClass):  # type: ignore
+    class CustomImageCoordsFlipHoriz(AugsBaseClass):  # type: ignore
         def __init__(self) -> None:
             raise ImportError(
                 "Kornia is not installed. Run `pip install kornia`.")
 
-    class KorniaImageCoordsFlipVert(AugsBaseClass):  # type: ignore
+    class CustomImageCoordsFlipVert(AugsBaseClass):  # type: ignore
         def __init__(self) -> None:
             raise ImportError(
                 "Kornia is not installed. Run `pip install kornia`.")
@@ -387,6 +314,11 @@ else:
 
 @dataclass
 class AugmentationConfig:
+    # Input specification
+    input_data_keys: list[DataKey]
+    keepdim : bool = True
+    same_on_batch : bool = False
+
     # Rotation augmentation (torchvision)
     rotation_angle: float | tuple[float, float] = (0.0, 360.0)
     rotation_aug_prob: float = 0.0
@@ -468,8 +400,11 @@ class ImageAugmentationsHelper(nn.Module):
         super().__init__()
         self.augs_cfg = augs_cfg
 
+        # TODO add input_data_keys to AugmentationConfig
+        # ImageSequential seems not importable from kornia
+
         # Define kornia augmentation pipeline
-        augs_ops = nn.ModuleList()
+        augs_ops : list[_AugmentationBase] = []
         torch_vision_ops = nn.ModuleList()
 
         # TODO: add rotation augmentation, for simple cases, it is sufficient to rotate the image and pad with zero. Do it before translation.
@@ -487,34 +422,59 @@ class ImageAugmentationsHelper(nn.Module):
         # Intensity augmentations
         if augs_cfg.brightness_aug_prob > 0:
             # Random brightness scaling
-            augs_ops.append(module=K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,
+            augs_ops.append(K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,
                                                       p=augs_cfg.brightness_aug_prob,
                                                       keepdim=True,
                                                       clip_output=False))
 
         if augs_cfg.contrast_aug_prob > 0:
             # Random contrast scaling
-            augs_ops.append(module=K.RandomContrast(contrast=augs_cfg.min_max_contrast_factor,
+            augs_ops.append(K.RandomContrast(contrast=augs_cfg.min_max_contrast_factor,
                                                     p=augs_cfg.contrast_aug_prob,
                                                     keepdim=True,
                                                     clip_output=False))
 
         if augs_cfg.gaussian_blur_aug_prob > 0:
             # Random Gaussian blur
-            augs_ops.append(module=K.RandomGaussianBlur(kernel_size=augs_cfg.kernel_size,
+            augs_ops.append(K.RandomGaussianBlur(kernel_size=augs_cfg.kernel_size,
                                                         sigma=augs_cfg.sigma_gaussian_blur,
                                                         p=augs_cfg.gaussian_blur_aug_prob,
                                                         keepdim=True))
 
         if augs_cfg.poisson_shot_noise_aug_prob > 0:
             # FIXME it seems that possion shot noise cannot be constructed, investigate
-            augs_ops.append(module=PoissonShotNoise(
-                probability=augs_cfg.poisson_shot_noise_aug_prob))
+            augs_ops.append(PoissonShotNoise(probability=augs_cfg.poisson_shot_noise_aug_prob))
 
         if augs_cfg.gaussian_noise_aug_prob > 0:
             # Random Gaussian noise
-            augs_ops.append(module=RandomGaussianNoiseVariableSigma(
+            augs_ops.append(RandomGaussianNoiseVariableSigma(
                 sigma_noise=augs_cfg.sigma_gaussian_noise_dn, gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob))
+
+        if augs_cfg.shift_aug_prob > 0 or augs_cfg.rotation_aug_prob:
+            
+            # Define rotation angles
+            if augs_cfg.rotation_aug_prob > 0:
+                pass
+
+            # Define translation value 
+            if augs_cfg.shift_aug_prob > 0:
+                pass
+            
+            # Construct RandomAffine for rotation
+            pass
+
+        # Flip augmentation
+            
+
+
+        # Build AugmentationSequential from nn.ModuleList
+        min_num_augs = 1
+        max_num_augs = len(augs_ops)
+        self.kornia_augs_module = AugmentationSequential(augs_ops,
+                                                         data_keys=augs_cfg.input_data_keys,
+                                                         same_on_batch=False,
+                                                         keepdim=False,
+                                                         random_apply=(min_num_augs, max_num_augs))
 
         # if augs_cfg.append_custom_module_after_ is not None:
         #    pass
@@ -522,7 +482,7 @@ class ImageAugmentationsHelper(nn.Module):
         # Stack into nn.Sequential module
         # TODO replace with AugmentationSequential
         self.kornia_augs_module = nn.Sequential(*augs_ops)
-        
+
         self.torchvision_augs_module = nn.Sequential(
             *torch_vision_ops) if len(torch_vision_ops) > 0 else None
 
