@@ -834,6 +834,15 @@ class ImageAugmentationsHelper(nn.Module):
 
         return shifted_imgs, lbl
 
+    # Overload "to" method
+    def to(self, *args, **kwargs):
+        """Overload to method to apply to all submodules."""
+        super().to(*args, **kwargs)
+        self.kornia_augs_module.to(*args, **kwargs)
+        if self.torchvision_augs_module is not None:
+            self.torchvision_augs_module.to(*args, **kwargs)
+        return self
+
 # %% Prototypes TODO
 
 
