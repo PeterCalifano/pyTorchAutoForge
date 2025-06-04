@@ -604,7 +604,10 @@ class ImageAugmentationsHelper(nn.Module):
             # Apply augmentations module
             aug_inputs = self.kornia_augs_module(*inputs)
 
-
+            ###
+            aug_inputs[0].to(keypoints.device)
+            aug_inputs[1].to(keypoints.device)
+            ###
             ##########
             # TODO find a way to actually get keypoints and other entries without to index those manually!
             # Concat additional entries to keypoints entry in aug_inputs
@@ -839,8 +842,10 @@ class ImageAugmentationsHelper(nn.Module):
         """Overload to method to apply to all submodules."""
         super().to(*args, **kwargs)
         self.kornia_augs_module.to(*args, **kwargs)
+
         if self.torchvision_augs_module is not None:
             self.torchvision_augs_module.to(*args, **kwargs)
+        
         return self
 
 # %% Prototypes TODO
