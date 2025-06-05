@@ -341,9 +341,47 @@ def test_AugmentationSequential():
     plt.tight_layout()
     plt.show()
 
+def test_augmentation_helper_cuda_preserves_device():
+    
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available.")
+
+    # Create a minimal configuration for the augmentations helper.
+    cfg = AugmentationConfig(
+        max_shift_img_fraction=(0.1, 0.1),
+        input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
+        shift_aug_prob=1.0,
+        is_normalized=False,
+        rotation_angle=(-10, 10),
+        rotation_aug_prob=1.0,
+        sigma_gaussian_noise_dn=0.0,       # Disable noise for simplicity
+        gaussian_noise_aug_prob=1.0,
+        gaussian_blur_aug_prob=1.0,
+        is_torch_layout=False,
+        min_max_brightness_factor=(1.0, 1.0),
+        min_max_contrast_factor=(1.0, 1.0),
+        brightness_aug_prob=1.0,
+        contrast_aug_prob=1.0,
+        input_normalization_factor=255.0,
+        enable_auto_input_normalization=False,
+    )
+
+    augs_helper = ImageAugmentationsHelper(cfg)
+
+    # Create dummy inputs on CUDA
+    x = torch.randn(1, 1, 64, 64, device='cuda:0')
+    lbl = torch.tensor([[32, 32]], dtype=torch.float32, device='cuda:0')
+
+    out_img, out_lbl = augs_helper(x, lbl)
+
+    # Verify that outputs remain on cuda
+    assert out_img.device.type == 'cuda:0'
+    assert out_lbl.device.type == 'cuda:0'
+
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
 
     #test_synthetic_mask_augmentation()
-    test_sample_images_augmentation()
+    #test_sample_images_augmentation()
     #test_AugmentationSequential()
+    test_augmentation_helper_cuda_preserves_device()
