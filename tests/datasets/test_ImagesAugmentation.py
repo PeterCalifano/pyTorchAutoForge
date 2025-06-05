@@ -341,8 +341,16 @@ def test_AugmentationSequential():
     plt.tight_layout()
     plt.show()
 
-def test_augmentation_helper_cuda_preserves_device():
-    
+
+@pytest.mark.parametrize(argnames=["device", "shift_aug_prob", "rotation_aug_prob", "gaussian_noise_aug_prob", "gaussian_blur_aug_prob", "brightness_aug_prob", "contrast_aug_prob"], argvalues=["cpu", "cuda"], )
+
+def test_augmentation_helper_preserves_device(device, 
+                                              shift_aug_prob,
+                                              rotation_aug_prob,
+                                              gaussian_noise_aug_prob,
+                                              gaussian_blur_aug_prob,
+                                              brightness_aug_prob,
+                                              contrast_aug_prob) -> None:
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available.")
 
@@ -350,18 +358,18 @@ def test_augmentation_helper_cuda_preserves_device():
     cfg = AugmentationConfig(
         max_shift_img_fraction=(0.1, 0.1),
         input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
-        shift_aug_prob=1.0,
+        shift_aug_prob=shift_aug_prob,
         is_normalized=False,
         rotation_angle=(-10, 10),
-        rotation_aug_prob=1.0,
+        rotation_aug_prob=rotation_aug_prob,
         sigma_gaussian_noise_dn=0.0,       # Disable noise for simplicity
-        gaussian_noise_aug_prob=1.0,
-        gaussian_blur_aug_prob=1.0,
+        gaussian_noise_aug_prob=gaussian_noise_aug_prob,
+        gaussian_blur_aug_prob=gaussian_blur_aug_prob,
         is_torch_layout=False,
         min_max_brightness_factor=(1.0, 1.0),
         min_max_contrast_factor=(1.0, 1.0),
-        brightness_aug_prob=1.0,
-        contrast_aug_prob=1.0,
+        brightness_aug_prob=brightness_aug_prob,
+        contrast_aug_prob=contrast_aug_prob,
         input_normalization_factor=255.0,
         enable_auto_input_normalization=False,
     )
@@ -369,14 +377,14 @@ def test_augmentation_helper_cuda_preserves_device():
     augs_helper = ImageAugmentationsHelper(cfg)
 
     # Create dummy inputs on CUDA
-    x = torch.randn(1, 1, 64, 64, device='cuda:0')
-    lbl = torch.tensor([[32, 32]], dtype=torch.float32, device='cuda:0')
+    x = torch.randn(1, 1, 64, 64, device=device)
+    lbl = torch.tensor([[32, 32]], dtype=torch.float32, device=device)
 
     out_img, out_lbl = augs_helper(x, lbl)
 
     # Verify that outputs remain on cuda
-    assert out_img.device.type == 'cuda:0'
-    assert out_lbl.device.type == 'cuda:0'
+    assert out_img.device.type == device
+    assert out_lbl.device.type == device
 
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
