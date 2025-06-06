@@ -96,7 +96,7 @@ class ModelHandlerONNx:
         # 3) where to save the model (can be a file or file-like object)
         # 4) Store the trained parameter weights inside the model file
         # 5) ONNX version to export the model to
-        # 6) Whether to execute constant folding for optimization
+        # 6) whether to execute constant folding for optimization
         # 7) Model input name
         # 8) Model output name
 
@@ -120,10 +120,16 @@ class ModelHandlerONNx:
             # Reload the model from disk
             self.onnx_model = self.onnx_load(os.path.join(
                 os.path.dirname(self.onnx_export_path), onnx_model_name + ".onnx"))
+            
             self.onnx_validate(self.onnx_model)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def torch_dynamo_export(self, input_tensor: torch.Tensor | None = None, onnx_model_name: str = 'onnx_dynamo_export', dynamic_axes: dict = None, IO_names: dict = None, verbose: bool = True) -> None:
+    def torch_dynamo_export(self, 
+                            input_tensor: torch.Tensor | None = None, 
+                            onnx_model_name: str = 'onnx_dynamo_export', 
+                            dynamic_axes: dict = None, 
+                            IO_names: dict = None, 
+                            verbose: bool = True) -> None:
         """Export the model to ONNx format using TorchDynamo."""
 
         # Check if any model is already exported in the export path and append ID to the filename if any
@@ -182,7 +188,9 @@ class ModelHandlerONNx:
             self.onnx_validate(self.onnx_model)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def convert_to_onnx_opset(self, onnx_model : onnx.ModelProto = None, onnx_opset_version : int = None) -> onnx.ModelProto:
+    def convert_to_onnx_opset(self, 
+                              onnx_model : onnx.ModelProto = None, 
+                              onnx_opset_version : int = None) -> onnx.ModelProto:
         """Convert the model to a different ONNx operation set version."""
         
         # Handle default values
@@ -204,7 +212,10 @@ class ModelHandlerONNx:
             return None
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def onnx_validate(self, onnx_model: onnx.ModelProto, test_sample : torch.Tensor | numpy.ndarray = None, output_sample : torch.Tensor | numpy.ndarray = None) -> None:
+    def onnx_validate(self, 
+                      onnx_model: onnx.ModelProto, 
+                      test_sample : torch.Tensor | numpy.ndarray = None, 
+                      output_sample : torch.Tensor | numpy.ndarray = None) -> None:
         """Validate the ONNx model using onnx.checker.check_model."""
 
         print('Validating model using checker.check_model...')
@@ -225,6 +236,7 @@ class ModelHandlerONNx:
 
                 print('Output equivalence test passed successfully with tolerances rtol=1e-03 and atol=1e-06.')
 
+        # TODO (UM) extend validation method (equivalence test)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def onnx_compare_timing(self, torch_model : torch.nn.Module, onnx_model: onnx.ModelProto, test_sample : torch.Tensor | numpy.ndarray, num_iterations : int = 100) -> dict:
@@ -265,14 +277,14 @@ class ModelHandlerONNx:
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def onnx_load_to_torch(self) -> torch.nn.Module:
-        """Method to load ONNx model from disk."""
-
+        """Method to load ONNx model from disk and convert to torch."""
+        # TODO
         pass
 
 
 ################################## LEGACY CODE ##################################
 # %% Torch to/from ONNx format exporter/loader based on TorchDynamo (PyTorch >2.0) - 09-06-2024
-def ExportTorchModelToONNx(model: torch.nn.Module, dummyInputSample: torch.tensor, onnxExportPath: str = '.', 
+def ExportTorchModelToONNx(model: torch.nn.Module, dummyInputSample: torch.Tensor, onnxExportPath: str = '.', 
                            onnxSaveName: str = 'trainedModelONNx', modelID: int = 0, onnx_version=None):
 
     # Define filename of the exported model
@@ -319,7 +331,7 @@ def ExportTorchModelToONNx(model: torch.nn.Module, dummyInputSample: torch.tenso
 
     return modelONNx, pathToModel, convertedModel
 
-def LoadTorchModelFromONNx(dummyInputSample: torch.tensor, onnxExportPath: str = '.', onnxSaveName: str = 'trainedModelONNx', modelID: int = 0):
+def LoadTorchModelFromONNx(dummyInputSample: torch.Tensor, onnxExportPath: str = '.', onnxSaveName: str = 'trainedModelONNx', modelID: int = 0):
     
     # Define filename of the exported model
     if modelID > 999:
