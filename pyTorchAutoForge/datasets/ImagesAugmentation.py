@@ -335,6 +335,7 @@ class AugmentationConfig:
     keepdim : bool = True
     same_on_batch : bool = False
     random_apply_minmax: tuple[int, int] = (1, -1)
+    device: str | None = None  # Device to run augmentations on, if None, uses torch default
 
     # Affine roto-translation augmentation
     affine_align_corners : bool = False
@@ -525,7 +526,17 @@ class ImageAugmentationsHelper(nn.Module):
         else:
             random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
             random_apply_minmax_[1] = random_apply_minmax_[1] - 1
-                                          
+
+        # Transfer all modules to device if specified   
+        if augs_cfg.device is not None:
+
+            for op in augs_ops:
+                op.to(augs_cfg.device)
+
+            for op in torch_vision_ops:
+                op.to(augs_cfg.device)
+
+
         self.kornia_augs_module = AugmentationSequential( *augs_ops,
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
@@ -559,6 +570,7 @@ class ImageAugmentationsHelper(nn.Module):
         
         # Processing batches
         with torch.no_grad():
+
             # Detect type, convert to torch Tensor [B,C,H,W], determine scaling factor
             is_numpy = isinstance(images_, np.ndarray)
             img_tensor, to_numpy, scale_factor = self.preprocess_images_(
@@ -604,10 +616,6 @@ class ImageAugmentationsHelper(nn.Module):
             # Apply augmentations module
             aug_inputs = self.kornia_augs_module(*inputs)
 
-            ###
-            aug_inputs[0].to(keypoints.device)
-            aug_inputs[1].to(keypoints.device)
-            ###
             ##########
             # TODO find a way to actually get keypoints and other entries without to index those manually!
             # Concat additional entries to keypoints entry in aug_inputs
@@ -638,6 +646,12 @@ class ImageAugmentationsHelper(nn.Module):
             if to_numpy is True:
                 aug_inputs[img_index] = torch_to_numpy(aug_inputs[img_index].permute(0, 2, 3, 1))
                 aug_inputs[lbl_index] = torch_to_numpy(aug_inputs[lbl_index])
+
+        # DEVNOTE: image appears to be transferred to cpu for no reason. To investigate.
+        ###
+        aug_inputs[0] = aug_inputs[0].to(keypoints.device)
+        aug_inputs[1].to(keypoints.device)
+        ###
 
         return aug_inputs
 
