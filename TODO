@@ -18,8 +18,8 @@
   - [x] Fix issues with device selection query and some imports
   - [x] Add support for automatic chaining of schedulers (todo debug learning rate update in Trainer?)
   - [x] Update Trainer to save checkpoints in subfolder with mlflow experiment name
-  - [ ] Upgrade translation augmentation to support translation of multiple (key)points
-  - [ ] Implement custom rotation augmentation to support rotation of multiple (key)points, through warping
+  - [x] Upgrade translation augmentation to support translation of multiple (key)points
+  - [x] Implement custom rotation augmentation to support rotation of multiple (key)points, through warping --> Using kornia Augmentation Sequential
   - [x] Update parametric template of CNN class for different uses
   - [ ] Add semi-automatic function to run model inference on sample input and save to disk with resulting predictions
   - [x] Implement Scaler adapter to store scaling factors for standalone input scaling (directly in forward)
@@ -27,6 +27,7 @@
   - [ ] Upgrade PTAF trainer and loss function interfaces to support image segmentation tasks
   - [ ] Review implementations and modify model parameters using register buffer/parameter where needed.
   - [ ] Upgrade api.torch to save model packages
+  - [x] Improve PTAF trainer: reduce on plateau scheduler, better stats for evalExample
 
 - [ ] v0.2.1
   - [ ] Modify DataLoaderIndex to accept datasets directly and a combination of datasets and dataloaders. If dataset is input, use default specifications for dataloader
