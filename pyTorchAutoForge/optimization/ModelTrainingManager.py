@@ -158,7 +158,8 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     enable_early_pruning: bool = False  # Enable early pruning
     pruning_patience: int = 50  # Number of epochs to wait before pruning
     batch_accumulation_factor: int = 1  # Number of batches to accumulate gradients before updating weights
-    EXIT_ON_PRUNING: bool = True
+    EXIT_ON_PRUNING: bool = True # Flag to determine whether to stop process if pruning is triggered
+    example_eval_size : int = 256 # Number of samples used to compute running evaluation stats
 
     enable_lr_reduction_on_plateau : bool = False
     lr_reduction_plateau_config: LearnRateReductOnPlateauConfig = field(
@@ -270,7 +271,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
         # Get fields in configuration dictionary
         missingFields = fieldNames - configDict.keys()
 
-        # Check if any required field is missing (those without default values)
+        # Check if any required field is missing (those with default values)
         requiredFields = {f.name for f in fields(
             cls) if f.default is MISSING and f.default_factory is MISSING}
         missingRequired = requiredFields & missingFields
@@ -891,7 +892,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             
             for epoch_num in range(self.num_of_epochs):
 
-                print(f"\n{colorama.Fore.GREEN}Training epoch" + trial_printout, f"{colorama.Fore.GREEN}: {epoch_num+1}/{self.num_of_epochs}")
+                print(f"\n{colorama.Style.BRIGHT}{colorama.Fore.GREEN}Training epoch" + trial_printout, f"{colorama.Style.BRIGHT}{colorama.Fore.GREEN}: {epoch_num+1}/{self.num_of_epochs}")
                 cycle_start_time = time.time()
 
                 # Update current learning rate
@@ -932,7 +933,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         raise optuna.TrialPruned()
                 else:
                     # Execute post-epoch operations
-                    self.evalExample()        # Evaluate example if enabled
+                    self.evalExample(self.example_eval_size)        # Evaluate example if enabled
 
                 # Update stats if new best model found (independently of keep_best flag)
                 if tmp_valid_loss <= self.bestValidationLoss:
@@ -1266,15 +1267,20 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     quantile95_prediction_err = torch.quantile(torch.abs(prediction_errors), 0.95, 0)
                     quantile95_prediction_err *= label_scaling_factors
                     
+                    quantile99_prediction_err = torch.quantile(torch.abs(prediction_errors), 0.99, 0)
+                    quantile99_prediction_err *= label_scaling_factors
+
                     # TODO (TBC): log example in mlflow?
                     # if self.mlflow_logging:
                     #    print('TBC')
 
-                    print(f"\tAverage prediction (scaled) with {samples_counter} samples: \n",
-                          "\t\t", average_prediction, "\n\tCorresponding average loss: ", average_loss)
-                    print(f"\n\tWorst prediction (scaled) errors per component: \n\t\t", worst_prediction_err)
-                    print(f"\n\tQuantile95 prediction (scaled) errors per component: \n\t\t", quantile95_prediction_err)
-                    print(f"\n\tMedian prediction (scaled) errors per component: \n\t\t", median_prediction_err)
+                    print(f"{colorama.Style.BRIGHT}{colorama.Fore.YELLOW}\tSample error statistics on batch of {num_samples} samples:", "\n\tCorresponding average loss: ", average_loss, f"{colorama.Style.RESET_ALL}")
+
+                    print(f"\n\tAverage prediction (scaled) errors per component: \n\t\t", average_prediction)
+                    print(f"\n\tWorst abs. prediction (scaled) errors per component: \n\t\t", worst_prediction_err)
+                    print(f"\n\tMedian abs. prediction (scaled) errors per component: \n\t\t", median_prediction_err)
+                    print(f"\n\tQuantile 95 abs. prediction (scaled) errors per component: \n\t\t", quantile95_prediction_err)
+                    print(f"\n\tQuantile 99 abs. prediction (scaled) errors per component: \n\t\t", quantile99_prediction_err)
                     print("\n")
 
                 elif self.tasktype == TaskType.CLASSIFICATION:
@@ -1288,131 +1294,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 else:
                     raise TypeError('Invalid Task type.')
-
-    def evalBestAccuracy(self):
-        self.bestModel.to(self.device)
-        self.bestModel.eval()
-
-        # TODO rework this method. It overlaps with ModelEvaluator. Perhaps add extended functionality to Trainer if user passes a ModelEvaluator to Trainer?
-
-        raise NotImplementedError('Current code is deprecated. Extended rework is TODO.')
-
-        # Backup the original batch size (TODO: TBC if it is useful)
-        original_dataloader = self.validationDataloader
-
-        # Temporarily initialize a new dataloader for validation (heuristic)
-        newBathSizeTmp = 2 * self.validationDataloader.batch_size  # TBC how to set this value
-
-        tmpdataloader = DataLoader(
-            original_dataloader.dataset,
-            batch_size=newBathSizeTmp,
-            shuffle=False,
-            drop_last=False,
-            pin_memory=True,
-            num_workers=0
-        )
-
-        dataset_size = len(tmpdataloader.dataset)
-        num_samples = dataset_size
-        num_batches = len(tmpdataloader)
-        average_loss = 0.0
-
-        stats = {}
-
-        with torch.no_grad():
-
-            # Task specific code
-            if self.tasktype == TaskType.REGRESSION:
-                average_prediction_err = None
-                worst_prediction_err = None
-                prediction_errors = None
-
-                for X, Y in tmpdataloader:
-                    # Get input and labels and move to target device memory
-                    X, Y = X.to(self.device), Y.to(self.device)
-                    # Perform FORWARD PASS
-                    predVal = self.bestModel(X)  # Evaluate model at input
-
-                    # Evaluate loss function to get loss value dictionary
-                    if self.loss_fcn is None:
-                        raise ValueError(
-                            'Loss function not provided for regression task.')
-
-                    if predVal.shape != Y.shape:
-                        Y = Y[:, 0:predVal.size(1)]  # Attempt to match shapes
-
-                    # TODO add support for custom error function. Currently assumes difference between prediction and target
-                    if prediction_errors is None:
-                        prediction_errors = predVal - Y
-                    else:
-                        prediction_errors = torch.cat(
-                            [prediction_errors, predVal - Y], dim=0)
-
-                    # Get loss value from dictionary
-                    average_loss += torch.nn.functional.mse_loss(
-                        predVal, Y, reduction='sum').item()
-
-                # Find max prediction error over all samples
-                worst_prediction_err, _ = torch.max(
-                    torch.abs(prediction_errors), dim=0)
-                # Compute average prediction over all samples
-                average_prediction_err = torch.mean(
-                    torch.abs(prediction_errors), dim=0)
-                median_prediction_err, _ = torch.median(
-                    torch.abs(prediction_errors), dim=0)
-                average_loss /= num_samples
-
-                print(
-                    f"\n\tAccuracy evaluation: regression average loss: {average_loss:>4f}\n")
-                print(f"\tPrediction errors with {num_samples} samples: \n", "\t Average:", average_prediction_err,
-                      "\n\t Median:", median_prediction_err, "\n\t Max:", worst_prediction_err)
-
-                # Pack data into dict
-                stats['prediction_err'] = prediction_errors.to('cpu').numpy()
-                stats['average_prediction_err'] = average_prediction_err.to(
-                    'cpu').numpy()
-                stats['median_prediction_err'] = median_prediction_err.to(
-                    'cpu').numpy()
-                stats['worst_prediction_err'] = worst_prediction_err.to(
-                    'cpu').numpy()
-
-                return stats
-
-            elif self.tasktype == TaskType.CLASSIFICATION:
-
-                if not (isinstance(self.loss_fcn, torch.nn.CrossEntropyLoss)):
-                    raise NotImplementedError(
-                        'Current classification validation function only supports nn.CrossEntropyLoss.')
-
-                correctPredictions = 0
-                for X, Y in tmpdataloader:
-                    # Get input and labels and move to target device memory
-                    X, Y = X.to(self.device), Y.to(self.device)
-                    # Perform FORWARD PASS
-                    predVal = self.model(X)  # Evaluate model at input
-                    # Evaluate loss function to get loss value dictionary
-                    validationLossDict = self.loss_fcn(predVal, Y)
-                    average_loss += validationLossDict.get('lossValue') if isinstance(
-                        validationLossDict, dict) else validationLossDict.item()
-
-                    # Evaluate how many correct predictions (assuming CrossEntropyLoss)
-                    correctPredictions += (predVal.argmax(1) ==
-                                           Y).type(torch.float).sum().item()
-
-                average_loss /= num_batches  # Compute batch size normalized loss value
-
-                # Compute percentage of correct classifications over dataset size
-                correctPredictions /= dataset_size
-                print(f"\n\tValidation: classification accuracy: {(100*correctPredictions):>0.2f}%, average loss: {average_loss:>4f}\n")
-
-                # Save results
-                stats['correct_predictions_fraction'] = correctPredictions
-                stats['average_loss'] = average_loss
-
-                return stats
-
-            else:
-                raise NotImplementedError('Task type not implemented yet.')
 
     def updateLearningRate_(self):
         """
@@ -1590,7 +1471,7 @@ def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
             trainLoss, currentStep = trainLoss.item(), (batchCounter + 1) * len(X)
             # print(f"Training loss value: {trainLoss:>7f}  [{currentStep:>5d}/{size:>5d}]")
             # if keys != []:
-            #    print("\t",", ".join([f"{key}: {trainLossOut[key]:.4f}" for key in keys]))    # Update learning rate if scheduler is provided
+            #     print("\t",", ".join([f"{key}: {trainLossOut[key]:.4f}" for key in keys]))    # Update learning rate if scheduler is provided
 
     # Perform step of SWA if enabled
     if swa_model is not None and epochID >= swa_start_epoch:
