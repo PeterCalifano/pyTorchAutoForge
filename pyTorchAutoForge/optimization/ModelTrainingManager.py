@@ -78,7 +78,7 @@ import traceback
 from torch import nn
 import numpy as np
 from torch.utils.data import DataLoader
-from dataclasses import dataclass, asdict, fields, Field, MISSING
+from dataclasses import dataclass, asdict, fields, field, MISSING
 
 from pyTorchAutoForge.datasets import DataloaderIndex, ImageAugmentationsHelper
 from pyTorchAutoForge.utils import GetDeviceMulti, AddZerosPadding, GetSamplesFromDataset, ComputeModelParamsStorageSize
@@ -111,6 +111,31 @@ class TaskType(Enum):
 # 2) Logging of all relevat config and results to file (either csv or text from std output)
 # 3) Main training logbook to store all data to be used for model selection and hyperparameter tuning, this should be "per project"
 # 4) Training mode: k-fold cross validation leveraging scikit-learn
+from typing import Literal
+
+@dataclass
+class LearnRateReductOnPlateauConfig():
+    '''Configuration dataclass for learning rate reduction on plateau. Contains all parameters for learning rate reduction on plateau.'''
+    lr_reduction_plateau_patience : int = 25  # Number of epochs to wait before reducing learning rate
+    lr_reduct_factor : float = 0.2
+    score_mode : Literal['min', 'max'] = 'min'
+    score_eval_thr : float = 1e-3
+    score_eval_thr_mode : Literal['rel', 'abs'] = 'rel'
+    min_lr : float = 1E-8
+    num_cooldown_epochs : int = 5
+
+
+    def to_scheduler_kwargs(self) -> dict:
+        return {
+            "factor":           self.lr_reduct_factor,
+            "patience":         self.lr_reduction_plateau_patience,
+            "cooldown":         self.num_cooldown_epochs,
+            "min_lr":           self.min_lr,
+            "mode":             self.score_mode,
+            "threshold":        self.score_eval_thr,
+            "threshold_mode":   self.score_eval_thr_mode,
+        }
+    
 
 @dataclass()
 class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass 
@@ -134,6 +159,11 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     pruning_patience: int = 50  # Number of epochs to wait before pruning
     batch_accumulation_factor: int = 1  # Number of batches to accumulate gradients before updating weights
     EXIT_ON_PRUNING: bool = True
+
+    enable_lr_reduction_on_plateau : bool = False
+    lr_reduction_plateau_config: LearnRateReductOnPlateauConfig = field(
+        default_factory=LearnRateReductOnPlateauConfig)
+
 
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
@@ -176,12 +206,12 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
         Returns:
             ModelTrainingManagerConfig: A new instance of ModelTrainingManagerConfig with the same configuration.
         """
-        return ModelTrainingManagerConfig(**instanceToCopy.getConfigDict())
+        return ModelTrainingManagerConfig(**instanceToCopy.get_config_dict())
 
     # DEVNOTE: dataclass generates __init__() automatically
     # Same goes for __repr()__ for printing and __eq()__ for equality check methods
 
-    def getConfigDict(self) -> dict:
+    def get_config_dict(self) -> dict:
         """
         Returns the configuration of the model training manager as a dictionary.
 
@@ -303,7 +333,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         elif isinstance(config, ModelTrainingManagerConfig):
             # Initialize ModelTrainingManagerConfig base instance from ModelTrainingManagerConfig instance
             # Call init of parent class for shallow copy
-            super().__init__(**config.getConfigDict())
+            super().__init__(**config.get_config_dict())
+            self.lr_reduction_plateau_config = config.lr_reduction_plateau_config
 
         # Check that checkpoint_dir exists, if not create it
         if not os.path.isdir(self.checkpoint_dir):
@@ -404,6 +435,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if not (os.path.isdir(self.checkpoint_dir)):
             os.mkdir(self.checkpoint_dir)
 
+
+        # Define reduction on plateau scheduler
+        if self.enable_lr_reduction_on_plateau is not None and self.optimizer is not None:
+            config = self.lr_reduction_plateau_config.to_scheduler_kwargs()
+            self.lr_reduct_plateau = optim.lr_scheduler.ReduceLROnPlateau(optimizer=self.optimizer, 
+                                                                          **config)
+
+    ### Instance methods below
     def _define_optimizer(self, optimizer: optim.Optimizer | enumOptimizerType) -> None:
         """
         Define and set the optimizer for the model training.
@@ -1387,11 +1426,30 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Get learning rate value after step
             new_lr = self.lr_scheduler.get_last_lr()[0]
 
-            # Print 
-            print('\n{light_blue}Learning rate changed: {prev_lr:.6g} --> {new_lr:.6g}{reset}\n'.format(light_blue=colorama.Fore.LIGHTBLUE_EX,
+            if self.enable_lr_reduction_on_plateau and self.currentValidationLoss is not None:
+                self.lr_reduct_plateau.step(metrics=self.currentValidationLoss) # Verify if on plateau
+                new_lrs = [g['lr'] for g in self.optimizer.param_groups]
+                has_reduced_on_plateau = any(lr < self.current_lr for lr in new_lrs)
+
+                if has_reduced_on_plateau:
+                    new_lr = min(new_lrs)  # Get the minimum learning rate after reduction
+            else:
+                has_reduced_on_plateau = False
+
+            # Print info
+            if has_reduced_on_plateau:
+
+                print('\n{light_blue}Learning rate reduced on plateau: {prev_lr:.6g} --> {new_lr:.6g} for {num_cooldown_epochs} epochs {reset}\n'.format(light_blue=colorama.Fore.LIGHTRED_EX,
                 prev_lr=self.current_lr,
                 new_lr=new_lr,
+                num_cooldown_epochs=self.lr_reduction_plateau_config.num_cooldown_epochs,
                 reset=colorama.Style.RESET_ALL))
+
+            else:
+                print('\n{light_blue}Learning rate changed: {prev_lr:.6g} --> {new_lr:.6g}{reset}\n'.format(light_blue=colorama.Fore.LIGHTBLUE_EX,
+                    prev_lr=self.current_lr,
+                    new_lr=new_lr,
+                    reset=colorama.Style.RESET_ALL))
 
             # Save the new learning rate
             self.current_lr = new_lr
