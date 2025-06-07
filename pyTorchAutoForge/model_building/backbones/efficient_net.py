@@ -126,12 +126,14 @@ class EfficientNetBackbone(nn.Module):
             return out
 
         elif self.cfg.output_type == 'spill_features':
+            
             # Append head output to the features list and return the whole list
             if self.output_layer is not None and len(features) > 0:
                 last_feat = features[-1]
                 head_out = self.output_layer(
                     last_feat.view(last_feat.size(0), -1))
                 features.append(head_out)
+
             out = features
             return out
 

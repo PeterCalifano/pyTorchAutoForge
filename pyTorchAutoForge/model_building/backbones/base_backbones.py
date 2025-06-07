@@ -99,7 +99,7 @@ class EfficientNetConfig(FeatureExtractorConfig):
         self.input_channels = 3
         # Define output channel sizes for each EfficientNet variant
         if self.model_name == 'b0':
-            feature_tapping_channel_out = [32, 16, 24, 40, 112, 192, 320, 1280]
+            feature_tapping_channel_out = [32, 16, 24, 40, 80, 112, 192, 320, 1280]
         else:
             raise ValueError(f"Channel sizes output (for each module) not defined for {self.model_name} variant. Please add it manually.")
 
