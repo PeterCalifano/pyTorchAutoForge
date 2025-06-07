@@ -69,7 +69,8 @@ if not on_rtd:
             import pynvml
 
             @functools.lru_cache(maxsize=1)
-            def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+            def GetDeviceMulti(selection_override : str | None = None, 
+                               expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps'] | str:
                 """
                 GetDeviceMulti Determines the optimal device for computation based on available memory and compatibility.
 
@@ -83,6 +84,22 @@ if not on_rtd:
                     Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
                         The selected device: a CUDA GPU (e.g., 'cuda:0'), MPS (for Apple Silicon), or CPU.
                 """
+
+                if selection_override is not None:
+                    # If a specific device is requested, return it directly
+                    if "cuda" in selection_override.lower():
+                        return selection_override.lower()
+                    elif selection_override.lower() in ['cpu']:
+                        return "cpu"
+                    elif selection_override.lower() in ['mps']:
+                        return "mps"
+                    else:
+                        raise ValueError(
+                            f"Invalid device selection override: {selection_override}")
+
+                if expected_max_vram is not None and not (isinstance(expected_max_vram, (float, int))):
+                    raise TypeError(
+                        f"Expected expected_max_vram to be float or int, got {type(expected_max_vram)} instead.")
 
                 MIN_FREE_MEM_RATIO = 0.3
                 # Minimum free memory in GB
