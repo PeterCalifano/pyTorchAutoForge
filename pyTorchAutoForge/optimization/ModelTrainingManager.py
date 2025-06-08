@@ -1278,9 +1278,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     print(f"\n\tAverage prediction (scaled) errors per component: \n\t\t", average_prediction)
                     print(f"\n\tWorst abs. prediction (scaled) errors per component: \n\t\t", worst_prediction_err)
-                    print(f"\n\tMedian abs. prediction (scaled) errors per component: \n\t\t", median_prediction_err)
-                    print(f"\n\tQuantile 95 abs. prediction (scaled) errors per component: \n\t\t", quantile95_prediction_err)
                     print(f"\n\tQuantile 99 abs. prediction (scaled) errors per component: \n\t\t", quantile99_prediction_err)
+                    print(f"\n\tQuantile 95 abs. prediction (scaled) errors per component: \n\t\t", quantile95_prediction_err)
+                    print(f"\n\tMedian abs. prediction (scaled) errors per component: \n\t\t", median_prediction_err)
                     print("\n")
 
                 elif self.tasktype == TaskType.CLASSIFICATION:
