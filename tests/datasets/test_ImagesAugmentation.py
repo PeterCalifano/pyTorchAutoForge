@@ -271,7 +271,7 @@ def test_AugmentationSequential():
                      keepdim=True),
         RandomHorizontalFlip(p=1.0),
         data_keys=[DataKey.IMAGE, DataKey.MASK, DataKey.KEYPOINTS],
-        same_on_batch=True
+        same_on_batch=False
     )
 
     def augment_data_batch(*inputs: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -291,7 +291,7 @@ def test_AugmentationSequential():
     bin_mask = image_tensor > 0.5  # Example binary mask
     keypoints = torch.tensor(
         # Example keypoints
-        [[512, 512], [750, 750]], dtype=torch.float32) # Note that kornia uses the points in the (N,2) format
+        [[512, 512], [750, 750]], dtype=torch.float32) # Note that kornia uses the points in the (N,2) format (assuming 1 image!)
 
     augmented_image, bin_mask, aug_keypoints = augment_data_batch(
         image_tensor, bin_mask, keypoints)
@@ -342,8 +342,14 @@ def test_AugmentationSequential():
     plt.show()
 
 
-@pytest.mark.parametrize(argnames=["device", "shift_aug_prob", "rotation_aug_prob", "gaussian_noise_aug_prob", "gaussian_blur_aug_prob", "brightness_aug_prob", "contrast_aug_prob"], argvalues=["cpu", "cuda"], )
-
+# Chain parametrize to test combinations
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("shift_aug_prob", [0, 1])
+@pytest.mark.parametrize("rotation_aug_prob", [0, 1])
+@pytest.mark.parametrize("gaussian_noise_aug_prob", [0, 1])
+@pytest.mark.parametrize("gaussian_blur_aug_prob", [0, 1])
+@pytest.mark.parametrize("brightness_aug_prob", [0, 1])
+@pytest.mark.parametrize("contrast_aug_prob", [0, 1])
 def test_augmentation_helper_preserves_device(device, 
                                               shift_aug_prob,
                                               rotation_aug_prob,
@@ -351,12 +357,13 @@ def test_augmentation_helper_preserves_device(device,
                                               gaussian_blur_aug_prob,
                                               brightness_aug_prob,
                                               contrast_aug_prob) -> None:
+    
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available.")
 
     # Create a minimal configuration for the augmentations helper.
     cfg = AugmentationConfig(
-        max_shift_img_fraction=(0.1, 0.1),
+        max_shift_img_fraction=(0.8, 0.8),
         input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
         shift_aug_prob=shift_aug_prob,
         is_normalized=False,
@@ -386,10 +393,58 @@ def test_augmentation_helper_preserves_device(device,
     assert out_img.device.type == device
     assert out_lbl.device.type == device
 
+def test_zero_augs_no_error():
+    try:
+        cfg = AugmentationConfig(
+            max_shift_img_fraction=(0.8, 0.8),
+            input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
+            shift_aug_prob=0.0,
+            is_normalized=False,
+            rotation_angle=(-10, 10),
+            rotation_aug_prob=0.0,
+            sigma_gaussian_noise_dn=0.0,       # Disable noise for simplicity
+            gaussian_noise_aug_prob=0.0,
+            gaussian_blur_aug_prob=0.0,
+            is_torch_layout=False,
+            min_max_brightness_factor=(1.0, 1.0),
+            min_max_contrast_factor=(1.0, 1.0),
+            brightness_aug_prob=0.0,
+            contrast_aug_prob=0.0,
+            input_normalization_factor=255.0,
+            enable_auto_input_normalization=False,
+        )
+
+        augs_helper = ImageAugmentationsHelper(cfg)
+
+        # Create dummy inputs
+        x = torch.randn(1, 1, 64, 64, device=device)
+        lbl = torch.tensor([[32, 32]], dtype=torch.float32, device=device)
+
+        out_img, out_lbl = augs_helper(x, lbl)
+
+    except:
+        pytest.fail("Augmentation with zero probabilities raised an error but it should have not (warn only).")
+    
+
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
+
+    device = "cuda" if torch.cuda.is_available() else "cpu" 
+    shift_aug_prob = 0.0
+    rotation_aug_prob = 0.0
+    gaussian_noise_aug_prob = 0.0
+    gaussian_blur_aug_prob = 0.0
+    brightness_aug_prob = 0.0
+    contrast_aug_prob = 0.0
+
 
     #test_synthetic_mask_augmentation()
     #test_sample_images_augmentation()
     #test_AugmentationSequential()
-    test_augmentation_helper_cuda_preserves_device()
+    test_augmentation_helper_preserves_device(device,
+                                              shift_aug_prob,
+                                              rotation_aug_prob,
+                                              gaussian_noise_aug_prob,
+                                              gaussian_blur_aug_prob,
+                                              brightness_aug_prob,
+                                              contrast_aug_prob)

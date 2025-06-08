@@ -34,6 +34,21 @@ ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
 # %% Custom augmentation modules
 # TODO modify to be usable by AugmentationSequential? Inherint from _AugmentationBase. Search how to define custom augmentations in Kornia
 
+# DEVNOTE issue with random apply: 0 is not allowed, but 1 is not either because it implies the user MUST specify at LEAST 2 augs. Easy workaround: automatically add a dummy that acts as a placeholder to make it work with 1
+class PlaceholderAugmentation(IntensityAugmentationBase2D):
+
+    def __init__(self):
+        super().__init__()
+
+    def apply_transform(self, 
+                input: torch.Tensor, 
+                params: dict,
+                flags: dict,
+                transform: torch.Tensor) -> torch.Tensor:
+
+        return input
+
+
 class PoissonShotNoise(IntensityAugmentationBase2D):
     """
     Applies Poisson shot noise to a batch of images.
@@ -334,7 +349,7 @@ class AugmentationConfig:
     input_data_keys: list[DataKey]
     keepdim : bool = True
     same_on_batch : bool = False
-    random_apply_minmax: tuple[int, int] = (1, -1)
+    random_apply_minmax: tuple[int, int] = (0, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
 
     # Affine roto-translation augmentation
@@ -440,6 +455,7 @@ class ImageAugmentationsHelper(nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
         super().__init__()
         self.augs_cfg = augs_cfg
+        self.num_aug_ops = 0
 
         # TODO add input_data_keys to AugmentationConfig
         # ImageSequential seems not importable from kornia
@@ -519,6 +535,14 @@ class ImageAugmentationsHelper(nn.Module):
         if augs_cfg.vflip_prob > 0:
             augs_ops.append(K.RandomVerticalFlip(p=augs_cfg.vflip_prob))
 
+        if len(augs_ops) == 0:
+            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops!{colorama.Style.RESET_ALL}")
+        elif len(augs_ops) == 1:
+            # If len of augs_ops == 1 add placeholder augs for random_apply
+            augs_ops.append(PlaceholderAugmentation())
+        
+        self.num_aug_ops = len(augs_ops)
+
         # Build AugmentationSequential from nn.ModuleList
         if augs_cfg.random_apply_minmax[1] == -1: # Use maximum number of augmentations if upper bound not provided
             random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
@@ -530,12 +554,11 @@ class ImageAugmentationsHelper(nn.Module):
         # Transfer all modules to device if specified   
         if augs_cfg.device is not None:
 
-            for op in augs_ops:
-                op.to(augs_cfg.device)
+            for aug_op in augs_ops:
+                aug_op.to(augs_cfg.device)
 
-            for op in torch_vision_ops:
-                op.to(augs_cfg.device)
-
+            for aug_op in torch_vision_ops:
+                aug_op.to(augs_cfg.device)
 
         self.kornia_augs_module = AugmentationSequential( *augs_ops,
                                                          data_keys=augs_cfg.input_data_keys,
@@ -614,7 +637,10 @@ class ImageAugmentationsHelper(nn.Module):
             ##########
 
             # Apply augmentations module
-            aug_inputs = self.kornia_augs_module(*inputs)
+            if self.num_aug_ops > 0:
+                aug_inputs = self.kornia_augs_module(*inputs)
+            else:
+                aug_inputs = inputs
 
             ##########
             # TODO find a way to actually get keypoints and other entries without to index those manually!
@@ -649,8 +675,8 @@ class ImageAugmentationsHelper(nn.Module):
 
         # DEVNOTE: image appears to be transferred to cpu for no reason. To investigate.
         ###
-        aug_inputs[0] = aug_inputs[0].to(keypoints.device)
-        aug_inputs[1].to(keypoints.device)
+        #aug_inputs[0] = aug_inputs[0].to(keypoints.device)
+        #aug_inputs[1].to(keypoints.device)
         ###
 
         return aug_inputs
@@ -801,7 +827,7 @@ class ImageAugmentationsHelper(nn.Module):
                 "Current implementation is tailored to translate single point label [Bx2], but got: ", labels.shape)
 
         # Convert labels to tensor [B,N,2]
-        lbl = numpy_to_torch(labels).float()
+        lbl = numpy_to_torch(labels).float() if isinstance(labels, np.ndarray) else labels.float()
         assert (
             lbl.shape[0] == B), f"Label batch size {lbl.shape[0]} does not match image batch size {B}."
 
@@ -1046,7 +1072,7 @@ if __name__ == "__main__":
     pass
 
 """
-    # For later use: batch warping
+    # For possible later development: translation on batch, tensorized
     def _translate_batch(self,
                          images: torch.Tensor,
                          labels: ArrayOrTensor
