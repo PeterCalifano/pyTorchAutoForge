@@ -12,6 +12,25 @@ class BaseLabelsContainer:
     mapping between YAML keys and dataclass attributes via metadata aliases.
     """
 
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the container and all nested BaseLabelsContainer fields
+        into a plain dict using attribute names.
+        """
+
+        out_dict: dict[str, Any] = {}
+        
+        for f in fields(self):
+
+            value = getattr(self, f.name)
+
+            if isinstance(value, BaseLabelsContainer):
+                out_dict[f.name] = value.to_dict()
+            else:
+                out_dict[f.name] = value
+
+        return out_dict
+    
     def to_yaml(self) -> str:
         """
         Serialize the container to a YAML string including only non-empty fields,
@@ -138,50 +157,35 @@ class LabelsContainer(BaseLabelsContainer):
     kpts_heatmaps: KptsHeatmapsLabels = field(default_factory=KptsHeatmapsLabels,
                                               metadata={'yaml': 'kpts_heatmaps'})
 
-# Runnable example
-def example() -> None:
-    # Create a container with custom values
-    geom = GeometricLabels(
-        ui32_image_size=(1296, 966),
-        centre_of_figure=(522.6458, 590.4096),
-        distance_to_obj_centre=1.31744e8,
-        length_units='m',
-        bound_box_coordinates=(433.0, 501.0, 145.0, 170.0),
-        bbox_coords_order='xywh',
-        obj_apparent_size_in_pix=88.1364,
-        object_reference_size=1737420.0,
-        object_ref_size_units='m',
-        obj_projected_ellipsoid_matrix=[[0.0]*3 for _ in range(3)]
-    )
-    aux = AuxiliaryLabels(
-        phase_angle_in_deg=73.3925,
-        light_direction_rad_angle_from_x=-2.60326,
-        object_shape_matrix_cam_frame=[[0.0]*3 for _ in range(3)]
-    )
-    kpts = KptsHeatmapsLabels()
-    container = LabelsContainer(
-        geometric=geom, auxiliary=aux, kpts_heatmaps=kpts)
+    # Convenience getters for common fields:
+    @property
+    def centre_of_figure(self) -> tuple[float, float]:
+        return self.geometric.centre_of_figure
 
-    # Serialize to YAML string
-    yaml_str = container.to_yaml()
-    print("YAML Output:\n", yaml_str)
+    @property
+    def distance_to_obj_centre(self) -> float:
+        return self.geometric.distance_to_obj_centre
 
+    @property
+    def ui32_image_size(self) -> tuple[int, int]:
+        return self.geometric.ui32_image_size
 
-def example_loading():
+    @property
+    def bound_box_coordinates(self) -> tuple[float, float, float, float]:
+        return self.geometric.bound_box_coordinates
 
-    root_path = "/media/peterc/Main/linux_data/datasets/UniformlyScatteredPointCloudsDatasets/Moon/Dataset_UniformAzElPointCloud_ABRAM_Moon_5000_ID5"
-    lbl_number = 1
-    lbl_path = "labels"
-    lbl_filename = f"{lbl_number:06d}.yaml"
-    
-    filepath = pathlib.Path(root_path) / lbl_path / lbl_filename
+    @property
+    def obj_apparent_size_in_pix(self) -> float:
+        return self.geometric.obj_apparent_size_in_pix
 
-    # Load from YAML file
-    container = LabelsContainer.load_from_yaml(filepath)
+    @property
+    def obj_projected_ellipsoid_matrix(self) -> list[list[float]]:
+        return self.geometric.obj_projected_ellipsoid_matrix
 
-    print("Loaded Container:")
-    print(container)
+    @property
+    def light_direction_rad_angle_from_x(self) -> float:
+        return self.auxiliary.light_direction_rad_angle_from_x
 
-if __name__ == "__main__":
-    example()
-    example_loading()
+    @property
+    def phase_angle_in_deg(self) -> float:
+        return self.auxiliary.phase_angle_in_deg
