@@ -1,0 +1,15 @@
+auxiliary: {dLightDirectionRadAngleFromX: -2.6032576586639853, dPhaseAngleInDeg: 73.39248871205007}
+geometric:
+  charBBoxCoordsOrder: xywh
+  charLengthUnits: m
+  dBoundBoxCoordinates: [433.0, 501.0, 145.0, 170.0]
+  dCentreOfFigure: [522.6458119377869, 590.409585241252]
+  dDistanceToObjCentre: 1.3174400439758018E8
+  dObjApparentSizeInPix: 88.13640457980276
+  dObjectRefSizeUnits: m
+  dObjectReferenceSize: 1737420.0
+  ui32ImageSize: [1296, 966]
+kpts_heatmaps:
+  charHeatMapDatatype: single
+  ui32HeatmapSize: [0, 0]
+  ui32NumOfKpts: 0
