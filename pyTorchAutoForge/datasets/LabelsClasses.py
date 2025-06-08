@@ -2,6 +2,7 @@ from dataclasses import dataclass, field, fields
 from typing import Any, Type, TypeVar
 import yaml
 import pathlib
+from typing import get_origin, get_args
 
 T = TypeVar('T', bound='BaseLabelsContainer')
 
@@ -37,41 +38,64 @@ class BaseLabelsContainer:
         using metadata aliases for keys.
         """
         def prune(data: Any) -> Any:
+
             if isinstance(data, BaseLabelsContainer):
                 return prune({f.metadata.get('yaml', f.name): getattr(data, f.name)
                               for f in fields(data)
                               if getattr(data, f.name) not in (None, '', [], {}, ())})
+            
             if isinstance(data, dict):
+
                 result = {}
                 for k, v in data.items():
                     pruned_v = prune(v)
                     if pruned_v not in (None, '', [], {}, ()):
                         result[k] = pruned_v
                 return result
+            
             if isinstance(data, (list, tuple)):
                 pruned_list = [prune(v) for v in data]
                 return pruned_list if pruned_list else None
+            
             return data
 
         pruned = prune(self)
         return yaml.safe_dump(pruned)
 
     @classmethod
-    def from_dict(cls: Type[T], data: dict[str, Any]) -> T:
+    def from_dict(cls: Type[T], data: dict[str, Any], yaml_aliases: bool = False) -> T:
         """
         Instantiate a container from a dict using metadata aliases,
         recursively constructing nested BaseLabelsContainer types.
         """
         init_kwargs: dict[str, Any] = {}
+
         for f in fields(cls):
-            alias = f.metadata.get('yaml', f.name)
-            if alias in data:
-                value = data[alias]
+            if yaml_aliases:
+                alias = f.metadata.get('yaml', f.name)
+
+                if alias in data:
+                    raw_value = data[alias]
+
+                    # Nested container
+                    if hasattr(f.type, 'from_dict') and isinstance(raw_value, dict):
+                        value = f.type.from_dict(raw_value, yaml_aliases=yaml_aliases)  # type: ignore
+                    else:
+                        value = raw_value
+                        # Coerce lists to tuples if field annotation is Tuple
+                        origin = get_origin(f.type)
+                        if origin is tuple and isinstance(value, list):
+                            value = tuple(value)
+
+            else:
+                value = data.get(f.name, None)
+
+                # Nested container
                 if hasattr(f.type, 'from_dict') and isinstance(value, dict):
-                    init_kwargs[f.name] = f.type.from_dict(
-                        value)  # type: ignore
-                else:
-                    init_kwargs[f.name] = value
+                    value = f.type.from_dict(value, yaml_aliases=yaml_aliases)  # type: ignore
+
+            init_kwargs[f.name] = value
+
         return cls(**init_kwargs)  # type: ignore
 
     @classmethod
@@ -81,7 +105,7 @@ class BaseLabelsContainer:
         """
         with open(path, 'r') as f:
             data = yaml.safe_load(f)
-        return cls.from_dict(data)
+        return cls.from_dict(data, yaml_aliases=True)
 
     def save_to_yaml(self, path: str) -> None:
         """

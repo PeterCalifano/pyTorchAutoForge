@@ -34,13 +34,20 @@ def test_to_dict_and_from_dict():
         heatmap_size=(64, 64),
         heatmap_datatype='single'
     )
+
     container = LabelsContainer(
         geometric=geom,
         auxiliary=aux,
         kpts_heatmaps=kpts
     )
-    d = container.to_dict()
-    new_container = LabelsContainer.from_dict(d)
+
+
+    container_dict = container.to_dict()
+    print("Container as dict:", container_dict)
+
+    # Convert back to LabelsContainer from dict
+    new_container = LabelsContainer.from_dict(container_dict)
+    print(new_container)
 
     assert new_container.geometric.ui32_image_size == container.geometric.ui32_image_size
     assert new_container.auxiliary.phase_angle_in_deg == container.auxiliary.phase_angle_in_deg
@@ -75,6 +82,7 @@ def test_yaml_serialization_and_deserialization(tmp_path):
         auxiliary=aux,
         kpts_heatmaps=kpts
     )
+
     # Save container to YAML file using tmp_path
     file_path = tmp_path / "test.yaml"
     container.save_to_yaml(str(file_path))
@@ -136,5 +144,6 @@ def test_lbl_containers_loading_from_yaml():
 
 
 if __name__ == "__main__":
-    test_labels_containers_instantiation()
-    test_lbl_containers_loading_from_yaml()
+    #test_labels_containers_instantiation()
+    #test_lbl_containers_loading_from_yaml()
+    test_to_dict_and_from_dict()
