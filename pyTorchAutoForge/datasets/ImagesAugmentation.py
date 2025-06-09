@@ -349,7 +349,7 @@ class AugmentationConfig:
     input_data_keys: list[DataKey]
     keepdim : bool = True
     same_on_batch : bool = False
-    random_apply_minmax: tuple[int, int] = (0, -1)
+    random_apply_minmax: tuple[int, int] = (1, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
 
     # Affine roto-translation augmentation
@@ -536,7 +536,7 @@ class ImageAugmentationsHelper(nn.Module):
             augs_ops.append(K.RandomVerticalFlip(p=augs_cfg.vflip_prob))
 
         if len(augs_ops) == 0:
-            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops!{colorama.Style.RESET_ALL}")
+            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops! Forward pass will error if called.{colorama.Style.RESET_ALL}")
         elif len(augs_ops) == 1:
             # If len of augs_ops == 1 add placeholder augs for random_apply
             augs_ops.append(PlaceholderAugmentation())
@@ -675,8 +675,8 @@ class ImageAugmentationsHelper(nn.Module):
 
         # DEVNOTE: image appears to be transferred to cpu for no reason. To investigate.
         ###
-        #aug_inputs[0] = aug_inputs[0].to(keypoints.device)
-        #aug_inputs[1].to(keypoints.device)
+        aug_inputs[0] = aug_inputs[0].to(keypoints.device)
+        aug_inputs[1].to(keypoints.device)
         ###
 
         return aug_inputs
