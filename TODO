@@ -20,23 +20,24 @@
   - [x] Update Trainer to save checkpoints in subfolder with mlflow experiment name
   - [x] Upgrade translation augmentation to support translation of multiple (key)points
   - [x] Implement custom rotation augmentation to support rotation of multiple (key)points, through warping --> Using kornia Augmentation Sequential
-  - [x] Update parametric template of CNN class for different uses
-  - [ ] Add semi-automatic function to run model inference on sample input and save to disk with resulting predictions
+  - [x] Update parametric template of CNN classes for different uses
+  - [x] Add semi-automatic function to run model inference on sample input and save to disk with resulting predictions
   - [x] Implement Scaler adapter to store scaling factors for standalone input scaling (directly in forward)
   - [x] Add prototype of automatic MC dropout wrapper for NNs with dropout layers
   - [ ] Upgrade PTAF trainer and loss function interfaces to support image segmentation tasks
-  - [ ] Review implementations and modify model parameters using register buffer/parameter where needed.
-  - [ ] Upgrade api.torch to save model packages
+  - [x] Review implementations and modify model parameters using register buffer/parameter where needed.
+  - [ ] Upgrade api.torch to save model "packages" with all info to run the model
   - [x] Improve PTAF trainer: reduce on plateau scheduler, better stats for evalExample
+  - [x] Implement prototype of labels containers from DatasetGeneratorLib and for general usage, with load/dump methods to/form yml and dict
+  - [ ] Improve ModelTrainingManager printing and save method
+  - [ ] Implement method to get traced model directly from ModelTrainingManager (or try to)
+  - [ ] Add automatic check of equivalence in model export helpers (onnx mainly)
+  - [ ] Modify mlflow logging to unpack dict and dataclasses and save each key separately (better grouping)
 
 - [ ] v0.2.1
   - [ ] Modify DataLoaderIndex to accept datasets directly and a combination of datasets and dataloaders. If dataset is input, use default specifications for dataloader
-  - [ ] Implement method to get traced model directly from ModelTrainingManager (or try to)
   - [ ] Implement new training mode: SWA_MODE
-  - [ ] Add support for "reduce on plateau" scheduler (independent of step())
   - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
-  - [ ] Add automatic check of equivalence in ModelExporter
-  - [ ] Review NN and template blocks for modularity
   - [ ] Implement prototype usage of AMP for mixed precision training
   - [ ] Add configurable dataclasses from template yml files for training manager and extensible prototype (see pySR configuration in nav-frontend)
   - [ ] Add pySR conveniency module
