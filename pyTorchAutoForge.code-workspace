@@ -34,6 +34,9 @@
 			"path": "../spiking-networks/norse_PeterCdev"
 		},
 		{
+			"path": "../../rendering-sw/DatasetGeneratorLib"
+		},
+		{
 			"path": "../MachineLearningGears_for_SpaceNav"
 		}
 	],
