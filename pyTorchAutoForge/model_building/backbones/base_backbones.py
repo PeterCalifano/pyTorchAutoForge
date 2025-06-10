@@ -29,7 +29,7 @@ class FeatureExtractorConfig(BaseConfigClass):
     input_channels: int = 3 # Placeholder value
 
     # Whether to return only the final feature map, or all intermediate outputs
-    output_type: Literal['last', 'spill_features'] = 'last'
+    output_type: Literal['last', 'spill_features', 'spatial_features'] = 'last'
 
 
 @dataclass
@@ -93,7 +93,7 @@ def BackboneFactory(cfg: BackboneConfig) -> nn.Module:
 class EfficientNetConfig(FeatureExtractorConfig):
     # Which EfficientNet variant to use
     model_name: Literal['b0', 'b1', 'b2', 'b3', 'b4', 'b6'] = 'b0'
-    feature_tapping_output_res: dict[str, tuple[int, int]] | None = field(default_factory=lambda: {"1": (32,32)})
+    feature_tapping_output_resolution_channels: dict[str, dict[str, tuple[int, int] | int]] | None = field(default_factory=lambda: {"1": {"resolution": (32,32), "channels": 1}})
 
     def __post_init__(self):
         self.input_channels = 3
@@ -103,24 +103,33 @@ class EfficientNetConfig(FeatureExtractorConfig):
         else:
             raise ValueError(f"Channel sizes output (for each module) not defined for {self.model_name} variant. Please add it manually.")
 
-        self.feature_tapping_channel_size: dict[str, int] | None = None
+        self.feature_tapping_channel_input_size: dict[str, int] | None = None
 
-        if self.feature_tapping_output_res is not None:
+        # Build mapping for EfficientNet channel input sizes 
+        if self.feature_tapping_output_resolution_channels is not None:
+
             # Define output channels for each feature_tapping key
-            self.feature_tapping_channel_size = {key: 0 for key in self.feature_tapping_output_res.keys()}
+            self.feature_tapping_channel_input_size = {key: 0 for key in self.feature_tapping_output_resolution_channels.keys()}
 
-            for key, target_res in self.feature_tapping_output_res.items():
+            for key, (key_resolution, key_channels) in self.feature_tapping_output_resolution_channels.items():
+                
+                # Get resolution and channels from the config
+                resolution = self.feature_tapping_output_resolution_channels[key][key_resolution]
+                channels = self.feature_tapping_output_resolution_channels[key][key_channels]
+
                 # Check key is a number
                 if not key.isdigit():
                     raise ValueError(f"Key {key} is not a valid number. Must be the index of the module from which the features are spilled.")
 
                 if int(key) >= len(feature_tapping_channel_out):
                     raise ValueError(f"Key {key} exceeds the number of EfficientNet children modules.")
-                self.feature_tapping_channel_size[key] = feature_tapping_channel_out[int(key)]
-        else:
-            self.feature_tapping_channel_size = {str(
-                i): feature_tapping_channel_out[i] for i in range(len(feature_tapping_channel_out))}
+                
+                self.feature_tapping_channel_input_size[key] = feature_tapping_channel_out[int(key)]
 
+        else:
+            # Build dict for all feature tapping channels (input sizes)
+            self.feature_tapping_channel_input_size = {str(
+                i): feature_tapping_channel_out[i] for i in range(len(feature_tapping_channel_out))}
 
 ### ResNet
 @dataclass

@@ -2,6 +2,9 @@ from torch import nn
 from torchvision import models
 from .base_backbones import EfficientNetConfig, FeatureExtractorFactory
 
+import torch
+import torch.nn.functional as F
+from pyTorchAutoForge.model_building.backbones.spatial_features_operators import SpatialKptFeatureSoftmaxLocator
 
 class EfficientNetBackbone(nn.Module):
     def __init__(self, cfg: EfficientNetConfig):
@@ -21,7 +24,8 @@ class EfficientNetBackbone(nn.Module):
             # Wrap as a single ModuleList so that forward is simple
             self.feature_extractor = nn.ModuleList([nn.Sequential(*modules)])
 
-        elif cfg.output_type == 'spill_features':
+        elif cfg.output_type == 'spill_features' or cfg.output_type == 'spatial_features':
+
             # For spill_features, keep individual stages
             feature_extractor_modules = modules[0]
 
@@ -33,53 +37,65 @@ class EfficientNetBackbone(nn.Module):
             self.feature_extractor.append(modules[1])
 
             # Build average pooling layer
-            self.feature_processor = nn.ModuleDict()
+            self.feature_spill_preprocessor = nn.ModuleDict()
 
-            if self.cfg.feature_tapping_output_res is not None \
-                    and self.cfg.feature_tapping_channel_size is not None:
+            if self.cfg.feature_tapping_output_resolution_channels is not None \
+                    and self.cfg.feature_tapping_channel_input_size is not None:
 
-                for key, target_res in self.cfg.feature_tapping_output_res.items():
+                for key, (target_res_key, target_channels_key) in self.cfg.feature_tapping_output_resolution_channels.items():
+
+                    # Get target resolution and channels from configuration
+                    target_res = self.cfg.feature_tapping_output_resolution_channels[key][target_res_key]
+                    target_channels = self.cfg.feature_tapping_output_resolution_channels[key][target_channels_key]
 
                     # Adaptive max pooling layer
-                    pooled_res = (4*target_res[0], 4*target_res[1])
+                    pooled_res = (4*target_res[0], 4*target_res[1]) # Pool to 4 times the target resolution
                     adaptive_max_pool = nn.AdaptiveMaxPool2d(pooled_res)
 
                     # Convolutional 2d extractor layer
-                    max_pool_extractor_layer = nn.Conv2d(in_channels=self.cfg.feature_tapping_channel_size[key],
-                                                         out_channels=1,
+                    max_pool_extractor_layer = nn.Conv2d(in_channels=self.cfg.feature_tapping_channel_input_size[key],
+                                                         out_channels=target_channels,
                                                          kernel_size=1,
                                                          stride=1,
                                                          padding=1)
 
                     # Max pooling layer
-                    max_pool_extractor_out_layer = nn.AdaptiveMaxPool2d(
-                        output_size=(2*target_res[0],
-                                     2*target_res[1]))
+                    max_pool_extractor_out_layer = nn.AdaptiveMaxPool2d(output_size=(target_res[0], target_res[1]))
 
-                    # Flattening layer
-                    flattening_layer = nn.Flatten()
+                    # Activation function for output features maps
+                    features_spill_activations = nn.PReLU(num_parameters=self.cfg.feature_tapping_channel_input_size[key])
 
-                    # Activation function for features
-                    features_activation_in = nn.PReLU(num_parameters=1)
-                    features_activation_out = nn.PReLU(num_parameters=1)
+                    if not cfg.output_type == 'spatial_features': # Intensity-like feature output type
 
-                    # Feature mixing layer
-                    feature_weighting = nn.Linear(
-                        in_features=4 * target_res[0] * target_res[1],
-                        out_features=self.cfg.feature_tapping_channel_size[key] * target_res[0] * target_res[1])
+                        # Build flattening and linear layer to match expected output size
+                        self.feature_spill_preprocessor[str(key)] = nn.Sequential(
+                            adaptive_max_pool,
+                            max_pool_extractor_layer,
+                            max_pool_extractor_out_layer,
+                            features_spill_activations,
+                            nn.Flatten(),
+                            nn.Linear(in_features=target_channels * target_res[0] * target_res[1], 
+                                      out_features=self.cfg.feature_tapping_channel_input_size[key])
+                        )
 
-                    self.feature_processor[str(key)] = nn.Sequential(
-                        adaptive_max_pool,
-                        max_pool_extractor_layer,
-                        max_pool_extractor_out_layer,
-                        flattening_layer,
-                        features_activation_in,
-                        feature_weighting,
-                        features_activation_out,
-                    )
+                    else: # Spatial features output type
+
+                        # Build softargmax layer to extract spatial features for each channel
+                        # Outputs will be of shape (B, C, 2) where 2 is for x and y coordinates, C channels
+                        spatial_kpt_extractor = SpatialKptFeatureSoftmaxLocator(target_resolution=target_res,
+                                                                                target_channels=target_channels)
+
+                        self.feature_spill_preprocessor[str(key)] = nn.Sequential(
+                            adaptive_max_pool,
+                            max_pool_extractor_layer,
+                            max_pool_extractor_out_layer,
+                            features_spill_activations,
+                            spatial_kpt_extractor
+                        )
+
             else:
                 raise ValueError(
-                    "feature_tapping_channel_size must not be None when feature_tapping_output_res is provided and output type is {cfg.output_type}.")
+                    "feature_tapping_channel_input_size must not be None when feature_tapping_output_res is provided and output type is {cfg.output_type}.")
 
         else:
             raise ValueError(
@@ -113,9 +129,9 @@ class EfficientNetBackbone(nn.Module):
 
         # Process selected features with average pooling
         if self.cfg.output_type == 'spill_features' and self.cfg.feature_tapping_output_res is not None:
-            for key, target_res in self.cfg.feature_tapping_output_res.items():
-                if key in self.feature_processor:
-                    features[int(key)] = self.feature_processor[key](
+            for key, (target_res, target_channels) in self.cfg.feature_tapping_output_res.items():
+                if key in self.feature_spill_preprocessor:
+                    features[int(key)] = self.feature_spill_preprocessor[key](
                         features[int(key)])
 
         # Handle output and optional head
