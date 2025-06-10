@@ -1317,6 +1317,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             else:
                 has_reduced_on_plateau = False
 
+            # FIXME: it seems that step does not work ok if cosine annealing is working
+
             # Print info
             if has_reduced_on_plateau:
 
@@ -1409,6 +1411,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 self.optuna_trial.set_user_attr('mlflow_name', self.modelName)
                 self.optuna_trial.set_user_attr('mlflow_ID', self.currentMlflowRun.info.run_id)
 
+    def exportModel(self):
+        pass
+    # TODO move code to save models here, with tracing/onnx option (fail-safe: save pth if cannot save traced or equivalence fails)
 
 # %% Function to freeze a generic nn.Module model parameters to avoid backpropagation
 def FreezeModel(model: nn.Module) -> nn.Module:
