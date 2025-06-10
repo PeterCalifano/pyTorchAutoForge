@@ -31,15 +31,18 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
         height (int): The height of the input feature map.
         width (int): The width of the input feature map.
     """     
-    def __init__(self, height: int, width: int):
+
+    def __init__(self, 
+                 input_resolution: tuple[int, int], 
+                 num_input_channels:int) -> None:
         super().__init__()
         
-        self.height = height
-        self.width = width
+        self.height, self.width = input_resolution
+        self.num_input_channels = num_input_channels
 
         # Create coordinate buffers normalized to [-1, 1]
-        x_coords = torch.linspace(-1.0, 1.0, width)
-        y_coords = torch.linspace(-1.0, 1.0, height)
+        x_coords = torch.linspace(-1.0, 1.0, self.width)
+        y_coords = torch.linspace(-1.0, 1.0, self.height)
 
         self.register_buffer("x_coords", x_coords)  # shape (W,)
         self.register_buffer("y_coords", y_coords)  # shape (H,)
@@ -77,7 +80,7 @@ if __name__ == "__main__":
 
     # Test ONNX export compatibility
     dummy_input = torch.randn(1, 3, 5, 7)
-    
+
     try:
         torch.onnx.export(
             module,
