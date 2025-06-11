@@ -29,8 +29,9 @@
   - [ ] Upgrade api.torch to save model "packages" with all info to run the model
   - [x] Improve PTAF trainer: reduce on plateau scheduler, better stats for evalExample
   - [x] Implement prototype of labels containers from DatasetGeneratorLib and for general usage, with load/dump methods to/form yml and dict
-  - [ ] Improve ModelTrainingManager printing and save method
-  - [ ] Implement method to get traced model directly from ModelTrainingManager (or try to)
+  - [x] Improve ModelTrainingManager printing and save method
+  - [ ] Rework ModelTrainingManager to avoid inheritance of configuration
+  - [ ] Implement export method (traced, onnx, model pth) in ModelTrainingManager
   - [ ] Add automatic check of equivalence in model export helpers (onnx mainly)
   - [ ] Modify mlflow logging to unpack dict and dataclasses and save each key separately (better grouping)
 

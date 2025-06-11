@@ -1040,6 +1040,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             
             # Save best model up to current epoch if not None
             try:
+                # TODO replace by a trainer export method
                 if self.bestModel is not None:
                     examplePair = next(iter(self.validationDataloader))
                     model_save_name = os.path.join(
@@ -1050,6 +1051,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                 save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
                                 example_input=examplePair[0], 
                                 target_device=self.device)
+                        
+                        # TODO
+                        try:
+                            if self.export_best_to_onnx:
+                                pass
+                        except:
+                            pass
+
+
                     print(f"\t\033[38;5;208mBest model checkpoint saved correctly.\033[0m")
             except Exception as err: 
                 print(f"\t\033[31mAttempt to save best model checkpoint failed due to: {str(err)}\033[0m")
