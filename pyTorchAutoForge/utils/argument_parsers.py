@@ -100,3 +100,14 @@ PTAF_training_parser.add_argument('--optuna_storage', type=str, default="sqlite:
 
 # TODO add functionality to load and return configuration through the parser loading from file?
 
+####################################################
+# %% Auxiliary utilities
+def ParseShapeString(shape_str: str, delimiter: str = ',') -> tuple[int, ...]:
+    """Convert a comma-separated string into a tuple of ints."""
+    parts = shape_str.split(delimiter)
+    try:
+        return tuple(int(p.strip()) for p in parts)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Invalid shape '{shape_str}'. Expected comma-separated integers, e.g. '1,3,224,224'"
+        )
