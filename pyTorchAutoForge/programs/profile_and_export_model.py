@@ -8,10 +8,9 @@ try:
     from pyTorchAutoForge.evaluation import ModelProfilerHelper
     from pyTorchAutoForge.api.torch import LoadModel, SaveModel, AutoForgeModuleSaveMode
     from torch.profiler import profile, record_function, ProfilerActivity
-    from pyTorchAutoForge.utils.argument_parsers import ParseShapeString
+    from pyTorchAutoForge.utils.argument_parsers import ParseShapeString, ConfigArgumentParser
     import onnx
     from onnx2pytorch import ConvertModel as OnnxToTorch
-
 except ImportError as e:
     print("Required libraries are not installed. Please install pyTorchAutoForge and its dependencies.")
     sys.exit(1)
@@ -20,6 +19,7 @@ except ImportError as e:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # CLI callable script to load a model, profile it and export to onnx if requested.
+# TODO add support to load config from yml, using ConfigArgumentParser in PTAF
 argparser = argp.ArgumentParser(
     description="Program to profile a PyTorch/ONNx model and optionally export it to ONNX format and/or torch dynamo traced model.")
 
@@ -209,7 +209,7 @@ def main():
     try:
         if args.onnx_export and not args.model_path.endswith('.onnx') and args.onnx_export:
             # TODO: try to add onnx simply 
-            
+
             logging.info("Exporting model to ONNX format...")
             onnx_handler = ModelHandlerONNx(model=model,
                                             dummy_input_sample=input_sample,

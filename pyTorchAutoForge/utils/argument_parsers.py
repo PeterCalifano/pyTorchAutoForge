@@ -1,13 +1,79 @@
-import argparse
+import argparse as argp
 from pyTorchAutoForge.utils import GetDeviceMulti
+from typing import Any
+import yaml
 
-# Base class
-class ModelOptimizationParser(argparse.ArgumentParser):
+# Auxiliary functions 
+def _load_yaml(Path: str) -> dict[str, Any]:
+    """Load YAML file and return as dict."""
+    with open(Path, 'r') as f:
+        return yaml.safe_load(f) or {}
+
+def _merge_config(Args: argp.Namespace, Config: dict[str, Any]) -> None:
+    """Merge YAML config dict into argp Namespace, overriding existing attrs."""
+    for key, value in Config.items():
+        if hasattr(Args, key):
+            setattr(Args, key, value)
+
+# %% Base classes
+class ConfigArgumentParser(argp.ArgumentParser):
+    """
+    ArgumentParser that supports loading defaults from a YAML config file.
+    Providing -y/--yaml_config will override all other args.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        yaml_arg_name: str = 'yaml_config',
+        **kwargs: Any
+    ) -> None:
+        
+        super().__init__(*args, **kwargs)
+        self._yaml_arg_name: str = yaml_arg_name
+        self.add_argument(
+            '-y', f'--{self._yaml_arg_name}',
+            dest=self._yaml_arg_name,
+            type=str,
+            help='Path to YAML config file to override arguments'
+        )
+
+    def ParseArgs(self, args: Any | None = None, namespace: argp.Namespace | None = None) -> argp.Namespace:
+
+        # First parse known to check for YAML
+        preliminary, _ = super().parse_known_args(args, namespace)
+        yaml_path: str | None = getattr(
+            preliminary, self._yaml_arg_name, None)
+        
+        if yaml_path:
+            config: dict[str, Any] = _load_yaml(yaml_path)
+
+            # Build fresh namespace with defaults
+            new_ns: argp.Namespace = argp.Namespace()
+
+            for action in self._actions:
+                if action.dest != 'help':
+                    setattr(new_ns, action.dest, action.default)
+                    
+            _merge_config(new_ns, config)
+
+            return new_ns
+        
+        # Fallback to standard parse_args
+        return super().parse_args(args, namespace)
+
+    # Allow both parse_args and parse_args aliasing
+    def parse_args(self, args: Any | None = None, namespace: argp.Namespace | None = None) -> argp.Namespace:
+        return self.ParseArgs(args, namespace)
+
+
+# Specific base parsers
+class ModelOptimizationParser(argp.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
 # Config file with custom action to stop further parsing
-class StopParsingAction(argparse.Action):
+class StopParsingAction(argp.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         
         setattr(namespace, self.dest, values)
@@ -108,6 +174,6 @@ def ParseShapeString(shape_str: str, delimiter: str = ',') -> tuple[int, ...]:
     try:
         return tuple(int(p.strip()) for p in parts)
     except ValueError:
-        raise argparse.ArgumentTypeError(
+        raise argp.ArgumentTypeError(
             f"Invalid shape '{shape_str}'. Expected comma-separated integers, e.g. '1,3,224,224'"
         )
