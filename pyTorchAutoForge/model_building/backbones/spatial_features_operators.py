@@ -9,9 +9,11 @@ def spatial_softargmax(feature_map):
     N, C, H, W = feature_map.shape
     # Apply softmax over HxW per channel
     prob = F.softmax(feature_map.view(N, C, -1), dim=-1).view(N, C, H, W)
+
     # Create coordinate grids normalized to [-1, 1]
     x_coords = torch.linspace(-1, 1, W, device=feature_map.device)
     y_coords = torch.linspace(-1, 1, H, device=feature_map.device)
+
     # Compute expected coordinates
     # sum over rows (y) and cols (x) weighted by probabilities
     # prob.sum(dim=2) collapses y dimension -> shape (N,C,W) for x
@@ -41,11 +43,18 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
         self.num_input_channels = num_input_channels
 
         # Create coordinate buffers normalized to [-1, 1]
-        x_coords = torch.linspace(-1.0, 1.0, self.width)
-        y_coords = torch.linspace(-1.0, 1.0, self.height)
+        #x_coords = torch.linspace(-1.0, 1.0, self.width)
+        #y_coords = torch.linspace(-1.0, 1.0, self.height)
 
-        self.register_buffer("x_coords", x_coords)  # shape (W,)
-        self.register_buffer("y_coords", y_coords)  # shape (H,)
+        # Pixel‐based coordinate buffers, shape (HW,)
+        xs = torch.arange(0, self.width, dtype=torch.float32)
+        ys = torch.arange(0, self.height, dtype=torch.float32)
+
+        xs_flat = xs.repeat(self.height)            # [0,1,..,W-1, 0,1,..,W-1, …]
+        ys_flat = ys.repeat_interleave(self.width)  # [0..0,1..1,..H-1..H-1]
+
+        self.register_buffer("x_coords", xs_flat.view(1,1,-1))  # shape (W,)
+        self.register_buffer("y_coords", ys_flat.view(1,1,-1))  # shape (H,)
 
     def forward(self, feature_map: Tensor) -> Tensor:
         B, C, H, W = feature_map.shape
@@ -53,16 +62,16 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
         assert H == self.height and W == self.width, (f"Input feature_map size ({H}, {W}) must match module initialization ({self.height}, {self.width})")
 
         # Apply softmax over spatial dimensions per channel
-        probability_mask = F.softmax(feature_map.view(B, C, -1), dim=-1).view(B, C, H, W)
+        probability_mask_flat = F.softmax(feature_map.view(B, C, -1), dim=2) # shape (B, C, HW)
 
         # Expected x coordinates: sum over y dimension then weighted by x_coords
-        x_expectation = (probability_mask.sum(dim=2) * self.x_coords).sum(dim=2)  # shape (B, C)
+        x_expectation = (probability_mask_flat * self.x_coords).sum(dim=2)  # shape (B, C)
 
         # Expected y coordinates: sum over x dimension then weighted by y_coords
-        y_expectation = (probability_mask.sum(dim=3) * self.y_coords).sum(dim=2)  # shape (B, C)
+        y_expectation = (probability_mask_flat * self.y_coords).sum(dim=2)  # shape (B, C)
 
         # Stack coordinates into (B, N, 2) shape
-        xy_expected_coordinates = torch.stack((x_expectation, y_expectation), dim=-1)  # shape (B, C, 2)
+        xy_expected_coordinates = torch.stack((x_expectation, y_expectation), dim=2)
         return xy_expected_coordinates
 
 

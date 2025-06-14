@@ -133,6 +133,7 @@ class ModelHandlerONNx:
         """Export the model to ONNx format using TorchDynamo."""
 
         # Check if any model is already exported in the export path and append ID to the filename if any
+        # FIXME renaming routine breaks
         nameID = 0
         onnx_model_name_tmp = onnx_model_name
         while os.path.isfile(os.path.join(os.path.dirname(self.onnx_export_path), onnx_model_name_tmp + ".onnx")):
