@@ -5,6 +5,11 @@ from pyTorchAutoForge.utils import AddZerosPadding, torch_to_numpy, timeit_avera
 from onnxruntime import InferenceSession
 from numpy.testing import assert_allclose
 
+
+
+# TODO: add support to use onnx simplify 
+#simplified_model, check_status = onnxsim.simplify(onnx_model)
+
 class ModelHandlerONNx:
     """
      _summary_
@@ -51,9 +56,9 @@ class ModelHandlerONNx:
     def torch_export(self, 
                      input_tensor: torch.Tensor | None = None, 
                      onnx_model_name: str | None = None, 
-                     dynamic_axes: dict = None, 
-                     IO_names: dict = None,
-                     verbose: bool = True) -> None:
+                     dynamic_axes: dict | None = None, 
+                     IO_names: dict | None = None,
+                     verbose: bool = True) -> str:
         """Export the model to ONNx format using TorchScript backend."""
 
         # TODO (PC) move all this preliminary code to a dedicated method
@@ -114,23 +119,26 @@ class ModelHandlerONNx:
                         dynamic_axes=dynamic_axes,
                         verbose=verbose, report=self.generate_report)
 
-        print(f"Model exported to ONNx format: {os.path.join(self.onnx_export_path, onnx_model_name + '.onnx')}")
+        print(f"Model exported to ONNx format: {self.onnx_filepath}")
 
         if self.run_export_validation:
             # Reload the model from disk
-            self.onnx_model = self.onnx_load(os.path.join(
-                os.path.dirname(self.onnx_export_path), onnx_model_name + ".onnx"))
+            self.onnx_model = self.onnx_load(onnx_filepath=self.onnx_filepath)
             
             self.onnx_validate(self.onnx_model)
 
+        return self.onnx_filepath
+    
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def torch_dynamo_export(self, 
                             input_tensor: torch.Tensor | None = None, 
                             onnx_model_name: str = 'onnx_dynamo_export', 
-                            dynamic_axes: dict = None, 
-                            IO_names: dict = None, 
+                            dynamic_axes: dict | None = None,
+                            IO_names: dict | None = None,
                             verbose: bool = True) -> None:
         """Export the model to ONNx format using TorchDynamo."""
+
+        # TODO update as torch_export. Revisit and merge common functionalities
 
         # Check if any model is already exported in the export path and append ID to the filename if any
         nameID = 0
@@ -176,16 +184,20 @@ class ModelHandlerONNx:
         onnx_program.optimize()
 
         # Save optimized model (serialized ONNx model)
-        onnx_file_path = os.path.join(os.path.dirname(self.onnx_export_path), onnx_model_name + ".onnx")
-        onnx_program.save(onnx_file_path)
+        self.onnx_filepath = os.path.join(
+            self.onnx_export_path + ".onnx")
+        
+        onnx_program.save(self.onnx_filepath)
 
-        print(f"Model exported to ONNx format using TorchDynamo: {os.path.join(self.onnx_export_path, onnx_model_name + '.onnx')}")
+        print(f"Model exported to ONNx format using TorchDynamo: {self.onnx_filepath}")
 
         if self.run_export_validation:
             # Reload the model from disk
-            self.onnx_model = self.onnx_load(os.path.join(
-                os.path.dirname(self.onnx_export_path), onnx_model_name + ".onnx"))
-            self.onnx_validate(self.onnx_model)
+            self.onnx_model = self.onnx_load(onnx_filepath=self.onnx_filepath)
+
+            self.onnx_validate(onnx_model=self.onnx_model)
+
+        return self.onnx_filepath
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def convert_to_onnx_opset(self, 
