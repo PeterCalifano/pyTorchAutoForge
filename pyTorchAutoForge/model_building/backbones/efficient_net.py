@@ -42,7 +42,13 @@ class EfficientNetBackbone(nn.Module):
             if self.cfg.feature_tapping_output_resolution_channels is not None \
                     and self.cfg.feature_tapping_channel_input_size is not None:
 
-                for key, (target_res_key, target_channels_key) in self.cfg.feature_tapping_output_resolution_channels.items():
+                for key, value in self.cfg.feature_tapping_output_resolution_channels.items():
+                    
+                    if len(value) == 2:
+                        target_res_key, target_channels_key = value.keys()
+
+                    elif len(value) == 3:
+                        target_res_key, target_channels_key, target_linear_output_size = value.keys()
 
                     # Get target resolution and channels from configuration
                     target_res = self.cfg.feature_tapping_output_resolution_channels[key][target_res_key]
@@ -63,9 +69,12 @@ class EfficientNetBackbone(nn.Module):
                     max_pool_extractor_out_layer = nn.AdaptiveMaxPool2d(output_size=(target_res[0], target_res[1]))
 
                     # Activation function for output features maps
-                    features_spill_activations = nn.PReLU(num_parameters=self.cfg.feature_tapping_channel_input_size[key])
+                    features_spill_activations = nn.PReLU(num_parameters=target_channels)
 
-                    if not cfg.output_type == 'spatial_features': # Intensity-like feature output type
+                    if cfg.output_type == 'spill_features': # Intensity-like feature output type
+                        if 'linear_output_size' not in cfg.feature_tapping_output_resolution_channels[key].keys():
+                            raise ValueError(
+                                "feature_tapping_output_resolution_channels must contain 'linear_output_size' for intensity-like output type (spill_features mode).")
 
                         # Build flattening and linear layer to match expected output size
                         self.feature_spill_preprocessor[str(key)] = nn.Sequential(
@@ -75,7 +84,7 @@ class EfficientNetBackbone(nn.Module):
                             features_spill_activations,
                             nn.Flatten(),
                             nn.Linear(in_features=target_channels * target_res[0] * target_res[1], 
-                                      out_features=self.cfg.feature_tapping_channel_input_size[key])
+                                      out_features=cfg.feature_tapping_output_resolution_channels[key][target_linear_output_size])
                         )
 
                     else: # Spatial features output type
@@ -95,7 +104,7 @@ class EfficientNetBackbone(nn.Module):
 
             else:
                 raise ValueError(
-                    "feature_tapping_channel_input_size must not be None when feature_tapping_output_res is provided and output type is {cfg.output_type}.")
+                    "feature_tapping_channel_input_size must not be None when feature_tapping_output_resolution_channels is provided and output type is {cfg.output_type}.")
 
         else:
             raise ValueError(
@@ -128,11 +137,12 @@ class EfficientNetBackbone(nn.Module):
                 features.append(x)
 
         # Process selected features with average pooling
-        if self.cfg.output_type == 'spill_features' and self.cfg.feature_tapping_output_res is not None:
-            for key, (target_res, target_channels) in self.cfg.feature_tapping_output_res.items():
+        if self.cfg.output_type == 'spill_features' and self.cfg.feature_tapping_output_resolution_channels is not None:
+
+            for key in self.cfg.feature_tapping_output_resolution_channels.keys():
+
                 if key in self.feature_spill_preprocessor:
-                    features[int(key)] = self.feature_spill_preprocessor[key](
-                        features[int(key)])
+                    features[int(key)] = self.feature_spill_preprocessor[key](features[int(key)])
 
         # Handle output and optional head
         if self.cfg.output_type == 'last':

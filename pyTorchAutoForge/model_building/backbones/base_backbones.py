@@ -111,11 +111,30 @@ class EfficientNetConfig(FeatureExtractorConfig):
             # Define output channels for each feature_tapping key
             self.feature_tapping_channel_input_size = {key: 0 for key in self.feature_tapping_output_resolution_channels.keys()}
 
-            for key, (key_resolution, key_channels) in self.feature_tapping_output_resolution_channels.items():
-                
-                # Get resolution and channels from the config
-                resolution = self.feature_tapping_output_resolution_channels[key][key_resolution]
-                channels = self.feature_tapping_output_resolution_channels[key][key_channels]
+            # TODO which was the idea here?
+            for key, value in self.feature_tapping_output_resolution_channels.items():
+
+                # Handle value being a tuple of length 2 or 3
+                if isinstance(value, dict):
+                    
+                    if len(value) == 2:
+                        key_resolution, key_channels = value.keys()
+
+                        # Get resolution and channels from the config
+                        resolution = self.feature_tapping_output_resolution_channels[key][key_resolution]
+                        channels = self.feature_tapping_output_resolution_channels[key][key_channels]
+
+                    elif len(value) == 3:
+                        key_resolution, key_channels, key_linear_output_size = value.keys()
+
+                        # Get resolution and channels from the config
+                        resolution = self.feature_tapping_output_resolution_channels[key][key_resolution]
+                        channels = self.feature_tapping_output_resolution_channels[key][key_channels]
+                        linear_output_size = self.feature_tapping_output_resolution_channels[key][key_linear_output_size]
+                    else:
+                        raise ValueError(f"Value for key {key} must be a tuple of length 2 or 3.")
+                else:
+                    raise ValueError(f"Value for key {key} must be a dict.")
 
                 # Check key is a number
                 if not key.isdigit():
