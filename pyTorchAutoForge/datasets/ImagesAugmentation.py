@@ -871,8 +871,10 @@ class ImageAugmentationsHelper(nn.Module):
 
                     if iter_counter == self.augs_cfg.max_invalid_resample_attempts:
                         raise RuntimeError(f"Max invalid resample attempts reached: {iter_counter}. Augmentation helper is not able to provide a fully valid batch. Please verify your augmentation configuration.")
-
-                    print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: attempt #{iter_counter}/{self.augs_cfg.max_invalid_resample_attempts-1} failed. Current number of invalid samples: '{(~is_valid_mask_tmp).sum()}'.{colorama.Style.RESET_ALL}")
+                    
+                    if not_all_valid:
+                        print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: attempt #{iter_counter}/{self.augs_cfg.max_invalid_resample_attempts-1} failed. Current number of invalid samples: '{(~is_valid_mask_tmp).sum().float()}'.{colorama.Style.RESET_ALL}")
+                    
                     iter_counter += 1
 
                 # Reallocate new samples in inputs
@@ -916,10 +918,11 @@ class ImageAugmentationsHelper(nn.Module):
         img_index = self.augs_cfg.input_data_keys.index(DataKey.IMAGE)
 
         B = inputs[img_index].shape[0]
-        mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
+        #mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
 
         # A threshold to detect near-black images (tune if needed)
-        is_pixel_bright_count_mask = (mean_per_image > 5E-2).view(mean_per_image.size(0), -1).sum(dim=1)
+        is_pixel_bright_count_mask = (
+            torch.abs(inputs[img_index]) > 5E-2).view(B, -1).sum(dim=1)
         is_valid_mask = is_pixel_bright_count_mask >= self.augs_cfg.min_num_bright_pixels
 
         # Indices of invalid images
