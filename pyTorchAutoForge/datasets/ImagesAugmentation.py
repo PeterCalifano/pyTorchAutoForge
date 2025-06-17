@@ -415,6 +415,7 @@ class AugmentationConfig:
     enable_batch_validation_check: bool = False
     invalid_sample_remedy_action: Literal["discard", "resample", "original"] = "original"
     max_invalid_resample_attempts: int = 10  # Max attempts to resample invalid images
+    min_num_bright_pixels: int = 1000  
 
     def __post_init__(self):
 
@@ -918,7 +919,8 @@ class ImageAugmentationsHelper(nn.Module):
         mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
 
         # A threshold to detect near-black images (tune if needed)
-        is_valid_mask = mean_per_image > 1E-3
+        is_pixel_bright_count_mask = (mean_per_image > 5E-2).view(mean_per_image.size(0), -1).sum(dim=1)
+        is_valid_mask = is_pixel_bright_count_mask >= self.augs_cfg.min_num_bright_pixels
 
         # Indices of invalid images
         invalid_indices = (~is_valid_mask).nonzero(as_tuple=True)[0]
