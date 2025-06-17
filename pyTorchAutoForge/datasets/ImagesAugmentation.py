@@ -871,6 +871,7 @@ class ImageAugmentationsHelper(nn.Module):
                     if iter_counter == self.augs_cfg.max_invalid_resample_attempts:
                         raise RuntimeError(f"Max invalid resample attempts reached: {iter_counter}. Augmentation helper is not able to provide a fully valid batch. Please verify your augmentation configuration.")
 
+                    print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: attempt #{iter_counter}/{self.augs_cfg.max_invalid_resample_attempts-1} failed. Current number of invalid samples: '{(~is_valid_mask_tmp).sum()}'.{colorama.Style.RESET_ALL}")
                     iter_counter += 1
 
                 # Reallocate new samples in inputs
