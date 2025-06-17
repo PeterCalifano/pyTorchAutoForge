@@ -394,14 +394,14 @@ class AugmentationConfig:
     brightness_aug_prob: float = 0.0
     contrast_aug_prob: float = 0.0
 
-    # Batch‐mode flag
-    batch_size: int | None = None  # inferred at runtime if None
+    # Batch‐mode number
+    batch_size: int | None = None  # Inferred at runtime if None
 
     # Scaling factors for labels
     label_scaling_factors: ndArrayOrTensor | None = None
     datakey_to_scale : DataKey | None = None
 
-    # Input specification options
+    # Special options
     # If True, input is a tuple of (image, other_data)
     #input_is_tuple: bool = False
 
@@ -409,7 +409,12 @@ class AugmentationConfig:
     is_normalized: bool = True
     # Optional scaling factor. If None, inference attempt based on dtype
     input_normalization_factor: float | None = None
+    # Automatic normalization based on input dtype (for images). No scaling for floating point arrays.
     enable_auto_input_normalization: bool = False
+    # Input validation module settings
+    enable_batch_validation_check: bool = False
+    invalid_sample_remedy_action: Literal["discard", "resample", "original"] = "original"
+    max_invalid_resample_attempts: int = 10  # Max attempts to resample invalid images
 
     def __post_init__(self):
 
@@ -639,8 +644,15 @@ class ImageAugmentationsHelper(nn.Module):
             # Apply augmentations module
             if self.num_aug_ops > 0:
                 aug_inputs = self.kornia_augs_module(*inputs)
+
+                # Transformed image validator and fixer
+                if self.augs_cfg.enable_batch_validation_check:
+                    aug_inputs = self.validate_fix_input_img_(*aug_inputs, original_inputs=inputs)
+
             else:
                 aug_inputs = inputs
+
+
 
             ##########
             # TODO find a way to actually get keypoints and other entries without to index those manually!
@@ -651,7 +663,7 @@ class ImageAugmentationsHelper(nn.Module):
             if lbl_to_unsqueeze:
                 aug_inputs[1] = aug_inputs[1].squeeze(1)
             ##########
-            
+
             # Apply inverse scaling if needed
             if scale_factor is not None and (self.augs_cfg.is_normalized or self.augs_cfg.enable_auto_input_normalization):
                 aug_inputs[img_index] = aug_inputs[img_index] / scale_factor
@@ -661,6 +673,7 @@ class ImageAugmentationsHelper(nn.Module):
 
             # Apply clamping to [0,1]
             aug_inputs[img_index] = torch.clamp(aug_inputs[img_index], 0.0, 1.0)
+
 
             if self.augs_cfg.label_scaling_factors is not None and self.augs_cfg.datakey_to_scale is not None:
                 lbl_index = self.augs_cfg.input_data_keys.index(self.augs_cfg.datakey_to_scale)
@@ -807,6 +820,114 @@ class ImageAugmentationsHelper(nn.Module):
             # else: keep 1.0
 
         return scale_factor
+
+    def validate_fix_input_img_(self, *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...], original_inputs : ndArrayOrTensor | tuple[ndArrayOrTensor, ...]) -> None:
+        """
+        Validate input images after augmentation. Attempt fix according to selected remedy action.
+        """
+        # Determine validity of input images according to is_valid_image_ criteria (default or custom)
+        # TODO: allow _is_valid_image to be custom by overloading with user-specified function returning a mask of size (B, N)
+        # TODO: requires extensive testing!
+
+        inputs = list(inputs)
+        img_index = self.augs_cfg.input_data_keys.index(DataKey.IMAGE)
+        lbl_index = self.augs_cfg.input_data_keys.index(DataKey.KEYPOINTS) # TODO (PC) absolutely requires extension!
+
+        # Scan for invalid samples
+        is_valid_mask, invalid_samples = self._is_valid_image(*inputs)
+        invalid_indices = (~is_valid_mask).nonzero(as_tuple=True)[0]
+
+        if not is_valid_mask.all():
+            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: augmentation validation found {(~is_valid_mask).sum()} invalid samples. Attempting to fix with remedy action: '{self.augs_cfg.invalid_sample_remedy_action}'.{colorama.Style.RESET_ALL}")
+        else:
+            return inputs
+
+
+        # If any invalid sample, execute remedy action
+        match self.augs_cfg.invalid_sample_remedy_action.lower():
+
+            case "discard":
+                # Remove invalid samples from inputs by eliminating invalid indices (reduce batch size!)
+                new_inputs = [input[is_valid_mask] for input in inputs]
+
+            case "resample":
+                not_all_valid = True
+
+                # Resample until all valid
+                iter_counter = 0
+                # TODO need to pass in the original of the invalid not the actual invalid!
+                invalid_original = [input[~is_valid_mask] for input in original_inputs]
+
+                while not_all_valid:
+                    
+                    # Rerun augs module on invalid samples
+                    new_aug_inputs_ = self.kornia_augs_module(*invalid_original)
+
+                    # Check new validity mask
+                    is_valid_mask_tmp, _ = self._is_valid_image(*new_aug_inputs_)
+
+                    not_all_valid = not(is_valid_mask_tmp.all())
+
+                    if iter_counter == self.augs_cfg.max_invalid_resample_attempts:
+                        raise RuntimeError(f"Max invalid resample attempts reached: {iter_counter}. Augmentation helper is not able to provide a fully valid batch. Please verify your augmentation configuration.")
+
+                    iter_counter += 1
+
+                # Reallocate new samples in inputs
+                for i in range(len(inputs)):
+                    inputs[i][invalid_indices] = new_aug_inputs_[i]
+
+                new_inputs = inputs
+
+            case "original":
+                # Replace invalid samples with original inputs
+                for i, (is_valid, orig_img, orig_lbl) in enumerate(zip(is_valid_mask, 
+                                                                        original_inputs[img_index],
+                                                                        original_inputs[lbl_index])):
+                    if not is_valid:
+                        inputs[img_index][i] = orig_img
+                        inputs[lbl_index][i] = orig_lbl
+
+                new_inputs = inputs
+
+        return list(new_inputs)
+
+    def _is_valid_image(self, *inputs : ndArrayOrTensor | tuple[ndArrayOrTensor, ...]):
+        """
+        Check validity of augmented images in a batch.
+
+        This method computes the mean pixel value for each image in the batch and considers
+        an image valid if its mean is above a small threshold (default: 1E-3). It returns a
+        boolean mask indicating which images are valid, and a tuple of invalid samples
+        extracted from the inputs.
+
+        Args:
+            *inputs: One or more tensors or tuples of tensors, where the image tensor is
+                expected at the index corresponding to DataKey.IMAGE in the input_data_keys.
+
+        Returns:
+            is_valid_mask (torch.Tensor): Boolean tensor of shape (B,) indicating validity per image.
+            invalid_inputs (tuple): Tuple of tensors containing only the invalid samples.
+        """
+
+        # Compute mean across channels and spatial dims
+        img_index = self.augs_cfg.input_data_keys.index(DataKey.IMAGE)
+
+        B = inputs[img_index].shape[0]
+        mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
+
+        # A threshold to detect near-black images (tune if needed)
+        is_valid_mask = mean_per_image > 1E-3
+
+        # Indices of invalid images
+        invalid_indices = (~is_valid_mask).nonzero(as_tuple=True)[0]
+
+        # Select invalid samples
+        invalid_inputs = tuple(torch.index_select(input, dim=0, index=invalid_indices) for input in inputs)
+
+        # Return validity mask and new invalid tensor samples (using index_select)
+        return is_valid_mask, invalid_inputs
+
 
     # TODO (PC) move method to dedicated custom augmentation class
     # DEPRECATED, move outside for archive

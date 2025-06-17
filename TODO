@@ -33,6 +33,8 @@
   - [ ] Implement method to get traced model directly from ModelTrainingManager (or try to)
   - [ ] Add automatic check of equivalence in model export helpers (onnx mainly)
   - [ ] Modify mlflow logging to unpack dict and dataclasses and save each key separately (better grouping)
+  - [ ] Add optional validation check in Augmentation helper to ensure all inputs are valid ones with remedy action
+  - [ ] Add batched bbox label generator using binary thresholded mask/image
 
 - [ ] v0.2.1
   - [ ] Modify DataLoaderIndex to accept datasets directly and a combination of datasets and dataloaders. If dataset is input, use default specifications for dataloader
