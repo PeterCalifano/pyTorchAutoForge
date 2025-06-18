@@ -63,10 +63,45 @@ if not on_rtd:
                 return "cuda:0"
             return "cpu"
 
+        def Wait_for_gpu_memory(min_free_mb: int, gpu_index: int = 0, check_interval_in_seconds: int = 30):
+            pass # Dummy function for rtd-docs
+
     else:
         # GetDevice for Non-Tegra devices
         try:
             import pynvml
+
+            def Wait_for_gpu_memory(min_free_mb: int, gpu_index: int = 0, check_interval_in_seconds: int = 30):
+                """
+                Wait_for_gpu_memory waits until at least `min_free_mb` of GPU memory is available on the specified GPU.
+
+                Args:
+                    min_free_mb (int): Minimum free memory in MB required to proceed.
+                    gpu_index (int): Index of the GPU to monitor.
+                    check_interval (int): Time in seconds to wait between memory checks.
+
+                This function pauses execution until the specified amount of free memory is available.
+                """
+                pynvml.nvmlInit()
+                device_handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+                import time
+
+                while True:
+                    mem_info = pynvml.nvmlDeviceGetMemoryInfo(device_handle)
+                    free_mb = int(mem_info.free) / 1024 / 1024
+
+                    if free_mb >= min_free_mb:
+                        print(
+                            f"GPU {gpu_index}: {free_mb:.1f} MB free, proceeding.")
+                        break
+
+                    else:
+                        print(
+                            f"Waiting for GPU {gpu_index} memory to free up... ({free_mb:.1f} MB free, need {min_free_mb} MB)")
+                        time.sleep(check_interval_in_seconds)
+
+                pynvml.nvmlShutdown()  # Shutdown NVML after use
+
 
             @functools.lru_cache(maxsize=1)
             def GetDeviceMulti(selection_override : str | None = None, 
@@ -169,7 +204,31 @@ if not on_rtd:
         except ImportError:
             print("pynvml import error. Package is required to use more advanced GetDeviceMulti functionalities memory management. Please install it using 'pip install pynvml'. PTAF will use simplified logic instead.")
 
-            # Fall back to simplified logic
+            # Fall back to simplified logic/dummy functions
+            def Wait_for_gpu_memory(min_free_mb: int, gpu_index: int = 0, check_interval_in_seconds: int = 30):
+                """
+                Wait_for_gpu_memory is a dummy function that does nothing.
+                It is used as a placeholder when pynvml is not available.
+                """
+                usr_input = input(f"pynvml not available. Cannot check for GPU memory availability. Would you like to continue anyway?")
+
+                while True:
+                    if usr_input.lower() not in ['y', 'yes', 'n', 'no']:
+
+                        usr_input = input(
+                            "Invalid input. Please enter 'Y/yes' or 'n/no': ").strip().lower()
+                        continue
+
+                    elif usr_input.lower() in ['n', 'no']:
+                        print("Exiting program...")
+                        import sys
+                        sys.exit(0)
+
+                    else:
+                        print(f"Continuing program execution without checking GPU memory availability, using 'cuda' as default device.")
+                        break
+
+
             @functools.lru_cache(maxsize=1)
             def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
                 if torch.cuda.is_available():

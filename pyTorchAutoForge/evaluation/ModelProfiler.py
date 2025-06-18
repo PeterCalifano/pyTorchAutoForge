@@ -127,7 +127,10 @@ class ModelProfilerHelper():
         else:
             raise ValueError("Input sample is None. Cannot generate summary.")
 
-        model_summary = torchinfo.summary(model=self.model, input_size=input_size, device=self.device, col_names=("input_size", "output_size", "num_params", "mult_adds"))
+        model_summary = torchinfo.summary(model=self.model, 
+                                          input_size=input_size, 
+                                          device=self.device, 
+                                          col_names=("input_size", "output_size", "num_params", "mult_adds"))
 
         return model_summary
     
