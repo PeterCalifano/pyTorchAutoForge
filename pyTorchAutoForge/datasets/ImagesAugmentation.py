@@ -839,7 +839,7 @@ class ImageAugmentationsHelper(nn.Module):
         invalid_indices = (~is_valid_mask).nonzero(as_tuple=True)[0]
 
         if not is_valid_mask.all():
-            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: augmentation validation found {(~is_valid_mask).sum()} invalid samples. Attempting to fix with remedy action: '{self.augs_cfg.invalid_sample_remedy_action}'.{colorama.Style.RESET_ALL}")
+            print(f"\r{colorama.Fore.LIGHTYELLOW_EX}WARNING: augmentation validation found {(~is_valid_mask).sum()} invalid samples. Attempting to fix with remedy action: '{self.augs_cfg.invalid_sample_remedy_action}'.{colorama.Style.RESET_ALL}")
         else:
             return inputs
 
@@ -873,7 +873,7 @@ class ImageAugmentationsHelper(nn.Module):
                         raise RuntimeError(f"Max invalid resample attempts reached: {iter_counter}. Augmentation helper is not able to provide a fully valid batch. Please verify your augmentation configuration.")
                     
                     if not_all_valid:
-                        print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: attempt #{iter_counter}/{self.augs_cfg.max_invalid_resample_attempts-1} failed. Current number of invalid samples: '{(~is_valid_mask_tmp).sum().float()}'.{colorama.Style.RESET_ALL}")
+                        print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: attempt #{iter_counter}/{self.augs_cfg.max_invalid_resample_attempts-1} failed. Current number of invalid samples: {(~is_valid_mask_tmp).sum().float()}.{colorama.Style.RESET_ALL}\n")
                     
                     iter_counter += 1
 
