@@ -1108,7 +1108,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             max_chars = 1000  # Define the max length you want to print
             error_message = str(e)[:max_chars]
 
-            traceback_ = traceback.format_exc(limit=5)
+            traceback_ = traceback.format_exc(limit=8)
 
             print(
                 f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback (most recent 5 calls):\n{traceback_}\033[0m")
