@@ -570,7 +570,7 @@ class ImageAugmentationsHelper(nn.Module):
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
                                                          keepdim=False,
-                                                         random_apply=(random_apply_minmax_[0], random_apply_minmax_[1]))
+                                                         random_apply=(random_apply_minmax_[0], random_apply_minmax_[1])).to(augs_cfg.device)
 
         # if augs_cfg.append_custom_module_after_ is not None:
         #    pass
@@ -919,6 +919,9 @@ class ImageAugmentationsHelper(nn.Module):
 
         B = inputs[img_index].shape[0]
         #mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
+        
+        # Move all inputs to the same device
+        inputs = tuple(input.to(self.augs_cfg.device) for input in inputs)
 
         # A threshold to detect near-black images (tune if needed)
         is_pixel_bright_count_mask = (
