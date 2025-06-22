@@ -117,7 +117,7 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
 
 ######################## DEVNOTE Relatively stable code BELOW ########################
 # %% Path/data fetching functions
-
+# TODO take from ML-Gears
 
 
 
@@ -264,6 +264,7 @@ class ImagesDatasetFormat_Trajectory(ImagesDatasetFormat):
     
 
 # %% Dataset index classes
+# TODO
 @dataclass
 class DatasetIndex:
     dataset_root_path: Path | str | None = None

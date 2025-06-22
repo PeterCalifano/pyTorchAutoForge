@@ -55,11 +55,8 @@ def test_load_starnav_collections():
 def test_load_sample_dataset():
     pass
 
+
 if __name__ == "__main__":
     #pytest.main([__file__])
-    test_load_starnav_collections()
-
-
-
-
+    #test_load_starnav_collections()
 
