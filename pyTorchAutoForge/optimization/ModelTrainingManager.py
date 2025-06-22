@@ -621,9 +621,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             print("No Kornia augmentation pipeline defined.")
 
 
+    #def trainInternalModelOneEpoch_(self):
+    #    self.trainModelOneEpoch_(model)
+
     def trainModelOneEpoch_(self):
         '''
-            Internal method to train the model using the specified datasets and loss function. Not intended to be called as standalone.
+        Internal method to train the model using the specified datasets and loss function. Not intended to be called as standalone.
         '''
 
         if self.optimizer is None:
@@ -724,7 +727,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         print('\n') # Add newline after progress bar
         return running_loss / current_batch
 
-    def validateModel_(self):
+    def validateInternalModel_(self):
+        """Wrapper function to call validation method on internal model state"""
+
+        validation_loss_value = self.validateModel_(self.model)
+
+        return validation_loss_value
+
+
+    def validateModel_(self, model : torch.nn.Module):
         """Method to validate the model using the specified datasets and loss function. Not intended to be called as standalone."""
         if self.validationDataloader is None:
             raise ValueError('No validation dataloader provided.')
@@ -733,7 +744,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         
         # TODO improve this method, no real need to have two separate cycles for classification and regression. Just move different code to submethods. Moreover, need to adapt for other applications
 
-        self.model.eval()
+        model.eval()
         validation_loss_value = 0.0  # Accumulation variables
         # batchMaxLoss = 0
         # validationData = {}  # Dictionary to store validation data
@@ -760,6 +771,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             run_time_total = 0.0
 
             if self.tasktype == TaskType.CLASSIFICATION:
+                # TODO rework trainer structure entirely, quite old and outdated now
 
                 if not (isinstance(self.loss_fcn, torch.nn.CrossEntropyLoss)):
                     raise NotImplementedError(
@@ -782,7 +794,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         X, Y = self.augment_data_batch(X, Y)
 
                     # Perform FORWARD PASS
-                    predicted_val = self.model(X)  # Evaluate model at input
+                    predicted_val = model(X)  # Evaluate model at input
 
                     # Evaluate loss function to get loss value dictionary
                     valid_loss_dict = self.loss_fcn(predicted_val, Y)
@@ -824,7 +836,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         X, Y = self.augment_data_batch(X, Y)
 
                     # Perform FORWARD PASS
-                    predicted_val = self.model(X)  # Evaluate model at input
+                    predicted_val = model(X)  # Evaluate model at input
 
                     # Evaluate loss function to get loss value dictionary
                     valid_loss_dict = self.loss_fcn(predicted_val, Y)
@@ -907,7 +919,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 tmp_train_loss = self.trainModelOneEpoch_()
 
                 # Perform validation at current epoch
-                tmp_valid_loss = self.validateModel_()
+                tmp_valid_loss = self.validateInternalModel_()
 
                 # TODO clarify intent of this, remove if not really necessary
                 if isinstance(tmp_valid_loss, tuple):
@@ -1105,13 +1117,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             raise optuna.TrialPruned() # Re-raise exception to stop optuna trial --> this is required due to how optuna handles it.
 
         except Exception as e: # Any other exception
-            max_chars = 1000  # Define the max length you want to print
+            max_chars = 2000  # Define the max length you want to print
             error_message = str(e)[:max_chars]
 
-            traceback_ = traceback.format_exc(limit=8)
+            traceback_limit = 8
+            traceback_ = traceback.format_exc(limit=traceback_limit)
 
-            print(
-                f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback (most recent 5 calls):\n{traceback_}\033[0m")
+            print(f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback includes most recent {traceback_limit} calls. {traceback_}\033[0m")
 
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
