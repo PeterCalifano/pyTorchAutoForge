@@ -115,8 +115,11 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
     image_format: str = "png"
     image_dtype: type | torch.dtype = np.uint8
 
-
 ######################## DEVNOTE Relatively stable code BELOW ########################
+# %% Path/data fetching functions
+
+
+
 
 # %% Data containers
 @dataclass
@@ -129,6 +132,24 @@ class ImagesLabelsContainer:
     images: np.ndarray | torch.Tensor
     labels: np.ndarray | torch.Tensor
 
+    def __iter__(self):
+        """
+        Iterate over the images and labels.
+        """
+        for img, lbl in zip(self.images, self.labels):
+            yield img, lbl
+    
+    def __getitem__(self, idx):
+        """
+        Get the image and label at the specified index.
+        """
+        if isinstance(idx, slice):
+            return ImagesLabelsContainer(
+                images=self.images[idx],
+                labels=self.labels[idx]
+            )
+        else:
+            return self.images[idx], self.labels[idx]
 
 @dataclass
 class TupledImagesLabelsContainer:
