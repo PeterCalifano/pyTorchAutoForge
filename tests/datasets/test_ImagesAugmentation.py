@@ -44,7 +44,6 @@ def test_random_gaussian_noise_variable_sigma_no_noise():
     )(x)
     assert torch.allclose(out, x)
 
-
 def test_random_gaussian_noise_variable_sigma_zero_sigma():
     # sigma_noise=0 & prob=1 ⇒ output equals input
     x = torch.randn(2, 1, 3, 3)
@@ -52,7 +51,6 @@ def test_random_gaussian_noise_variable_sigma_zero_sigma():
         sigma_noise=0.0, gaussian_noise_aug_prob=1.0
     )(x)
     assert torch.allclose(out, x)
-
 
 def test_random_gaussian_noise_variable_sigma_shape_dtype():
     # shape and dtype preserved
@@ -439,12 +437,12 @@ if __name__ == '__main__':
 
 
     #test_synthetic_mask_augmentation()
-    #test_sample_images_augmentation()
+    test_sample_images_augmentation()
     #test_AugmentationSequential()
-    test_augmentation_helper_preserves_device(device,
-                                              shift_aug_prob,
-                                              rotation_aug_prob,
-                                              gaussian_noise_aug_prob,
-                                              gaussian_blur_aug_prob,
-                                              brightness_aug_prob,
-                                              contrast_aug_prob)
+    #test_augmentation_helper_preserves_device(device,
+    #                                          shift_aug_prob,
+    #                                          rotation_aug_prob,
+    #                                          gaussian_noise_aug_prob,
+    #                                          gaussian_blur_aug_prob,
+    #                                          brightness_aug_prob,
+    #                                          contrast_aug_prob)

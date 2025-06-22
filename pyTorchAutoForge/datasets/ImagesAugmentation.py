@@ -1,5 +1,6 @@
 from logging import warning
 from warnings import warn
+from typing import Any
 
 try:
     import kornia
@@ -17,7 +18,7 @@ except ImportError:
 
 from typing import Literal, TypeAlias
 import torch
-from torch import nn
+from torch import nn, Tensor
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import numpy as np
@@ -35,18 +36,22 @@ ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
 # TODO modify to be usable by AugmentationSequential? Inherint from _AugmentationBase. Search how to define custom augmentations in Kornia
 
 # DEVNOTE issue with random apply: 0 is not allowed, but 1 is not either because it implies the user MUST specify at LEAST 2 augs. Easy workaround: automatically add a dummy that acts as a placeholder to make it work with 1
+
+
 class PlaceholderAugmentation(IntensityAugmentationBase2D):
 
     def __init__(self):
         super().__init__()
 
-    def apply_transform(self, 
-                input: torch.Tensor, 
-                params: dict,
-                flags: dict,
-                transform: torch.Tensor) -> torch.Tensor:
+    def apply_transform(self,
+                        input: torch.Tensor,
+                        params: dict,
+                        flags: dict,
+                        transform: torch.Tensor) -> torch.Tensor:
 
         return input
+
+# %% Intensity augmentations
 
 
 class PoissonShotNoise(IntensityAugmentationBase2D):
@@ -74,11 +79,10 @@ class PoissonShotNoise(IntensityAugmentationBase2D):
     """
 
     def __init__(self, probability: float = 0.0):
-        super().__init__()
-        self.probability = probability
+        super().__init__(p=probability)
 
-    def apply_transform(self, 
-                        input: torch.Tensor, 
+    def apply_transform(self,
+                        input: torch.Tensor,
                         params: dict,
                         flags: dict,
                         transform: torch.Tensor) -> torch.Tensor:
@@ -94,28 +98,27 @@ class PoissonShotNoise(IntensityAugmentationBase2D):
 
         """
 
-        # TODO modify to handle tuple inputs 
+        # TODO modify to handle tuple inputs
 
         # Randomly sample a boolean mask to index batch size
         B = input.shape[0]
         device, dtype = input.device, input.dtype
-                
-        apply_mask = torch.rand(B) < self.probability
 
         # Pixel value is the variance of the Photon Shot Noise (higher where brighter).
         # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel.
-        photon_shot_noise = torch.poisson(x[apply_mask])
+        photon_shot_noise = torch.poisson(x)
 
         # Sum noise to the original images according to mask
-        x[apply_mask] += photon_shot_noise
+        x += photon_shot_noise
 
         return x
-    
+
     def generate_parameters(self, shape: torch.Size) -> dict:
         return {}  # Not needed for this kind of noise
 
     def compute_transformation(self, input: torch.Tensor, params: dict, flags: dict) -> torch.Tensor:
         return torch.empty(0)  # Not used in IntensityAugmentationBase2D
+
 
 class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
     """
@@ -136,22 +139,22 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
         >>> noisy_imgs = aug(images)
     """
 
-    def __init__(self, sigma_noise: float | tuple[float, float],
+    def __init__(self,
+                 sigma_noise: float | tuple[float, float],
                  gaussian_noise_aug_prob: float = 0.5):
-        super().__init__()
+        super().__init__(p=gaussian_noise_aug_prob)
 
         self.sigma_gaussian_noise_dn = sigma_noise
-        self.gaussian_noise_aug_prob = gaussian_noise_aug_prob
 
-    #def forward(self, x: torch.Tensor | tuple[torch.Tensor],
+    # def forward(self, x: torch.Tensor | tuple[torch.Tensor],
     #            labels: torch.Tensor | tuple[torch.Tensor] | None = None) -> torch.Tensor | tuple[torch.Tensor, ...]:
 
-    def apply_transform(self, 
-                        input: torch.Tensor, 
-                        params: dict,
-                        flags: dict,
-                        transform: torch.Tensor) -> torch.Tensor:
-        
+    def apply_transform(self,
+                        input: torch.Tensor,
+                        params: dict[str, torch.Tensor],
+                        flags: dict[str, Any],
+                        transform: torch.Tensor | None) -> torch.Tensor:
+
         B, C, H, W = input.shape
         device = input.device
 
@@ -165,16 +168,54 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
         else:
             sigma_array = torch.full((B,), float(sigma), device=device)
 
-        # apply probabilistically per sample
-        probability_mask = torch.rand(
-            B, device=device) < self.gaussian_noise_aug_prob
-
-        sigma_array = sigma_array * probability_mask.float()
         sigma_array = sigma_array.view(B, 1, 1, 1)
         noise = torch.randn_like(input) * sigma_array
 
         return input + noise
 
+
+class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
+    """
+    Randomly fills the masked region with structured noise. 
+    Expects input tensor of shape (B, C+1, H, W):
+      - first C channels: image
+      - last    1 channel: binary mask (0=keep, 1=replace)
+    Returns the same shape.
+    """
+
+    def __init__(self, 
+                 noise_texture_aug_prob: float = 0.5,
+                 randomization_prob : float = 0.6,
+                 masking_quantile: float = 0.85) -> None:
+        super().__init__(p=noise_texture_aug_prob)
+
+        self.randomization_prob = randomization_prob
+        self.masking_quantile = masking_quantile
+    
+    def apply_transform(self,
+                        input: torch.Tensor,
+                        params: dict[str, torch.Tensor],
+                        flags: dict[str, Any],
+                        transform: torch.Tensor | None) -> torch.Tensor:
+        
+        img_batch = input[0]
+        B = input.shape[0]
+        device, dtype = img_batch.device, img_batch.dtype
+
+        # Compute masks to select target patches
+        brightness = img_batch.mean(dim=1, keepdim=True)  # B×1×H×W
+        brightness_thr = (brightness.view(
+            B, 1, -1)).quantile(self.masking_quantile, dim=2, keepdim=True)
+
+        img_mask = (brightness > brightness_thr).float()
+
+        # TODO implement noise patterns to apply to image patches
+
+        # Re-attach mask channel for downstream modules
+        return out_imgs
+
+
+# %% Geometric augmentations
 # TODO (PC) move translate_batch to this custom augmentation class, add rotation and extend for multiple points labels shift
 class RandomImageLabelsRotoTranslation(GeometricAugmentationBase2D):
     """
@@ -184,7 +225,8 @@ class RandomImageLabelsRotoTranslation(GeometricAugmentationBase2D):
 
     :param AugsBaseClass: _description_
     :type AugsBaseClass: _type_
-    """    
+    """
+
     def __init__(self,
                  angles: float | tuple[float, float] = (0.0, 360.0),
                  distribution_type: Literal["uniform", "normal"] = "uniform"):
@@ -198,6 +240,7 @@ class RandomImageLabelsRotoTranslation(GeometricAugmentationBase2D):
         # TODO implement rotation
         raise NotImplementedError("Implementation todo")
         return x, labels
+
 
 def Flip_coords_X(coords: torch.Tensor,
                   image_width: int
@@ -218,7 +261,7 @@ def Flip_coords_X(coords: torch.Tensor,
     Raises:
         ValueError: If `coords` does not have shape (N,2) or (B,N,2).
     """
-    
+
     if coords.dim() == 2:
         # Get x, y coordinates from (N,2)
         x = coords[:, 0]
@@ -239,6 +282,7 @@ def Flip_coords_X(coords: torch.Tensor,
 
     else:
         raise ValueError("coords must have shape (N,2) or (B,N,2)")
+
 
 def Flip_coords_Y(coords: torch.Tensor,
                   image_height: int
@@ -280,11 +324,12 @@ def Flip_coords_Y(coords: torch.Tensor,
     else:
         raise ValueError("coords must have shape (N,2) or (B,N,2)")
 
+
 # %% Kornia augmentations module
 if has_kornia:
     class CustomImageCoordsFlipHoriz(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self) -> None:
-            super().__init__()
+        def __init__(self, apply_prob:float = 0.5) -> None:
+            super().__init__(apply_prob)
 
         def forward(self,
                     image: torch.Tensor,
@@ -309,12 +354,12 @@ if has_kornia:
             return flipped_image, flipped_coords
 
     class CustomImageCoordsFlipVert(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self) -> None:
-            super().__init__()
+        def __init__(self, apply_prob:float = 0.5) -> None:
+            super().__init__(apply_prob)
 
         def forward(self,
                     image: torch.Tensor,
-                    coords: torch.Tensor 
+                    coords: torch.Tensor
                     ) -> tuple[torch.Tensor, torch.Tensor]:
             """
             Uses Kornia to vertically flip a batch of images (B,C,H,W), and adjusts coords.
@@ -343,17 +388,18 @@ else:
 
 # %% Augmentation helper configuration dataclass
 
+
 @dataclass
 class AugmentationConfig:
     # Input specification
     input_data_keys: list[DataKey]
-    keepdim : bool = True
-    same_on_batch : bool = False
+    keepdim: bool = True
+    same_on_batch: bool = False
     random_apply_minmax: tuple[int, int] = (1, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
 
     # Affine roto-translation augmentation
-    affine_align_corners : bool = False
+    affine_align_corners: bool = False
     affine_fill_value: int = 0  # Fill value for empty pixels after rotation
 
     rotation_angle: float | tuple[float, float] = (0.0, 360.0)
@@ -365,9 +411,9 @@ class AugmentationConfig:
     translate_distribution_type: Literal["uniform", "normal"] = "uniform"
 
     # Default is None = image centre
-    #rotation_centre: tuple[float, float] | None = None
-    #rotation_interp_mode: transforms.InterpolationMode = transforms.InterpolationMode.BILINEAR
-    #rotation_expand: bool = False  # If True, expands rotated image to fill size
+    # rotation_centre: tuple[float, float] | None = None
+    # rotation_interp_mode: transforms.InterpolationMode = transforms.InterpolationMode.BILINEAR
+    # rotation_expand: bool = False  # If True, expands rotated image to fill size
 
     # Flip augmentation probability
     hflip_prob: float = 0.0
@@ -399,11 +445,11 @@ class AugmentationConfig:
 
     # Scaling factors for labels
     label_scaling_factors: ndArrayOrTensor | None = None
-    datakey_to_scale : DataKey | None = None
+    datakey_to_scale: DataKey | None = None
 
     # Input specification options
     # If True, input is a tuple of (image, other_data)
-    #input_is_tuple: bool = False
+    # input_is_tuple: bool = False
 
     # Whether image is normalized (0–1) or raw (0–255)
     is_normalized: bool = True
@@ -416,27 +462,28 @@ class AugmentationConfig:
         if self.label_scaling_factors is not None and self.is_torch_layout:
             self.label_scaling_factors = numpy_to_torch(
                 self.label_scaling_factors)
-            
+
         if self.label_scaling_factors is not None and self.datakey_to_scale is None:
             raise ValueError(
                 "If label_scaling_factors is provided, datakey_to_scale must also be specified to indicate which entry in the input must be scaled!.")
 
         # Ensure interpolation mode is enum type
-        #if isinstance(self.rotation_interp_mode, str) and \
+        # if isinstance(self.rotation_interp_mode, str) and \
         #        self.rotation_interp_mode.upper() in ['BILINEAR', 'NEAREST']:
         #    self.rotation_interp_mode = transforms.InterpolationMode[self.rotation_interp_mode.upper(
         #    )]
 
         # Ensure either translation or flip is enabled. If both, override translation and select flip
-        #if self.shift_aug_prob > 0 and (self.hflip_prob > 0 or self.vflip_prob > 0):
+        # if self.shift_aug_prob > 0 and (self.hflip_prob > 0 or self.vflip_prob > 0):
         #    print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: Both translation and flip augmentations are enabled. Disabling translation and using flip only.{colorama.Style.RESET_ALL}")
         #    self.shift_aug_prob = 0.0
 
         # Check augs_datakey are all kornia.DataKey
         if not all(isinstance(key, DataKey) for key in self.input_data_keys):
-            raise ValueError("All input_data_keys must be instances of DataKey.")
+            raise ValueError(
+                "All input_data_keys must be instances of DataKey.")
 
-        # Check max_shift_img_fraction is in (0,1) 
+        # Check max_shift_img_fraction is in (0,1)
         if isinstance(self.max_shift_img_fraction, (tuple, list)):
             if not (0.0 < self.max_shift_img_fraction[0] <= 1.0 and
                     0.0 < self.max_shift_img_fraction[1] <= 1.0):
@@ -461,12 +508,13 @@ class ImageAugmentationsHelper(nn.Module):
         # ImageSequential seems not importable from kornia
 
         # Define kornia augmentation pipeline
-        augs_ops : list[GeometricAugmentationBase2D | IntensityAugmentationBase2D] = []
+        augs_ops: list[GeometricAugmentationBase2D |
+                       IntensityAugmentationBase2D] = []
         torch_vision_ops = nn.ModuleList()
 
         # TODO: add rotation augmentation, for simple cases, it is sufficient to rotate the image and pad with zero. Do it before translation.
         # Geometric augmentations
-        #if augs_cfg.rotation_aug_prob > 0:
+        # if augs_cfg.rotation_aug_prob > 0:
         #    rotation_aug = transforms.RandomRotation(degrees=augs_cfg.rotation_angle,
         #                                             center=augs_cfg.rotation_centre,
         #                                             interpolation=augs_cfg.rotation_interp_mode,
@@ -479,27 +527,28 @@ class ImageAugmentationsHelper(nn.Module):
         if augs_cfg.brightness_aug_prob > 0:
             # Random brightness scaling
             augs_ops.append(K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,
-                                                      p=augs_cfg.brightness_aug_prob,
-                                                      keepdim=True,
-                                                      clip_output=False))
+                                               p=augs_cfg.brightness_aug_prob,
+                                               keepdim=True,
+                                               clip_output=False))
 
         if augs_cfg.contrast_aug_prob > 0:
             # Random contrast scaling
             augs_ops.append(K.RandomContrast(contrast=augs_cfg.min_max_contrast_factor,
-                                                    p=augs_cfg.contrast_aug_prob,
-                                                    keepdim=True,
-                                                    clip_output=False))
+                                             p=augs_cfg.contrast_aug_prob,
+                                             keepdim=True,
+                                             clip_output=False))
 
         if augs_cfg.gaussian_blur_aug_prob > 0:
             # Random Gaussian blur
             augs_ops.append(K.RandomGaussianBlur(kernel_size=augs_cfg.kernel_size,
-                                                        sigma=augs_cfg.sigma_gaussian_blur,
-                                                        p=augs_cfg.gaussian_blur_aug_prob,
-                                                        keepdim=True))
+                                                 sigma=augs_cfg.sigma_gaussian_blur,
+                                                 p=augs_cfg.gaussian_blur_aug_prob,
+                                                 keepdim=True))
 
         if augs_cfg.poisson_shot_noise_aug_prob > 0:
             # FIXME it seems that possion shot noise cannot be constructed, investigate
-            augs_ops.append(PoissonShotNoise(probability=augs_cfg.poisson_shot_noise_aug_prob))
+            augs_ops.append(PoissonShotNoise(
+                probability=augs_cfg.poisson_shot_noise_aug_prob))
 
         if augs_cfg.gaussian_noise_aug_prob > 0:
             # Random Gaussian noise
@@ -507,27 +556,28 @@ class ImageAugmentationsHelper(nn.Module):
                 sigma_noise=augs_cfg.sigma_gaussian_noise_dn, gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob))
 
         if augs_cfg.shift_aug_prob > 0 or augs_cfg.rotation_aug_prob:
-            
+
             # Define rotation angles
             if augs_cfg.rotation_aug_prob > 0:
                 rotation_degrees = augs_cfg.rotation_angle
             else:
                 rotation_degrees = 0.0
 
-            # Define translation value 
+            # Define translation value
             if augs_cfg.shift_aug_prob > 0:
-                translate_shift = augs_cfg.max_shift_img_fraction if isinstance(augs_cfg.max_shift_img_fraction, tuple) else (augs_cfg.max_shift_img_fraction, augs_cfg.max_shift_img_fraction)
+                translate_shift = augs_cfg.max_shift_img_fraction if isinstance(augs_cfg.max_shift_img_fraction, tuple) else (
+                    augs_cfg.max_shift_img_fraction, augs_cfg.max_shift_img_fraction)
             else:
                 translate_shift = (0.0, 0.0)
-                
-            # Construct RandomAffine 
+
+            # Construct RandomAffine
             augs_ops.append(K.RandomAffine(degrees=rotation_degrees,
-                                            translate=translate_shift,
-                                            p=augs_cfg.rotation_aug_prob,
-                                            keepdim=True,
-                                            align_corners=augs_cfg.affine_align_corners,
-                                            same_on_batch=False))
-                        
+                                           translate=translate_shift,
+                                           p=augs_cfg.rotation_aug_prob,
+                                           keepdim=True,
+                                           align_corners=augs_cfg.affine_align_corners,
+                                           same_on_batch=False))
+
         # Flip augmentation
         if augs_cfg.hflip_prob > 0:
             augs_ops.append(K.RandomHorizontalFlip(p=augs_cfg.hflip_prob))
@@ -540,18 +590,19 @@ class ImageAugmentationsHelper(nn.Module):
         elif len(augs_ops) == 1:
             # If len of augs_ops == 1 add placeholder augs for random_apply
             augs_ops.append(PlaceholderAugmentation())
-        
+
         self.num_aug_ops = len(augs_ops)
 
         # Build AugmentationSequential from nn.ModuleList
-        if augs_cfg.random_apply_minmax[1] == -1: # Use maximum number of augmentations if upper bound not provided
+        # Use maximum number of augmentations if upper bound not provided
+        if augs_cfg.random_apply_minmax[1] == -1:
             random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
             random_apply_minmax_[1] = len(augs_ops) - 1
         else:
             random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
             random_apply_minmax_[1] = random_apply_minmax_[1] - 1
 
-        # Transfer all modules to device if specified   
+        # Transfer all modules to device if specified
         if augs_cfg.device is not None:
 
             for aug_op in augs_ops:
@@ -560,7 +611,7 @@ class ImageAugmentationsHelper(nn.Module):
             for aug_op in torch_vision_ops:
                 aug_op.to(augs_cfg.device)
 
-        self.kornia_augs_module = AugmentationSequential( *augs_ops,
+        self.kornia_augs_module = AugmentationSequential(*augs_ops,
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
                                                          keepdim=False,
@@ -569,12 +620,12 @@ class ImageAugmentationsHelper(nn.Module):
         # if augs_cfg.append_custom_module_after_ is not None:
         #    pass
 
-        self.torchvision_augs_module = nn.Sequential(*torch_vision_ops) if len(torch_vision_ops) > 0 else None
+        self.torchvision_augs_module = nn.Sequential(
+            *torch_vision_ops) if len(torch_vision_ops) > 0 else None
 
+    # images: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
+    # labels: ndArrayOrTensor
 
-    #images: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
-    #labels: ndArrayOrTensor
-        
     def forward(self,
                 *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
                 ) -> tuple[ndArrayOrTensor | tuple[ndArrayOrTensor, ...], ndArrayOrTensor]:
@@ -590,7 +641,7 @@ class ImageAugmentationsHelper(nn.Module):
         img_index = self.augs_cfg.input_data_keys.index(DataKey.IMAGE)
         # Index inputs to get image
         images_ = inputs[img_index]
-        
+
         # Processing batches
         with torch.no_grad():
 
@@ -610,10 +661,10 @@ class ImageAugmentationsHelper(nn.Module):
                 img_tensor = self.torchvision_augs_module(img_tensor)
 
             # Apply translation
-            #if self.augs_cfg.shift_aug_prob > 0:
+            # if self.augs_cfg.shift_aug_prob > 0:
             #    img_shifted, lbl_shifted = self.translate_batch_(
-            #        img_tensor, labels) 
-            #else:
+            #        img_tensor, labels)
+            # else:
             #    img_shifted = img_tensor
             #    lbl_shifted = numpy_to_torch(labels).float()
 
@@ -627,12 +678,13 @@ class ImageAugmentationsHelper(nn.Module):
             # TODO find a way to actually get keypoints and other entries without to index those manually!
 
             lbl_to_unsqueeze = inputs[1].dim() == 2
-            if lbl_to_unsqueeze: 
+            if lbl_to_unsqueeze:
                 # Input is (B,2) --> unsqueeze
                 inputs[1] = inputs[1].unsqueeze(1)
 
             keypoints = inputs[1][..., :2]
-            additional_entries = inputs[1][..., 2:] if inputs[1].shape[-1] > 2 else None
+            additional_entries = inputs[1][...,
+                                           2:] if inputs[1].shape[-1] > 2 else None
             inputs[1] = keypoints
             ##########
 
@@ -646,31 +698,37 @@ class ImageAugmentationsHelper(nn.Module):
             # TODO find a way to actually get keypoints and other entries without to index those manually!
             # Concat additional entries to keypoints entry in aug_inputs
             if additional_entries is not None:
-                aug_inputs[1] = torch.cat([aug_inputs[1], additional_entries], dim=2)
+                aug_inputs[1] = torch.cat(
+                    [aug_inputs[1], additional_entries], dim=2)
 
             if lbl_to_unsqueeze:
                 aug_inputs[1] = aug_inputs[1].squeeze(1)
             ##########
-            
+
             # Apply inverse scaling if needed
             if scale_factor is not None and (self.augs_cfg.is_normalized or self.augs_cfg.enable_auto_input_normalization):
                 aug_inputs[img_index] = aug_inputs[img_index] / scale_factor
 
             if aug_inputs[img_index].max() > 10:
-                warn(f'\033[93mWARNING: image before clamping to [0,1] has values much greater than 1, that are unlikely to result from augmentations. Check flags: is_normalized: {self.augs_cfg.is_normalized}, enable_auto_input_normalization: {self.augs_cfg.enable_auto_input_normalization}.\033[0m')
+                warn(
+                    f'\033[93mWARNING: image before clamping to [0,1] has values much greater than 1, that are unlikely to result from augmentations. Check flags: is_normalized: {self.augs_cfg.is_normalized}, enable_auto_input_normalization: {self.augs_cfg.enable_auto_input_normalization}.\033[0m')
 
             # Apply clamping to [0,1]
-            aug_inputs[img_index] = torch.clamp(aug_inputs[img_index], 0.0, 1.0)
+            aug_inputs[img_index] = torch.clamp(
+                aug_inputs[img_index], 0.0, 1.0)
 
             if self.augs_cfg.label_scaling_factors is not None and self.augs_cfg.datakey_to_scale is not None:
-                lbl_index = self.augs_cfg.input_data_keys.index(self.augs_cfg.datakey_to_scale)
+                lbl_index = self.augs_cfg.input_data_keys.index(
+                    self.augs_cfg.datakey_to_scale)
                 lbl_tensor = aug_inputs[lbl_index]
                 # Apply inverse scaling to labels
-                aug_inputs[lbl_index] = lbl_tensor / self.augs_cfg.label_scaling_factors.to(lbl_tensor.device)
+                aug_inputs[lbl_index] = lbl_tensor / \
+                    self.augs_cfg.label_scaling_factors.to(lbl_tensor.device)
 
             # Convert back to numpy if was ndarray
             if to_numpy is True:
-                aug_inputs[img_index] = torch_to_numpy(aug_inputs[img_index].permute(0, 2, 3, 1))
+                aug_inputs[img_index] = torch_to_numpy(
+                    aug_inputs[img_index].permute(0, 2, 3, 1))
                 aug_inputs[lbl_index] = torch_to_numpy(aug_inputs[lbl_index])
 
         # DEVNOTE: image appears to be transferred to cpu for no reason. To investigate.
@@ -827,7 +885,8 @@ class ImageAugmentationsHelper(nn.Module):
                 "Current implementation is tailored to translate single point label [Bx2], but got: ", labels.shape)
 
         # Convert labels to tensor [B,N,2]
-        lbl = numpy_to_torch(labels).float() if isinstance(labels, np.ndarray) else labels.float()
+        lbl = numpy_to_torch(labels).float() if isinstance(
+            labels, np.ndarray) else labels.float()
         assert (
             lbl.shape[0] == B), f"Label batch size {lbl.shape[0]} does not match image batch size {B}."
 
@@ -835,7 +894,8 @@ class ImageAugmentationsHelper(nn.Module):
         if isinstance(self.augs_cfg.max_shift_img_fraction, (tuple, list)):
             max_x, max_y = self.augs_cfg.max_shift_img_fraction
         else:
-            max_x, max_y = (self.augs_cfg.max_shift_img_fraction, self.augs_cfg.max_shift_img_fraction)
+            max_x, max_y = (self.augs_cfg.max_shift_img_fraction,
+                            self.augs_cfg.max_shift_img_fraction)
 
         if self.augs_cfg.translate_distribution_type == "uniform":
             # Sample shifts by applying 0.99 margin
@@ -885,7 +945,7 @@ class ImageAugmentationsHelper(nn.Module):
 
         if self.torchvision_augs_module is not None:
             self.torchvision_augs_module.to(*args, **kwargs)
-        
+
         return self
 
 # %% Prototypes TODO
