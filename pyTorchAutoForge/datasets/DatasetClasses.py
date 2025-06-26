@@ -23,6 +23,51 @@ from functools import partial
 import json
 import yaml
 
+try:
+    from kornia.constants import DataKey
+except ImportError:
+    print('\033[93m' + "kornia not installed, images augmentation functionalities won't be available." + '\033[0m')
+
+class PTAF_Datakey(enum.Enum):
+    """
+    Enumeration class for dataset keys. Interchangable with kornia datakeys (included in this enumeration class).
+    """
+    IMAGE = 0
+    INPUT = 0
+    MASK = 1
+    BBOX = 2
+    BBOX_XYXY = 3
+    BBOX_XYWH = 4
+    KEYPOINTS = 5
+    CLASS = 6
+    RANGE_TO_COM = 7  # Range to center of mass of object
+    REFERENCE_SIZE = 8  # Reference size of the object, e.g. diameter or radius
+    PHASE_ANGLE = 9  # Phase angle of the scene
+    CENTRE_OF_FIGURE = 10  # Centre of figure of the object
+
+    def get_lbl_vector_size(self):
+        # Define sizes for data keys
+        """
+        Get the size of the label vector based on the data key.
+        """
+        sizes = {
+            PTAF_Datakey.IMAGE: -1,
+            PTAF_Datakey.INPUT: -1,
+            PTAF_Datakey.MASK: -1,
+            PTAF_Datakey.BBOX: 4,  # x1, y1, x2, y2
+            PTAF_Datakey.BBOX_XYXY: 4,  # x1, y1, x2, y2
+            PTAF_Datakey.BBOX_XYWH: 4,  # x, y, width, height
+            PTAF_Datakey.KEYPOINTS: 2,  # x, y for each keypoint
+            PTAF_Datakey.CLASS: 1,
+            PTAF_Datakey.RANGE_TO_COM: 1,
+            PTAF_Datakey.REFERENCE_SIZE: 1,
+            PTAF_Datakey.PHASE_ANGLE: 1,
+            PTAF_Datakey.CENTRE_OF_FIGURE: 2,  # x, y coordinates of the centre of figure
+        }
+
+        return sizes.get(self, None)
+    
+
 # DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
 
 # %% Types and aliases
@@ -122,13 +167,25 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
 @dataclass
 class ImagesLabelsContainer:
     """
-     _summary_
+    Container for storing images and their corresponding labels.
 
-    _extended_summary_
+    Attributes:
+        images (np.ndarray | torch.Tensor): Array or tensor containing image data.
+        labels (np.ndarray | torch.Tensor): Array or tensor containing label data.
+        labels_datakeys (tuple[PTAF_Datakey, ...] | None): Optional tuple specifying the data keys for the labels.
     """
     images: np.ndarray | torch.Tensor
     labels: np.ndarray | torch.Tensor
 
+    labels_datakeys: tuple[PTAF_Datakey | str, ...] | None = None 
+    labels_sizes: dict[str, int] | None = None
+
+    def __iter__(self):
+        """
+        Iterate over the images and labels.
+        """
+        for img, lbl in zip(self.images, self.labels):
+            yield img, lbl
 
 @dataclass
 class TupledImagesLabelsContainer:
