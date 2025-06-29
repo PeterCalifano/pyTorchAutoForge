@@ -72,7 +72,7 @@ class TemplateNetBaseConfig(BaseConfigClass):
     model_name: str = "template_network"
 
     # Architecture design
-    regularization_layer_type: regularizer_types = 'batchnorm'
+    regularization_layer_type: regularizer_types = 'none'  # Regularization layer type, e.g. dropout, batchnorm, etc.
 
     out_channels_sizes: list[int] | None = None
 

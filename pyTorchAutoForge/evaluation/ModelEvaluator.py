@@ -68,7 +68,6 @@ class ModelEvaluator():
         # Evaluator attributes
         self.loss_fcn = lossFcn
         self.validationDataloader: DataLoader = dataLoader
-        self.trainingDataloaderSize: int = len(self.validationDataloader)
         self.custom_eval_function = custom_eval_fcn
         self.device = device
         self.model = model.to(self.device)
@@ -663,3 +662,6 @@ class ModelEvaluator():
         # Show all figures if not tmux and interactive backend
         if sys.stdout.isatty() and plt.get_backend().lower() != 'agg':
             plt.show()
+
+    def makeSamplePredictions(self):
+        pass

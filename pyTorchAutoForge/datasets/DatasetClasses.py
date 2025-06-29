@@ -67,7 +67,6 @@ class PTAF_Datakey(enum.Enum):
 
         return sizes.get(self, None)
     
-
 # DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
 
 # %% Types and aliases
@@ -240,7 +239,6 @@ class ImagesDatasetFormat(ABC):
     target_object: str
     dataset_id: int
 
-
 class ImagesDatasetFormat_Sequences(ImagesDatasetFormat):
     """
     Class to specify sequenced datasets config format.
@@ -298,7 +296,6 @@ class ImagesDatasetFormat_Trajectory(ImagesDatasetFormat):
     def get_name(self) -> str:
         raise NotImplementedError("get_name() not implemented yet for ImagesDatasetFormat_Trajectory")
     
-
 # %% Dataset index classes
 @dataclass
 class DatasetIndex:

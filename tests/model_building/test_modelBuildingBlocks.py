@@ -1,6 +1,6 @@
 import pytest
 import torch
-from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNet2dConfig, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d, TemplateFullyConnectedNetConfig, TemplateFullyConnectedNet,    TemplateConvNetFeatureFuser2dConfig, TemplateConvNetFeatureFuser2d
+from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule, DenormalizeImg, TemplateConvNet2dConfig, TemplateNetBaseConfig, NormalizeImg, TemplateConvNet2d, TemplateFullyConnectedNetConfig, TemplateFullyConnectedNet, TemplateConvNetFeatureFuser2dConfig, TemplateConvNetFeatureFuser2d
 
 from pyTorchAutoForge.model_building.ModelAutoBuilder import ComputeConvBlock2dOutputSize, AutoComputeConvBlocksOutput
 
