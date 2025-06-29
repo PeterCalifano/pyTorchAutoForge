@@ -118,10 +118,11 @@ class ScalerAdapter(BaseAdapter):
         # Handle scale input
         if isinstance(scale_coefficient, list) or isinstance(scale_coefficient, np.ndarray):
             scale = torch.as_tensor(scale_coefficient, dtype=torch.float32)
-
         elif torch.is_tensor(scale_coefficient):
             scale = scale_coefficient.to(dtype=torch.float32)
-
+        elif isinstance(scale_coefficient, (int, float)):
+            # Convert scalar to 0-D tensor
+            scale = torch.tensor(scale_coefficient, dtype=torch.float32)
         else:
             raise TypeError(
                 "`scale_coefficient` must be a list, a 1-D numpy array, or a torch Tensor")
@@ -137,6 +138,10 @@ class ScalerAdapter(BaseAdapter):
             bias = torch.as_tensor(bias_coefficient, dtype=torch.float32)
         elif torch.is_tensor(bias_coefficient):
             bias = bias_coefficient.to(dtype=torch.float32)
+        elif isinstance(bias_coefficient, (int, float)):
+            # Convert scalar to 0-D tensor
+            bias = torch.tensor(bias_coefficient, dtype=torch.float32)
+
         else:
             raise TypeError(
                 "`bias_coefficient` must be None, a list, a 1-D numpy array, or a torch Tensor"
