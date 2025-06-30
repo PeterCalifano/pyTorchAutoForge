@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-
+import numpy as np
 
 def spatial_softargmax(feature_map):
     # feature_map shape: (N, C, H, W)
@@ -36,7 +36,8 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
 
     def __init__(self, 
                  input_resolution: tuple[int, int], 
-                 num_input_channels:int) -> None:
+                 num_input_channels : int = 1,
+                 downsampling_res_factor: int | float | tuple[float, float] | tuple[int, int] = (1.0, 1.0)) -> None:
         super().__init__()
         
         self.height, self.width = input_resolution
@@ -47,14 +48,29 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
         #y_coords = torch.linspace(-1.0, 1.0, self.height)
 
         # Pixel‐based coordinate buffers, shape (HW,)
-        xs = torch.arange(0, self.width, dtype=torch.float32)
-        ys = torch.arange(0, self.height, dtype=torch.float32)
+        #xs = torch.arange(0, self.width, dtype=torch.float32)        
+        #ys = torch.arange(0, self.height, dtype=torch.float32)
 
-        xs_flat = xs.repeat(self.height)            # [0,1,..,W-1, 0,1,..,W-1, …]
-        ys_flat = ys.repeat_interleave(self.width)  # [0..0,1..1,..H-1..H-1]
+        #xs_flat = xs.repeat(self.height)            # [0,1,..,W-1, 0,1,..,W-1, …]
+        #ys_flat = ys.repeat_interleave(self.width)  # [0..0,1..1,..H-1..H-1]
+
+        xs_flat = torch.tensor(np.tile(np.arange(self.width), self.height),
+                               dtype=torch.float32).unsqueeze(0)
+        ys_flat = torch.tensor(np.repeat(np.arange(self.height), self.width),
+                               dtype=torch.float32).unsqueeze(0)
+
+        # If int or float, convert to tuple
+        if isinstance(downsampling_res_factor, (int, float)):
+            downsampling_res_factor = (downsampling_res_factor, downsampling_res_factor)
+
+        elif isinstance(downsampling_res_factor, tuple) and len(downsampling_res_factor)== 2:
+            downsampling_res_factor = (float(downsampling_res_factor[0]), float(downsampling_res_factor[1]))
 
         self.register_buffer("x_coords", xs_flat.view(1,1,-1))  # shape (W,)
         self.register_buffer("y_coords", ys_flat.view(1,1,-1))  # shape (H,)
+        self.register_buffer('downsampling_res_factor',
+                             torch.tensor(downsampling_res_factor, dtype=torch.float32))
+
 
     def forward(self, feature_map: Tensor) -> Tensor:
         B, C, H, W = feature_map.shape
@@ -70,9 +86,16 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
         # Expected y coordinates: sum over x dimension then weighted by y_coords
         y_expectation = (probability_mask_flat * self.y_coords).sum(dim=2)  # shape (B, C)
 
-        # Stack coordinates into (B, N, 2) shape
-        xy_expected_coordinates = torch.stack((x_expectation, y_expectation), dim=2)
-        return xy_expected_coordinates
+        # Scale coordinates by downsampling factor to the original input resolution
+        pred_x = x_expectation * self.downsampling_res_factor[0]
+        pred_y = y_expectation * self.downsampling_res_factor[1]
+
+        # Stack coordinates into (B, C, 2) shape
+        xy_pred_coordinates = torch.stack((pred_x, pred_y), dim=2)
+
+        # Flatten to (B, -1) stacking keypoints (x,y) for each channel
+        return xy_pred_coordinates.view(B, C * 2)
+
 
 
 # Runnable example

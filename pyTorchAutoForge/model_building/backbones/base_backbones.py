@@ -110,7 +110,7 @@ class EfficientNetConfig(FeatureExtractorConfig):
             # Define output channels for each feature_tapping key
             self.feature_tapping_channel_input_size = {key: 0 for key in self.feature_tapping_output_resolution_channels.keys()}
 
-            # TODO which was the idea here?
+            # Define feature_tapping_channel_input_size for each stage
             for key, value in self.feature_tapping_output_resolution_channels.items():
 
                 # Handle value being a tuple of length 2 or 3
