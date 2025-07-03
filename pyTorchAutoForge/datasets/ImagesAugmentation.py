@@ -542,7 +542,7 @@ class ImageAugmentationsHelper(nn.Module):
             augs_ops.append(K.RandomVerticalFlip(p=augs_cfg.vflip_prob))
 
         if len(augs_ops) == 0:
-            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops! Forward pass will error if called.{colorama.Style.RESET_ALL}")
+            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops! Forward pass will not do anything if called.{colorama.Style.RESET_ALL}")
         elif len(augs_ops) == 1:
             # If len of augs_ops == 1 add placeholder augs for random_apply
             augs_ops.append(PlaceholderAugmentation())

@@ -4,6 +4,7 @@ import yaml
 import pathlib
 from typing import get_origin, get_args
 import numpy as np
+import enum
 
 T = TypeVar('T', bound='BaseLabelsContainer')
 

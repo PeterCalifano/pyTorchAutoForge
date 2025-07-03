@@ -1,5 +1,5 @@
 from pyTorchAutoForge.datasets.auxiliary_functions import LoadDatasetToMem
-from pyTorchAutoForge.datasets.DatasetClasses import PTAF_Datakey
+from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey
 
 import os
 import numpy as np
