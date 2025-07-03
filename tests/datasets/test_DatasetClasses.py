@@ -1,6 +1,6 @@
 import sys
 import os
-from pyTorchAutoForge.datasets.DatasetClasses import ImagesLabelsContainer, NormalizeDataMatrix, NormalizationType, DatasetLoaderConfig, DatasetIndex, DatasetsIndexTree
+from pyTorchAutoForge.datasets.DatasetClasses import ImagesLabelsContainer, NormalizeDataMatrix, NormalizationType, DatasetLoaderConfig
 
 import pytest
 
@@ -52,12 +52,20 @@ def test_load_starnav_collections():
 
     print(f"Available datasets: {dataset_names}")
 
-def test_load_sample_dataset():
+
+def test_ImagesDatasetConfig():
+    pass
+
+
+def test_ImagesLabelsDatasetBase():
+    pass
+
+
+def test_ImagesLabelsCachedDataset():
     pass
 
 if __name__ == "__main__":
     #pytest.main([__file__])
-    test_load_starnav_collections()
 
 
 
