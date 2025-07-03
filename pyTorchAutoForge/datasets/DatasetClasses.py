@@ -32,14 +32,16 @@ class ImagesDatasetType(enum.Enum):
     Enumeration class for dataset types.
     """
     SEQUENCED = "ScatteredSequences"
-    POINT_CLOUD = "point_cloud" # TODO modify
-    TRAJECTORY = "trajectory" # TODO modify
+    POINT_CLOUD = "point_cloud"  # TODO modify
+    TRAJECTORY = "trajectory"  # TODO modify
+
 
 class NormalizationType(enum.Enum):
     NONE = "None"
     ZSCORE = "ZScore"
     RESOLUTION = "Resolution"
     MINMAX = "MinMax"
+
 
 class DatasetScope(enum.Enum):
     """
@@ -63,6 +65,7 @@ class DatasetScope(enum.Enum):
         if isinstance(other, DatasetScope):
             return self.value == other.value
 
+
 class ptaf_dtype(enum.Enum):
     INT8 = "int8"
     UINT8 = "uint8"
@@ -75,7 +78,6 @@ class ptaf_dtype(enum.Enum):
 
     # DOUBT (PC) can it be convertible to torch and numpy types directly?
 
-# TODO temporary version, make a unified class to handle normalizations
 
 # %% Configuration classes
 @dataclass
@@ -87,40 +89,93 @@ class DatasetLoaderConfig():
     """
     # Required fields
     # Generics
-    # DEVNOTE expand to also accept a list of names under the same root for "automerging"?
-    dataset_names: Path | str | list[str | Path]
+    dataset_names_list: Path | str | list[str | Path]
+    datasets_root_folder: str | tuple[str, ...]
+    lbl_vector_data_keys: tuple[PTAF_Datakey | str, ...]
 
     # Labels
-    label_size: int = 0  # DEVNOTE why needed?
-    num_samples: int = 0
-    label_folder_name: str = ""
+    # label_size: int = 0
+    # num_samples: int = 0
+    # label_folder_name: str = ""
 
-    # Optional
-    # Generics
-    dataset_root_path: str = "."
-    hostname: str = "localhost"  # Default is local machine
+    # Optional (defaults)
+    hostname: str = os.uname()[1]  # Default is local machine
+    labels_folder_name: str = "labels"
+    lbl_dtype: type | torch.dtype = torch.float32
 
     # Additional details/options
-    max_num_samples: int = -1  # If -1, all samples are loaded
+    samples_limit_per_dataset: int | tuple[int, ...] = -1
 
     def __post_init__(self):
         """
         Post-initialization checks for the DatasetLoaderConfig.
         """
-        # TODO add code to define dataset_root_path from dataset_name if not provided (de)
+        # Convert all strings to tuple if not already
+        if isinstance(self.datasets_root_folder, str):
+            self.datasets_root_folder = (self.datasets_root_folder,)
+        if isinstance(self.dataset_names_list, str):
+            self.dataset_names_list = (self.dataset_names_list,)
+
+        # Check all roots exist
+        for root in self.datasets_root_folder:
+            if not os.path.exists(root):
+                raise FileNotFoundError(
+                    f"Dataset root folder '{root}' does not exist.")
+
+        # Check all datakeys are valid PTAF_Datakey
+        for key in self.lbl_vector_data_keys:
+            if isinstance(key, str):
+                # Convert string to PTAF_Datakey if possible
+                try:
+                    key = PTAF_Datakey[key.upper()]
+                except KeyError:
+                    raise ValueError(
+                        f"Invalid label data key string: {key}. Must be a valid PTAF_Datakey or a recognized string.")
+            if not isinstance(key, (PTAF_Datakey)):
+                raise TypeError(
+                    f"lbl_vector_data_keys must be of type PTAF_Datakey or str, got {type(key)}")
 
 
 @dataclass
 class ImagesDatasetConfig(DatasetLoaderConfig):
-    image_folder: str = ""
+    # Default options
+    binary_masks_folder_name: str = "binary_masks"
+    images_folder_name: str = "images"
+    camera_filepath: str | None = None
+
     image_format: str = "png"
     image_dtype: type | torch.dtype = np.uint8
+    image_backend: Literal['pil', 'cv2'] = 'cv2'
 
+    # Additional options
+    intensity_scaling_mode: Literal['none', 'dtype', 'custom'] = 'dtype'
+    intensity_scale_value: float | None = None  # Used only if intensity_scaling is 'custom'
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if intensity_scaling_mode not in ['none', 'dtype', 'custom']:
+            raise ValueError(
+                f"Unsupported intensity scaling mode: {self.intensity_scaling_mode}. Supported modes are 'none', 'dtype', and 'custom'.")
+       
+       if self.intensity_scale_value is not None and self.intensity_scaling_mode != 'custom':
+           raise ValueError(
+               f"intensity_scale_value must be None unless intensity_scaling_mode is 'custom'.")
 
 ######################## DEVNOTE Relatively stable code BELOW ########################
 @dataclass
 class DatasetPathsContainer():
-    """Dataclass to hold paths to images and labels in a dataset."""
+    """
+    DatasetPathsContainer _summary_
+
+    _extended_summary_
+
+    :raises ValueError: _description_
+    :raises ValueError: _description_
+    :raises IndexError: _description_
+    :return: _description_
+    :rtype: _type_
+    """
     img_filepaths: list[str]
     lbl_filepaths: list[str]
 
@@ -159,6 +214,7 @@ class DatasetPathsContainer():
     def dump_as_tuple(self) -> tuple[list[str], list[str], int | None]:
         """Return the image and label file paths as a tuple."""
         return self.img_filepaths, self.lbl_filepaths, self.total_num_entries
+
 
 def FetchDatasetPaths(dataset_name: str | list | tuple,
                       datasets_root_folder: str | tuple[str, ...],
@@ -276,7 +332,6 @@ def FetchDatasetPaths(dataset_name: str | list | tuple,
                                  num_of_entries_in_set=num_of_imags_in_set,
                                  total_num_entries=total_num_imgs)
 
-
 # %% Data containers
 @dataclass
 class ImagesLabelsContainer:
@@ -291,7 +346,7 @@ class ImagesLabelsContainer:
     images: np.ndarray | torch.Tensor
     labels: np.ndarray | torch.Tensor
 
-    labels_datakeys: tuple[PTAF_Datakey | str, ...] | None = None 
+    labels_datakeys: tuple[PTAF_Datakey | str, ...] | None = None
     labels_sizes: dict[str, int] | None = None
 
     def __iter__(self):
@@ -300,6 +355,7 @@ class ImagesLabelsContainer:
         """
         for img, lbl in zip(self.images, self.labels):
             yield img, lbl
+
 
 @dataclass
 class TupledImagesLabelsContainer:
@@ -323,340 +379,9 @@ class TupledImagesLabelsContainer:
         """
         return self.input_tuple[0] if len(self.input_tuple) > 0 else None
 
-# %% Dataset format classes
-# DEVNOTE format_types group all available formats supported by the dataset index class. May be changed to a registry?
-dataset_format_types = Literal["ImagesDatasetFormat_Sequences",
-                               "ImagesDatasetFormat_PointCloud",
-                               "ImagesDatasetFormat_Trajectory"]
-
-@dataclass
-class ImagesDatasetFormat(ABC):
-
-    @property
-    @abstractmethod
-    def dataset_type(self) -> ImagesDatasetType:
-        pass
-
-    @property
-    @abstractmethod
-    def collection_name(self) -> str:
-        pass
-
-    @abstractmethod
-    def get_name(self) -> str:
-        pass
-
-    def __str__(self):
-        # Get name of the type
-        type_name : dataset_format_types = self.__class__.__name__
-        return type_name
-
-    target_object: str
-    dataset_id: int
-
-class ImagesDatasetFormat_Sequences(ImagesDatasetFormat):
-    """
-    Class to specify sequenced datasets config format.
-    """
-    num_sequences: int
-
-    def __init__(self, target_object: str, dataset_id: int, num_sequences: int):
-        super().__init__(target_object, dataset_id)
-        self.num_sequences = num_sequences
-
-    @property
-    def dataset_type(self) -> ImagesDatasetType:
-        return ImagesDatasetType.SEQUENCED
-
-    @property
-    def collection_name(self) -> str:
-        return "UniformlyScatteredSequencesDatasets"
-    
-    def get_name(self) -> str:
-        return f"Dataset_{self.dataset_type.value}_{self.target_object}_{self.num_sequences}seqs_ID{self.dataset_id}"
-    
-class ImagesDatasetFormat_PointCloud(ImagesDatasetFormat):
-    """
-    Class to specify point cloud datasets config format.
-    """
-    def __init__(self, target_object: str, dataset_id: int):
-        super().__init__(target_object, dataset_id)
-
-    @property
-    def dataset_type(self) -> ImagesDatasetType:
-        return ImagesDatasetType.POINT_CLOUD
-
-    @property
-    def collection_name(self) -> str:
-        return "UniformlyScatteredPointCloudsDatasets"
-    
-    def get_name(self) -> str:
-        raise NotImplementedError("get_name() not implemented yet for ImagesDatasetFormat_PointCloud")
-
-class ImagesDatasetFormat_Trajectory(ImagesDatasetFormat):
-    """
-    Class to specify trajectory datasets config format.
-    """
-    def __init__(self, target_object: str, dataset_id: int):
-        super().__init__(target_object, dataset_id)
-
-    @property
-    def dataset_type(self) -> ImagesDatasetType:
-        return ImagesDatasetType.TRAJECTORY
-
-    @property
-    def collection_name(self) -> str:
-        return "TrajectoriesDatasets"
-
-    def get_name(self) -> str:
-        raise NotImplementedError("get_name() not implemented yet for ImagesDatasetFormat_Trajectory")
-    
-# %% Dataset index classes
-@dataclass
-class DatasetIndex:
-    dataset_root_path: Path | str | None = None
-    dataset_format_objects: dataset_format_types | None = None
-    dataset_name: str | None = None
-
-    dataset_inputs_paths : list[str | Path] = field(default_factory=list)
-    dataset_targets_paths : list[str | Path] = field(default_factory=list)
-
-    # Optional settings
-    img_name_folder: str = "images"
-    label_name_folder: str = "labels"
-    events_name_folder : str = "events"
-    masks_name_folder: str = "masks"
-    visibility_masks_name_folder: str = "binary_masks"
-
-    def __post_init__(self):
-        # Build index
-        if self.dataset_root_path is None:
-            print("Dataset root path not provided. Index cannot be built.")
-            return
-        
-
-    @classmethod
-    def load(cls):
-        raise NotImplementedError(
-            "DatasetIndex.load() is not implemented yet. Please implement this method to load dataset index from a file or other source.")
-    
-class DatasetsIndexTree(dict):
-    def __init__(self,
-                 dataset_root_path: Path | str | list[Path | str] | None = None,
-                 dataset_format_objects: ImagesDatasetFormat | list[ImagesDatasetFormat] = None):
-        """
-        Initialize the DatasetsIndex with a root path and dataset format objects.
-
-        Args:
-            dataset_root_path (Path | str | list[Path | str] | None): Root path for datasets.
-            dataset_format_objects (ImagesDatasetFormat | list[ImagesDatasetFormat]): Dataset format objects.
-        """
-        super().__init__()
-
-        # Initialize attributes
-        self.dataset_root_paths = dataset_root_path
-        self.dataset_format_objects = dataset_format_objects 
-        self.dataset_names = []
-        self.dataset_paths = []
-
-        self.dataset_indices: list[DatasetIndex] = []
-
-    def __post_init__(self):
-        """
-        __post_init__ _summary_
-
-        _extended_summary_
-        """
-
-        # TODO move code in a dedicated method such that it can be reused for __append__
-
-        # For each dataset format object in the list:
-        # - build the dataset name
-        # - check it exists
-        # - get the collection name
-        # - assign it a unique id
-
-        # Convert all strings to path objects
-        if self.dataset_root_path is None:
-            print("Dataset root path not provided.")
-            return
-        
-        if isinstance(self.dataset_root_path, str):
-            self.dataset_root_path = Path(self.dataset_root_path)
-
-        if not self.dataset_root_path.exists():
-            print(f"Dataset root path {self.dataset_root_path} does not exist.")
-
-        # Wrap into tuple if not already
-        if isinstance(self.dataset_format_objects, ImagesDatasetFormat):
-            self.dataset_format_objects = [self.dataset_format_objects]
-
-        self.dataset_names = []
-        collection_names = []
-        self.dataset_paths = []
-        idx = 0
-
-        for dset_format_ in self.dataset_format_objects:
-
-            name_ = Path(dset_format_.get_name())
-            target_name_ = Path(dset_format_.target_object)
-            collection_name_ = Path(dset_format_.collection_name)
-
-            full_path_ = self.dataset_root_path / collection_name_ / target_name_ / name_
-
-            # Check the dataset exists
-            if not (full_path_).exists():
-                print(f"Dataset path '{full_path_}' does not exist.")
-                continue
-
-            # Append and increment index if existing
-            self.dataset_names.append(name_)
-            collection_names.append(collection_name_)
-            idx += 1
-
-            # Build dataset path
-            self.dataset_paths.append(full_path_)
-        
-    def __call__(self, index):
-        """
-        Get the dataset path at the given index.
-        """
-        if index < 0 or index >= len(self.dataset_indices):
-            raise IndexError("Index out of range for dataset indices.")
-
-        return self.dataset_indices[index]
-
-    def __str__(self):
-        """
-        String representation of the dataset index.
-        """
-        result = ["Datasets Index:"]
-        for i, (name, path) in enumerate(zip(self.dataset_names, self.dataset_paths)):
-            result.append(f" Key {i}:\n\tName: {name}\n\tPath: {path}")
-        return "\n".join(result)
-
-    def __append__(self, dataset_format_object: ImagesDatasetFormat):
-        """
-        Append a new dataset to the index providing its data.
-        """
-        if not isinstance(dataset_format_object, ImagesDatasetFormat):
-            raise TypeError("dataset_format_object must be an instance of ImagesDatasetFormat.")
-
-        if isinstance(self.dataset_format_objects, list):
-
-            # Check if the dataset format object already exists
-            if dataset_format_object in self.dataset_format_objects:
-                print(f"Dataset format object {dataset_format_object} already exists in the index.")
-                return
-            
-            self.dataset_format_objects.append(dataset_format_object)
-
-    def save(self, 
-             path: str | Path = './dataset_index', 
-             format: str = 'json',
-             paths_type : Literal["absolute", "relative"] = "relative") -> None:
-        """
-        Save the dataset index to a file. Supported formats: json, yaml, txt.
-        """
-
-        # TODO save paths according to type. If relative save relative to dataset_root_path, otherwise absolute paths including dataset_root_path
-
-        # Normalize path
-        if isinstance(path, str):
-            path = Path(path)
-
-        fmt = format.lower()
-
-        # Warn and strip any existing extension
-        existing_ext = path.suffix
-        if existing_ext:
-            ext_clean = existing_ext.lstrip('.').lower()
-            print(f"Warning: provided path already has extension '.{ext_clean}'. This will be overridden by format.")
-            path = path.with_suffix('')
-
-        # Append the correct extension
-        path = path.with_suffix(f".{fmt}")
-
-        # Build a serializable dict
-        index = {
-            "dataset_root_paths": (
-                [str(p) for p in self.dataset_root_paths]
-                if isinstance(self.dataset_root_paths, (list, tuple))
-                else str(self.dataset_root_paths)
-            ),
-            "dataset_format_object": [str(object=obj) for obj in self.dataset_format_objects], # TODO this is not really stringable
-            "dataset_names": [str(n) for n in self.dataset_names],
-            "dataset_paths": [str(p) for p in self.dataset_paths],
-        }
-
-        # Write file according to format
-        if fmt == 'json':
-            with open(path, 'w') as f:
-                json.dump(index, f, indent=4)
-
-        elif fmt in ('yaml', 'yml'):
-            with open(path, 'w') as f:
-                yaml.safe_dump(index, f)
-
-        elif fmt == 'txt':
-            with open(path, 'w') as f:
-                f.write(str(self))
-
-        else:
-            raise ValueError(f"Unsupported format '{format}'. Use 'json', 'yaml', or 'txt'.")
-
-    @classmethod
-    def load(cls, 
-             index_tree_path: str | Path,
-             dataset_root_path : str | Path | list[Path | str]) -> "DatasetsIndexTree":
-        """
-        Load and reconstruct a DatasetsIndexTree from a saved index file.
-        Supports json, yaml; txt is not supported for now.
-        """
-
-        # TODO if dataset_root_path is provided, use it to resolve relative paths in the index file
-
-        # Normalize paths to use pathlib
-        index_tree_path = Path(index_tree_path)
-
-        if not index_tree_path.exists():
-            raise FileNotFoundError(f"Index file not found: {index_tree_path!s}")
-
-        fmt = index_tree_path.suffix.lstrip('.').lower()
-        if fmt == 'json':
-            with open(index_tree_path, 'r') as f:
-                data = json.load(f)
-
-        elif fmt in ('yaml', 'yml'):
-            with open(index_tree_path, 'r') as f:
-                data = yaml.safe_load(f)
-
-        else:
-            raise ValueError(f"Unsupported format '{fmt}'. Use 'json' or 'yaml'.")
-
-        # TODO this is a prototype
-        # Reconstruct format‐objects if possible
-        fmt_objs = []
-        for repr_str in data.get("dataset_format_object", []):
-            # assume ImagesDatasetFormat has a from_string or equivalent
-            fmt_objs.append(ImagesDatasetFormat.from_string(repr_str))
-
-        # build the tree
-        root_paths = data.get("dataset_root_paths")
-        tree = cls(root_paths, fmt_objs)
-        tree.dataset_names = data.get("dataset_names", [])
-        tree.dataset_paths = data.get("dataset_paths", [])
-
-        # Rebuild DatasetIndex entries (assume DatasetIndex.load exists)
-        tree.dataset_indices = [
-            DatasetIndex.load(di_dict)
-            for di_dict in data.get("dataset_indices", [])
-        ]
-
-        return tree
 
 # %% Dataset base classes
-class ImagesLabelsDatasetBase(Dataset, ABC):
+class ImagesLabelsDatasetBase(Dataset):
     """
     A PyTorch Dataset for loading images with associated scene and camera metadata and labels.
     Supports 'pil' or 'cv2' backends for image loading.
@@ -664,10 +389,8 @@ class ImagesLabelsDatasetBase(Dataset, ABC):
     """
 
     def __init__(self,
-                 image_paths: list[str],
-                 camera_path: str | None = None,
+                 dset_cfg: ImagesDatasetConfig,
                  transform: Callable[[Image.Image], Any] | None = None,
-                 image_backend: Literal['pil', 'cv2'] = 'cv2'
                  ):
         """
         Args:
@@ -676,11 +399,11 @@ class ImagesLabelsDatasetBase(Dataset, ABC):
             transform: optional callable to apply to PIL Image samples.
         """
         super().__init__()
+        # Store configuration
+        self.dset_cfg = dset_cfg
 
         # Setup backend loader
-        self.image_backend = image_backend
-
-        if image_backend == 'cv2':
+        if self.dset_cfg.image_backend == 'cv2':
             try:
                 import cv2
             except ImportError:
@@ -690,7 +413,7 @@ class ImagesLabelsDatasetBase(Dataset, ABC):
             self._load_img_from_file: Callable = partial(cv2.imread,
                                                          flags=cv2.IMREAD_UNCHANGED)
 
-        elif image_backend == 'pil':
+        elif self.dset_cfg.image_backend == 'pil':
             try:
                 from PIL import Image
             except ImportError:
@@ -698,14 +421,15 @@ class ImagesLabelsDatasetBase(Dataset, ABC):
 
             self._load_img_from_file = Image.open
         else:
-            raise ValueError(f"Unsupported image_backend: {image_backend}")
+            raise ValueError(
+                f"Unsupported image_backend: {self.dset_cfg.image_backend}")
 
         # Store paths to images
         self.image_paths = image_paths
 
-        if camera_path is not None:
+        if self.dset_cfg.camera_path is not None:
             # Load camera parameters
-            self.camera_params = self._load_yaml(camera_path)
+            self.camera_params = self._load_yaml(self.dset_cfg.camera_path)
         else:
             # Initialize camera parameters as empty dict
             self.camera_params = {}
@@ -717,66 +441,85 @@ class ImagesLabelsDatasetBase(Dataset, ABC):
         # Cache attribute for processed labels
         self._label_cache: dict[str, Any] = {}
 
+        # Build paths index
+        self.dataset_paths_container = FetchDatasetPaths(
+            dataset_name=self.dset_cfg.dataset_names_list,
+            datasets_root_folder=self.dset_cfg.datasets_root_folder,
+            samples_limit_per_dataset=self.dset_cfg.samples_limit_per_dataset
+        )
+
+        self.dataset_size = len(self.image_paths)
+
     def _load_yaml(self, path: str) -> dict[str, Any]:
         """
         Load and return YAML content as dict.
         """
-        with open(path, 'r') as f:
-            return yaml.safe_load(f) or {}
-
-    @classmethod
-    def from_directory(cls,
-                       root_dir: str,
-                       image_meta_ext: str = '.yml',
-                       camera_meta_filename: str = 'camera.yml',
-                       transform: Callable[[Image.Image], Any] | None = None,
-                       image_backend: Literal['pil', 'cv2'] = 'cv2'
-                       ) -> "ImagesLabelsDatasetBase":
-        """
-        Scan root_dir for image metadata files and load global camera params.
-        """
-        import glob
-
-        pattern = os.path.join(root_dir,  f"*{image_meta_ext}")
-        image_paths = sorted(glob.glob(pattern))
-        camera_path = os.path.join(root_dir, camera_meta_filename)
-
-        return cls(image_paths, camera_path, transform, image_backend)
+        pass  # DEVNOTE what purpose?
 
     def __len__(self) -> int:
-        return len(self.image_paths)
+        return self.dataset_size
 
-    def load_indexed_from_path(self):
-        # TODO method to load a single (image, labels) pair from disk
-        pass
-
-    def load_image(self, image_path: str) -> dict[str, Any]:
+    # TODO review/rework
+    def _load_image(self, img_path: str) -> dict[str, Any]:
         """
-        Load image via selected backend, plus metadata and camera params.
+        Load image via selected backend.
         """
-        scene_meta = self._load_yaml(image_path)
-        img_filename = scene_meta.get('image', None)
-
-        if img_filename is None:
-            raise KeyError(f"'image' key not found in {image_path}")
-        img_path = os.path.join(os.path.dirname(image_path), img_filename)
 
         # Image loading (call backend method)
-        image = self._load_img_from_file(img_path)
-        if image is None:
+        img = self._load_img_from_file(img_path)
+
+        if img is None:
             raise FileNotFoundError(
                 f"Failed to load image {img_path} with backend {self.image_backend}"
             )
 
-        if self.transform:
-            image = self.transform(image)
+        return self._scale_image(img)
 
-        return {
-            'image': image,
-            'scene_metadata': scene_meta,
-            'camera_parameters': self.camera_params
-        }
+    def _scale_image(self, img: np.ndarray | torch.Tensor) -> np.ndarray | torch.Tensor:
+        """
+        Scale image data based on dtype or custom scaling.
+        """
 
+        if not isinstance(img, (np.ndarray, torch.Tensor)):
+            raise TypeError("Image must be a numpy array or a torch tensor.")
+        
+        if self.dset_cfg.intensity_scaling_mode not in ['none', 'dtype', 'custom']:
+            raise ValueError(
+                f"Unsupported intensity scaling mode: {self.dset_cfg.intensity_scaling_mode}")
+
+        if self.dset_cfg.intensity_scaling_mode == 'none':
+            return img
+
+        elif self.dset_cfg.intensity_scaling_mode == 'dtype':
+            # Scale based on dtype
+            if isinstance(img, np.ndarray):
+                if img.dtype == np.uint8:
+                    return img.astype(np.float32) / 255.0
+                elif img.dtype == np.uint16:
+                    return img.astype(np.float32) / 65535.0
+                else:
+                    raise TypeError(
+                        "Unsupported image data type for scaling. Only uint8 and uint16 are supported.")
+                
+            elif isinstance(img, torch.Tensor):
+                if img.dtype == torch.uint8:
+                    return img.float() / 255.0
+                elif img.dtype == torch.uint16:
+                    return img.float() / 65535.0
+                else:
+                    raise TypeError(
+                        "Unsupported image tensor data type for scaling. Only uint8 and uint16 are supported.")
+            else:
+                raise TypeError("Image must be a numpy array or a torch tensor.")
+
+        elif self.dset_cfg.intensity_scaling_mode == 'custom':
+            if self.dset_cfg.intensity_scale_value is None:
+                raise ValueError("intensity_scale_value must be set when intensity_scaling_mode is 'custom'.")
+            
+            return img * self.dset_cfg.intensity_scale_value
+
+
+    # TODO review/rework
     def load_labels(self, image_path: str) -> Any:
         """
         Load and process labels with caching. Override _process_labels in subclasses.
@@ -797,17 +540,63 @@ class ImagesLabelsDatasetBase(Dataset, ABC):
         self._label_cache[image_path] = processed
         return processed
 
-    @abstractmethod
-    def __getitem__(self, idx):
-        raise NotImplementedError("Subclasses should implement this method.")
+    def __getitem__(self, idx: int):
+        # Check index is not out of bounds
+        if idx < 0 or idx >= self.dataset_size:
+            raise IndexError(
+                f"Index {idx} out of bounds for dataset of size {self.dataset_size}")
 
-    @abstractmethod
-    def _process_labels(self, raw_labels: dict[str, Any]) -> Any:
+        # Get paths
+        image_path, label_path = self.dataset_paths_container[idx]
+
+        # Load image
+        img = torch.tensor(self._load_image(image_path), 
+                           dtype=self.dset_cfg.image_dtype)
+
+        # Load labels from YAML file
+        lbl = LabelsContainer.load_from_yaml(label_path)
+
+        # Extract lbl data based on datakeys
+        lbl = torch.tensor(lbl.get_labels(data_keys=self.dset_cfg.lbl_vector_data_keys),
+                           dtype=self.dset_cfg.lbl_dtype)
+
+        if self.transform is not None:
+            # Apply transform to the image and label
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            # Apply target transform to the label
+            lbl = self.target_transform(lbl)
+
+        # Load image and labels
+        return img, lbl
+
+    def _process_labels(self, raw_labels: dict[str | PTAF_Datakey, Any]) -> Any:
         """
         Placeholder for label processing. Override in subclass.
         """
-        raise NotImplementedError(
-            "Subclasses should implement _process_labels to process raw labels.")
+        return raw_labels
+
+    # DEVNOTE: this method is not up to date
+    # TODO reevaluate need and redesign
+    @classmethod
+    def from_directory(cls,
+                       root_dir: str,
+                       image_meta_ext: str = '.yml',
+                       camera_meta_filename: str = 'camera.yml',
+                       transform: Callable[[Image.Image], Any] | None = None,
+                       image_backend: Literal['pil', 'cv2'] = 'cv2'
+                       ) -> "ImagesLabelsDatasetBase":
+        """
+        Scan root_dir for image metadata files and load global camera params.
+        """
+        import glob
+
+        pattern = os.path.join(root_dir,  f"*{image_meta_ext}")
+        image_paths = sorted(glob.glob(pattern))
+        camera_path = os.path.join(root_dir, camera_meta_filename)
+
+        return cls(image_paths, camera_path, transform, image_backend)
 
 
 class ImagesLabelsCachedDataset(TensorDataset, ImagesLabelsDatasetBase):
@@ -918,6 +707,7 @@ class ImagesLabelsCachedDataset(TensorDataset, ImagesLabelsDatasetBase):
     def _process_labels(self, raw_labels: dict[str, Any]) -> Any:
         raise NotImplementedError("Method to implement")
 
+
 class TupledImagesLabelsCachedDataset(ImagesLabelsDatasetBase):
     def __init__(self, tupled_images_labels: TupledImagesLabelsContainer):
         """
@@ -962,31 +752,9 @@ class TupledImagesLabelsCachedDataset(ImagesLabelsDatasetBase):
         """
         return len(self.labels)
 
-
-# TODO may be removed entirely
-class ImagesLabelsDataset(ImagesLabelsDatasetBase):
-    def __init__(self, dataset_config: DatasetLoaderConfig):
-        """
-        Initialize the ImagesLabelsDataset with the given configuration.
-
-        Args:
-            dataset_config (DatasetLoaderConfig): Configuration for the dataset.
-        """
-        self.dataset_config = dataset_config
-
-    def __len__(self):
-        """
-        Return the number of samples in the dataset.
-
-        Returns:
-            int: Number of samples in the dataset.
-        """
-        return self.dataset_config.num_samples
-
-    def __getitem__(self, index):
-        pass
-
 # %% Dataset classes for specialized formats
+
+
 class ImagesDataset_StandardESA(ImagesLabelsDatasetBase):
     """
     A PyTorch Dataset for loading images with associated scene and camera metadata and labels.
