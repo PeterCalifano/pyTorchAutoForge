@@ -393,38 +393,38 @@ def test_augmentation_helper_preserves_device(device,
     assert out_img.device.type == device
     assert out_lbl.device.type == device
 
-def test_zero_augs_no_error():
-    try:
-        cfg = AugmentationConfig(
-            max_shift_img_fraction=(0.8, 0.8),
-            input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
-            shift_aug_prob=0.0,
-            is_normalized=False,
-            rotation_angle=(-10, 10),
-            rotation_aug_prob=0.0,
-            sigma_gaussian_noise_dn=0.0,       # Disable noise for simplicity
-            gaussian_noise_aug_prob=0.0,
-            gaussian_blur_aug_prob=0.0,
-            is_torch_layout=False,
-            min_max_brightness_factor=(1.0, 1.0),
-            min_max_contrast_factor=(1.0, 1.0),
-            brightness_aug_prob=0.0,
-            contrast_aug_prob=0.0,
-            input_normalization_factor=255.0,
-            enable_auto_input_normalization=False,
-        )
+def test_zero_augs_input_unchanged():
+    device = 'cpu'
+    cfg = AugmentationConfig(
+        max_shift_img_fraction=(0.8, 0.8),
+        input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
+        shift_aug_prob=0.0,
+        is_normalized=True,
+        rotation_angle=(-10, 10),
+        rotation_aug_prob=0.0,
+        sigma_gaussian_noise_dn=0.0,       # Disable noise for simplicity
+        gaussian_noise_aug_prob=0.0,
+        gaussian_blur_aug_prob=0.0,
+        is_torch_layout=True,
+        min_max_brightness_factor=(1.0, 1.0),
+        min_max_contrast_factor=(1.0, 1.0),
+        brightness_aug_prob=0.0,
+        contrast_aug_prob=0.0,
+        input_normalization_factor=1.0,
+        enable_auto_input_normalization=False,
+    )
 
-        augs_helper = ImageAugmentationsHelper(cfg)
+    augs_helper = ImageAugmentationsHelper(cfg)
 
-        # Create dummy inputs
-        x = torch.randn(1, 1, 64, 64, device=device)
-        lbl = torch.tensor([[32, 32]], dtype=torch.float32, device=device)
+    # Create dummy inputs
+    x = torch.clamp(torch.randn(1, 1, 64, 64, device=device), 0, 1)
+    lbl = torch.tensor([[32, 32]], dtype=torch.float32, device=device)
 
-        out_img, out_lbl = augs_helper(x, lbl)
+    out_img, out_lbl = augs_helper(x, lbl)
 
-    except:
-        pytest.fail("Augmentation with zero probabilities raised an error but it should have not (warn only).")
-    
+    # Verify that outputs are the same as inputs
+    assert torch.allclose(out_img, x), "Output image should be the same as input"
+    assert torch.allclose(out_lbl, lbl), "Output labels should be the same as input labels"
 
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
@@ -441,10 +441,11 @@ if __name__ == '__main__':
     #test_synthetic_mask_augmentation()
     #test_sample_images_augmentation()
     #test_AugmentationSequential()
-    test_augmentation_helper_preserves_device(device,
-                                              shift_aug_prob,
-                                              rotation_aug_prob,
-                                              gaussian_noise_aug_prob,
-                                              gaussian_blur_aug_prob,
-                                              brightness_aug_prob,
-                                              contrast_aug_prob)
+    #test_augmentation_helper_preserves_device(device,
+    #                                          shift_aug_prob,
+    #                                          rotation_aug_prob,
+    #                                          gaussian_noise_aug_prob,
+    #                                          gaussian_blur_aug_prob,
+    #                                          brightness_aug_prob,
+    #                                          contrast_aug_prob)
+    test_zero_augs_input_unchanged()
