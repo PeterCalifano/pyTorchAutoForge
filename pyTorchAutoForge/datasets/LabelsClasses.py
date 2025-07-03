@@ -3,11 +3,54 @@ from typing import Any, Type, TypeVar
 import yaml
 import pathlib
 from typing import get_origin, get_args
-from pyTorchAutoForge.datasets.DatasetClasses import PTAF_Datakey
 import numpy as np
 
 T = TypeVar('T', bound='BaseLabelsContainer')
 
+try:
+    from kornia.constants import DataKey
+except ImportError:
+    print('\033[93m' + "kornia not installed, images augmentation functionalities won't be available." + '\033[0m')
+
+class PTAF_Datakey(enum.Enum):
+    """
+    Enumeration class for dataset keys. Interchangable with kornia datakeys (included in this enumeration class).
+    """
+    IMAGE = 0
+    INPUT = 0
+    MASK = 1
+    BBOX = 2
+    BBOX_XYXY = 3
+    BBOX_XYWH = 4
+    KEYPOINTS = 5
+    CLASS = 6
+    RANGE_TO_COM = 7  # Range to center of mass of object
+    REFERENCE_SIZE = 8  # Reference size of the object, e.g. diameter or radius
+    PHASE_ANGLE = 9  # Phase angle of the scene
+    CENTRE_OF_FIGURE = 10  # Centre of figure of the object
+
+    def get_lbl_vector_size(self):
+        # Define sizes for data keys
+        """
+        Get the size of the label vector based on the data key.
+        """
+        sizes = {
+            PTAF_Datakey.IMAGE: -1,
+            PTAF_Datakey.INPUT: -1,
+            PTAF_Datakey.MASK: -1,
+            PTAF_Datakey.BBOX: 4,  # x1, y1, x2, y2
+            PTAF_Datakey.BBOX_XYXY: 4,  # x1, y1, x2, y2
+            PTAF_Datakey.BBOX_XYWH: 4,  # x, y, width, height
+            PTAF_Datakey.KEYPOINTS: 2,  # x, y for each keypoint
+            PTAF_Datakey.CLASS: 1,
+            PTAF_Datakey.RANGE_TO_COM: 1,
+            PTAF_Datakey.REFERENCE_SIZE: 1,
+            PTAF_Datakey.PHASE_ANGLE: 1,
+            PTAF_Datakey.CENTRE_OF_FIGURE: 2,  # x, y coordinates of the centre of figure
+        }
+
+        return sizes.get(self, None)
+    
 @dataclass
 class BaseLabelsContainer:
     """
