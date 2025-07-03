@@ -161,6 +161,164 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
 
 
 ######################## DEVNOTE Relatively stable code BELOW ########################
+@dataclass
+class DatasetPathsContainer():
+    """Dataclass to hold paths to images and labels in a dataset."""
+    img_filepaths: list[str]
+    lbl_filepaths: list[str]
+
+    total_num_entries: int | None = field(default=None, init=True)
+    num_of_entries_in_set: list[int] | int | None = field(
+        default=None, init=True)
+
+    def __post_init__(self):
+        if self.img_filepaths is None or self.lbl_filepaths is None:
+            raise ValueError("Image and label file paths cannot be None.")
+
+        if len(self.img_filepaths) != len(self.lbl_filepaths):
+            raise ValueError(
+                "Number of image and label file paths must match.")
+
+        self.total_num_entries = len(self.img_filepaths)
+
+    def __len__(self):
+        """Return the total number of entries in the dataset."""
+        return self.total_num_entries
+
+    def __getitem__(self, index: int | list[int]) -> list[tuple[str, str]]:
+        """Get the image and label file paths for a given index."""
+
+        if isinstance(index, list):
+            return [(self.img_filepaths[i], self.lbl_filepaths[i]) for i in index]
+
+        if self.total_num_entries is not None:
+            if index < 0 or index >= self.total_num_entries:
+                raise IndexError("Index out of range.")
+        else:
+            print("Warning: total_num_entries is None, index check skipped.")
+
+        return [(self.img_filepaths[index], self.lbl_filepaths[index])]
+
+    def dump_as_tuple(self) -> tuple[list[str], list[str], int | None]:
+        """Return the image and label file paths as a tuple."""
+        return self.img_filepaths, self.lbl_filepaths, self.total_num_entries
+
+def FetchDatasetPaths(dataset_name: str | list | tuple,
+                      datasets_root_folder: str | tuple[str, ...],
+                      samples_limit_per_dataset: int | tuple[int, ...] = 0):
+
+    # Select loading mode (single or multiple datasets)
+    if isinstance(dataset_name, str):
+        dataset_names_array: list | tuple = (dataset_name,)
+
+    elif isinstance(dataset_name, (list, tuple)):
+        dataset_names_array: list | tuple = dataset_name
+    else:
+        raise TypeError(
+            "dataset_name must be a string or a list of strings")
+
+    # Initialize list index of datasets to load
+    image_folder = []
+    label_folder = []
+    num_of_imags_in_set = []
+
+    img_filepaths = []
+    lbl_filepaths = []
+
+    # Loop over index entries (1 per dataset folder to fetch)
+    for dset_count, _dataset_name in enumerate(dataset_names_array):
+
+        datasets_root_folder_ = None
+        current_total_of_imgs = 0
+
+        # Resolve correct root by check folder existence
+        for root_count, datasets_root_folder_ in enumerate(datasets_root_folder):
+
+            if os.path.exists(os.path.join(datasets_root_folder_, _dataset_name)):
+                break
+
+            elif root_count == len(datasets_root_folder) - 1:
+                raise FileNotFoundError(
+                    f"\033[91mDataset folder '{_dataset_name}' not found in any of the provided root folders: {datasets_root_folder}\033[0m")
+
+        if datasets_root_folder_ is None:
+            raise ValueError(
+                f"\033[91mDataset folder cannot be None: automatic resolution of dataset root folder failed silently. Please check your configuration and report issue.\033[0m")
+
+        print(
+            f"Fetching dataset '{_dataset_name}' with root folder {datasets_root_folder_}...")
+
+        # Append dataset paths
+        image_folder.append(os.path.join(
+            datasets_root_folder_, _dataset_name, "images"))
+
+        label_folder.append(os.path.join(
+            datasets_root_folder_, _dataset_name, "labels"))
+
+        # Check size of names in the folder
+        sample_file = next((f for f in os.listdir(image_folder[dset_count]) if os.path.isfile(
+            os.path.join(image_folder[dset_count], f))), None)
+
+        if sample_file:
+            name_size = len(os.path.splitext(sample_file)[0])
+            print(f"\tDataset name size: {name_size}. Example: {sample_file}")
+        else:
+            print("\033[38;5;208mNo files found in this folder!\033[0m")
+            continue
+
+        # Append number of images in the set
+        num_of_imags_in_set.append(len(os.listdir(image_folder[dset_count])))
+
+        # Build paths index
+        if name_size == 6:
+            img_filepaths.extend([os.path.join(
+                image_folder[dset_count], f"{id+1:06d}.png") for id in range(num_of_imags_in_set[dset_count])])
+
+        elif name_size == 8:
+            img_filepaths.extend([os.path.join(
+                image_folder[dset_count], f"{id*150:08d}.png") for id in range(num_of_imags_in_set[dset_count])])
+
+        else:
+            raise ValueError(
+                "Image/labels names are assumed to have 6 or 8 numbers. Please check the dataset format.")
+
+        # Check labels folder extensions
+        file_ext = os.path.splitext(os.listdir(label_folder[dset_count])[0])[1]
+        lbl_filepaths.extend([os.path.join(
+            label_folder[dset_count], f"{id+1:06d}{file_ext}") for id in range(num_of_imags_in_set[dset_count])])
+
+        current_total_of_imgs = sum(num_of_imags_in_set)  # Get current total
+        print(
+            f"Dataset '{_dataset_name}' contains {num_of_imags_in_set[dset_count]} images and labels in {file_ext} format.")
+
+        # Check if samples limit is set and apply it if it does
+        if isinstance(samples_limit_per_dataset, (list, tuple)):
+            samples_limit_per_dataset_ = samples_limit_per_dataset[dset_count]
+        else:
+            samples_limit_per_dataset_ = samples_limit_per_dataset
+
+        if samples_limit_per_dataset_ > 0:
+
+            # Prune paths of the current dataset only
+            img_filepaths = img_filepaths[current_total_of_imgs:
+                                          current_total_of_imgs + samples_limit_per_dataset_]
+            lbl_filepaths = lbl_filepaths[current_total_of_imgs:
+                                          current_total_of_imgs + samples_limit_per_dataset_]
+
+            print(
+                f"\tLimiter: number of samples was limited to {samples_limit_per_dataset_}/{num_of_imags_in_set[dset_count]}")
+
+            # Set total number of images to the limit
+            num_of_imags_in_set[dset_count] = samples_limit_per_dataset_
+
+    total_num_imgs = sum(num_of_imags_in_set)
+
+    # Return paths container
+    return DatasetPathsContainer(img_filepaths=img_filepaths,
+                                 lbl_filepaths=lbl_filepaths,
+                                 num_of_entries_in_set=num_of_imags_in_set,
+                                 total_num_entries=total_num_imgs)
+
 
 # %% Data containers
 @dataclass
