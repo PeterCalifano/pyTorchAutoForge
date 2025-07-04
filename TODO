@@ -7,7 +7,7 @@
 - [ ] v0.2.0
   - [x] Add prototype implementation of heads and backbones builders using registries
   - [ ] Add abstract meta class for loss functions to enforce interface
-  - [ ] Add prototype implementation of dataset classes from paths
+  - [x] Add prototype implementation of dataset classes from paths
   - [ ] Fix all unit tests
   - [x] Complete 1st version of model profiler
   - [x] Add prototype of model explainer for vector-to-vector regression using SHAP (basic explainer)
@@ -24,20 +24,19 @@
   - [x] Add semi-automatic function to run model inference on sample input and save to disk with resulting predictions
   - [x] Implement Scaler adapter to store scaling factors for standalone input scaling (directly in forward)
   - [x] Add prototype of automatic MC dropout wrapper for NNs with dropout layers
-  - [ ] Upgrade PTAF trainer and loss function interfaces to support image segmentation tasks
   - [x] Review implementations and modify model parameters using register buffer/parameter where needed.
-  - [ ] Upgrade api.torch to save model "packages" with all info to run the model
   - [x] Improve PTAF trainer: reduce on plateau scheduler, better stats for evalExample
   - [x] Implement prototype of labels containers from DatasetGeneratorLib and for general usage, with load/dump methods to/form yml and dict
   - [x] Improve ModelTrainingManager printing and save method
-  - [ ] Rework ModelTrainingManager to avoid inheritance of configuration
   - [ ] Implement export method (traced, onnx, model pth) in ModelTrainingManager
-  - [ ] Add automatic check of equivalence in model export helpers (onnx mainly)
+  - [x] Add automatic check of equivalence in model export helpers (onnx mainly)
   - [ ] Modify mlflow logging to unpack dict and dataclasses and save each key separately (better grouping)
-  - [ ] Add optional validation check in Augmentation helper to ensure all inputs are valid ones with remedy action
-  - [ ] Add batched bbox label generator using binary thresholded mask/image
+  - [ ] Add automatic mixed precision support from torch
+  - [x] Add optional validation check in Augmentation helper to ensure all inputs are valid ones with remedy action
 
 - [ ] v0.2.1
+  - [ ] Upgrade PTAF trainer and loss function interfaces to support image segmentation tasks
+  - [ ] Add batched bbox label generator using binary thresholded mask/image
   - [ ] Modify DataLoaderIndex to accept datasets directly and a combination of datasets and dataloaders. If dataset is input, use default specifications for dataloader
   - [ ] Implement new training mode: SWA_MODE
   - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
@@ -47,6 +46,7 @@
   - [ ] Explore Hydra for configuration management from yml files
   - [ ] Add prototype of SHAP for CNNs
   - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
+  - [ ] Upgrade api.torch to save model "packages" with all info to run the model
 
 - [ ] v0.2.2
   - [ ] Improve docstrings in src code
@@ -59,6 +59,7 @@
   - [ ] Add configurable dataclasses from template yml files
   - [ ] Add prototype version of model hyperparams optim tuning with default params to search (scheduler, its parameters, batch size, num of epochs, what else?)
   - [ ] Add prototype of model explainer for image to vector regression using Captum
+  - [ ] Rework ModelTrainingManager to avoid inheritance of configuration
 
 ## Modules development notes (to allocate)
 
