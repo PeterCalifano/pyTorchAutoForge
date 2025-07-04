@@ -15,7 +15,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from abc import ABC, abstractmethod
 from abc import ABCMeta
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 from collections.abc import Callable
 import yaml
 from PIL import Image
@@ -23,6 +23,7 @@ from functools import partial
 import json
 import yaml
 from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey, LabelsContainer
+
 
 # DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
 
@@ -89,8 +90,8 @@ class DatasetLoaderConfig():
     """
     # Required fields
     # Generics
-    dataset_names_list: Path | str | list[str | Path]
-    datasets_root_folder: str | tuple[str, ...]
+    dataset_names_list: Path | str | list[str | Path] | tuple[str | Path, ...]
+    datasets_root_folder: Path | str | tuple[str | Path, ...]
     lbl_vector_data_keys: tuple[PTAF_Datakey | str, ...]
 
     # Labels
@@ -111,9 +112,9 @@ class DatasetLoaderConfig():
         Post-initialization checks for the DatasetLoaderConfig.
         """
         # Convert all strings to tuple if not already
-        if isinstance(self.datasets_root_folder, str):
+        if isinstance(self.datasets_root_folder, (str, Path)):
             self.datasets_root_folder = (self.datasets_root_folder,)
-        if isinstance(self.dataset_names_list, str):
+        if isinstance(self.dataset_names_list, (str, Path)):
             self.dataset_names_list = (self.dataset_names_list,)
 
         # Check all roots exist
@@ -123,7 +124,9 @@ class DatasetLoaderConfig():
                     f"Dataset root folder '{root}' does not exist.")
 
         # Check all datakeys are valid PTAF_Datakey
+        lbl_vector_data_keys_checked = []
         for key in self.lbl_vector_data_keys:
+
             if isinstance(key, str):
                 # Convert string to PTAF_Datakey if possible
                 try:
@@ -131,10 +134,15 @@ class DatasetLoaderConfig():
                 except KeyError:
                     raise ValueError(
                         f"Invalid label data key string: {key}. Must be a valid PTAF_Datakey or a recognized string.")
+
             if not isinstance(key, (PTAF_Datakey)):
                 raise TypeError(
                     f"lbl_vector_data_keys must be of type PTAF_Datakey or str, got {type(key)}")
 
+            lbl_vector_data_keys_checked.append(key)
+
+        # Reassign lbl_vector_data_keys to ensure they are PTAF_Datakey instances
+        self.lbl_vector_data_keys = tuple(lbl_vector_data_keys_checked)
 
 @dataclass
 class ImagesDatasetConfig(DatasetLoaderConfig):
@@ -144,8 +152,9 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
     camera_filepath: str | None = None
 
     image_format: str = "png"
-    image_dtype: type | torch.dtype = np.uint8
+    image_dtype: type | torch.dtype = torch.uint8
     image_backend: Literal['pil', 'cv2'] = 'cv2'
+    load_as_tensor: bool = True
 
     # Additional options
     intensity_scaling_mode: Literal['none', 'dtype', 'custom'] = 'dtype'
@@ -154,27 +163,35 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        if intensity_scaling_mode not in ['none', 'dtype', 'custom']:
+        if self.intensity_scaling_mode not in ['none', 'dtype', 'custom']:
             raise ValueError(
                 f"Unsupported intensity scaling mode: {self.intensity_scaling_mode}. Supported modes are 'none', 'dtype', and 'custom'.")
        
-       if self.intensity_scale_value is not None and self.intensity_scaling_mode != 'custom':
-           raise ValueError(
-               f"intensity_scale_value must be None unless intensity_scaling_mode is 'custom'.")
+        if self.intensity_scale_value is not None and self.intensity_scaling_mode != 'custom':
+            raise ValueError(
+                f"intensity_scale_value must be None unless intensity_scaling_mode is 'custom'.")
+
+        
 
 ######################## DEVNOTE Relatively stable code BELOW ########################
 @dataclass
 class DatasetPathsContainer():
     """
-    DatasetPathsContainer _summary_
-
-    _extended_summary_
-
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises IndexError: _description_
-    :return: _description_
-    :rtype: _type_
+    Container for storing and accessing image and label file paths.
+    
+    This class manages collections of paired image and label file paths for one or more
+    datasets. It ensures the paths are properly matched and provides indexed access to
+    retrieve image-label path pairs.
+    
+    Attributes:
+        img_filepaths: List of file paths to images.
+        lbl_filepaths: List of file paths to corresponding labels.
+        total_num_entries: Total number of image-label pairs across all datasets.
+        num_of_entries_in_set: Number of entries in each dataset, as list or single int.
+        
+    Raises:
+        ValueError: If image and label file paths are None or don't have matching lengths.
+        IndexError: If an index is out of bounds when accessing items.
     """
     img_filepaths: list[str]
     lbl_filepaths: list[str]
@@ -197,10 +214,11 @@ class DatasetPathsContainer():
         """Return the total number of entries in the dataset."""
         return self.total_num_entries
 
-    def __getitem__(self, index: int | list[int]) -> list[tuple[str, str]]:
+    def __getitem__(self, index: int | list[int]) -> list[tuple[str, str]] | tuple[str, str]:
         """Get the image and label file paths for a given index."""
 
-        if isinstance(index, list):
+        if isinstance(index, (list, tuple)):
+            # Return list of tuple pairs [(img_i, lbl_i)]
             return [(self.img_filepaths[i], self.lbl_filepaths[i]) for i in index]
 
         if self.total_num_entries is not None:
@@ -209,19 +227,43 @@ class DatasetPathsContainer():
         else:
             print("Warning: total_num_entries is None, index check skipped.")
 
-        return [(self.img_filepaths[index], self.lbl_filepaths[index])]
+        # Return tuple pair (img, lbl)
+        return self.img_filepaths[index], self.lbl_filepaths[index]
 
     def dump_as_tuple(self) -> tuple[list[str], list[str], int | None]:
         """Return the image and label file paths as a tuple."""
         return self.img_filepaths, self.lbl_filepaths, self.total_num_entries
 
 
-def FetchDatasetPaths(dataset_name: str | list | tuple,
-                      datasets_root_folder: str | tuple[str, ...],
-                      samples_limit_per_dataset: int | tuple[int, ...] = 0):
+def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | Path, ...],
+                      datasets_root_folder: Path | str | tuple[str | Path, ...],
+                      samples_limit_per_dataset: int | tuple[int, ...] = 0) -> DatasetPathsContainer:
+    """Fetches file paths for images and labels from specified datasets.
+
+    Locates and builds paths to image and label files from one or more datasets,
+    handling various naming conventions and optional sample limiting.
+
+    Args:
+        dataset_name: Name(s) of dataset folder(s) to fetch paths from. Can be a single
+            string/Path or a collection of strings/Paths.
+        datasets_root_folder: Root folder(s) containing the dataset folders. Can be a 
+            single string/Path or a collection of strings/Paths.
+        samples_limit_per_dataset: Maximum number of samples to include from each dataset.
+            If > 0, limits the dataset size. Can be a single integer applied to all datasets
+            or a collection of integers with one limit per dataset. Defaults to 0 (no limit).
+
+    Raises:
+        TypeError: If dataset_name is not a string or a list/tuple of strings.
+        FileNotFoundError: If a dataset folder is not found in any of the provided root folders.
+        ValueError: If automatic resolution of dataset root folder fails or if image/label 
+            naming convention is not supported.
+
+    Returns:
+        DatasetPathsContainer: Container with paths to images and labels, along with dataset size info.
+    """    
 
     # Select loading mode (single or multiple datasets)
-    if isinstance(dataset_name, str):
+    if isinstance(dataset_name, (str, Path)):
         dataset_names_array: list | tuple = (dataset_name,)
 
     elif isinstance(dataset_name, (list, tuple)):
@@ -357,6 +399,7 @@ class ImagesLabelsContainer:
             yield img, lbl
 
 
+# TODO Update/remove
 @dataclass
 class TupledImagesLabelsContainer:
     """
@@ -382,26 +425,29 @@ class TupledImagesLabelsContainer:
 
 # %% Dataset base classes
 class ImagesLabelsDatasetBase(Dataset):
-    """
-    A PyTorch Dataset for loading images with associated scene and camera metadata and labels.
-    Supports 'pil' or 'cv2' backends for image loading.
-    Scene metadata and labels are loaded per image; camera parameters once at init.
-    """
-
-    def __init__(self,
-                 dset_cfg: ImagesDatasetConfig,
-                 transform: Callable[[Image.Image], Any] | None = None,
-                 ):
+    def __init__(self, 
+                 dset_cfg: ImagesDatasetConfig, 
+                 transform: torch.nn.Module | None = None, 
+                 lbl_transform: torch.nn.Module | None = None):
         """
+        Initialize a base dataset for images and labels.
+        
+        Sets up the dataset configuration, image loading backend, and transforms for 
+        both images and labels. Fetches dataset paths and prepares for data loading.
+        
         Args:
-            image_paths: list of file paths to image metadata YAML files.
-            camera_path: file path to camera parameters YAML file.
-            transform: optional callable to apply to PIL Image samples.
+            dset_cfg: Configuration object containing dataset paths, file formats, 
+                and loading parameters.
+            transform: Optional transformation module to apply to loaded images.
+            lbl_transform: Optional transformation module to apply to loaded labels.
+            
+        Raises:
+            ImportError: If the requested image backend (cv2 or PIL) is not installed.
+            ValueError: If an unsupported image backend is specified.
         """
         super().__init__()
         # Store configuration
         self.dset_cfg = dset_cfg
-
         # Setup backend loader
         if self.dset_cfg.image_backend == 'cv2':
             try:
@@ -411,7 +457,7 @@ class ImagesLabelsDatasetBase(Dataset):
                     "OpenCV (cv2) backend requested, but not installed")
 
             self._load_img_from_file: Callable = partial(cv2.imread,
-                                                         flags=cv2.IMREAD_UNCHANGED)
+                                                            flags=cv2.IMREAD_UNCHANGED)
 
         elif self.dset_cfg.image_backend == 'pil':
             try:
@@ -425,11 +471,9 @@ class ImagesLabelsDatasetBase(Dataset):
                 f"Unsupported image_backend: {self.dset_cfg.image_backend}")
 
         # Store paths to images
-        self.image_paths = image_paths
-
-        if self.dset_cfg.camera_path is not None:
+        if self.dset_cfg.camera_filepath is not None:
             # Load camera parameters
-            self.camera_params = self._load_yaml(self.dset_cfg.camera_path)
+            self.camera_params = self._load_yaml(self.dset_cfg.camera_filepath)
         else:
             # Initialize camera parameters as empty dict
             self.camera_params = {}
@@ -437,6 +481,7 @@ class ImagesLabelsDatasetBase(Dataset):
         # Store transform function
         # TODO input is a PIL image, but may not be the best format to load
         self.transform = transform
+        self.lbl_transform = lbl_transform
 
         # Cache attribute for processed labels
         self._label_cache: dict[str, Any] = {}
@@ -448,19 +493,23 @@ class ImagesLabelsDatasetBase(Dataset):
             samples_limit_per_dataset=self.dset_cfg.samples_limit_per_dataset
         )
 
-        self.dataset_size = len(self.image_paths)
+        self.dataset_size = len(self.dataset_paths_container)
 
     def _load_yaml(self, path: str) -> dict[str, Any]:
         """
         Load and return YAML content as dict.
         """
-        pass  # DEVNOTE what purpose?
+        with open(path, 'r') as f:
+            try:
+                return yaml.safe_load(f) or {}
+            except yaml.YAMLError as e:
+                raise ValueError(f"Failed to load YAML file {path}: {e}")
+
 
     def __len__(self) -> int:
         return self.dataset_size
 
-    # TODO review/rework
-    def _load_image(self, img_path: str) -> dict[str, Any]:
+    def _load_image(self, img_path: str) -> np.ndarray | torch.Tensor:
         """
         Load image via selected backend.
         """
@@ -470,8 +519,18 @@ class ImagesLabelsDatasetBase(Dataset):
 
         if img is None:
             raise FileNotFoundError(
-                f"Failed to load image {img_path} with backend {self.image_backend}"
+                f"Failed to load image {img_path} with backend {self.dset_cfg.image_backend}"
             )
+
+        if self.dset_cfg.load_as_tensor:
+            img = numpy_to_torch(img)
+            
+            if len(img.shape) == 2:
+                img = img.unsqueeze(0) # Unsqueeze from (H,W) to (C,H,W))
+
+            elif img.shape[-1] <= 3:
+                # Convert to (C,H,W) format
+                img = img.permute(2, 0, 1)
 
         return self._scale_image(img)
 
@@ -551,22 +610,22 @@ class ImagesLabelsDatasetBase(Dataset):
 
         # Load image
         img = torch.tensor(self._load_image(image_path), 
-                           dtype=self.dset_cfg.image_dtype)
+                           dtype=self.dset_cfg.image_dtype) # type:ignore
 
         # Load labels from YAML file
         lbl = LabelsContainer.load_from_yaml(label_path)
 
         # Extract lbl data based on datakeys
         lbl = torch.tensor(lbl.get_labels(data_keys=self.dset_cfg.lbl_vector_data_keys),
-                           dtype=self.dset_cfg.lbl_dtype)
+                           dtype=self.dset_cfg.lbl_dtype)  # type:ignore
 
         if self.transform is not None:
             # Apply transform to the image and label
             img = self.transform(img)
 
-        if self.target_transform is not None:
+        if self.lbl_transform is not None:
             # Apply target transform to the label
-            lbl = self.target_transform(lbl)
+            lbl = self.lbl_transform(lbl)
 
         # Load image and labels
         return img, lbl
