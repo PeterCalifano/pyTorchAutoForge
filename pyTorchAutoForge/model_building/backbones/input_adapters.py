@@ -86,14 +86,20 @@ class ImageMaskFilterAdapterConfig(BaseAdapterConfig):
     
 @dataclass
 class ScalerAdapterConfig(BaseAdapterConfig):
-    scale: float | list[float] | np.ndarray | torch.Tensor
+    scale: float | list[float] | np.ndarray | torch.Tensor | None = None
     bias: float | list[float] | np.ndarray | torch.Tensor | None = None
+    scaling_mode: Literal['precomputed_stats', 'batchnorm'] = 'precomputed_stats'
+    input_size: int | tuple[int, int] | None = None
 
     def __post_init__(self):
         # Validate scale and bias
-        if self.scale is None:
+        if self.scale is None and self.scaling_mode == 'precomputed_stats':
             raise ValueError("`scale` must be provided and cannot be None.")
-        
+
+        if self.scaling_mode == 'batchnorm':
+            if self.input_size is None:
+                raise ValueError("`input_size` must be provided for batch normalization scaling mode.")
+
         if isinstance(self.scale, (list, np.ndarray)) and len(self.scale) == 0:
             raise ValueError("`scale` must be a non-empty list or numpy array.")
         if self.bias is not None and isinstance(self.bias, (list, np.ndarray)) and len(self.bias) == 0:
@@ -101,63 +107,115 @@ class ScalerAdapterConfig(BaseAdapterConfig):
 
 # ===== Adapter modules =====
 class ScalerAdapter(BaseAdapter):
-    """
-    ScalerAdapter rescales input tensors by a fixed scale and bias vectors or scalars. Useful for normalizing or shifting input data before feeding to a model.
 
-    Args:
-        scale_coefficient (float | list[float] | np.ndarray | torch.Tensor): Multiplicative scaling factor. Can be a scalar or 1D vector.
-        bias_coefficient (float | list[float] | np.ndarray | torch.Tensor | None, optional): Additive bias. Defaults to 0.0. Can be a scalar or 1D vector.
-    """
     def __init__(
         self,
-        scale_coefficient: list[float] | np.ndarray | torch.Tensor,
-        bias_coefficient: list[float] | np.ndarray | torch.Tensor | None = None
+        scale_coefficient: list[float] | np.ndarray | torch.Tensor | None = None,
+        bias_coefficient: list[float] | np.ndarray | torch.Tensor | None = None,
+        input_size: int | None = None,
+        adapter_cfg: ScalerAdapterConfig | None = None,
     ) -> None:
+        """Rescales input tensors by fixed scale and bias vectors or scalars.
+        
+        Applies normalization or feature scaling to input data before feeding to a model.
+        Supports both precomputed statistics mode and batch normalization mode.
+        
+        Args:
+            scale_coefficient (list[float] | np.ndarray | torch.Tensor | None): 
+                Multiplicative scaling factor. Can be a scalar or 1D vector.
+                Required when using 'precomputed_stats' scaling mode.
+            bias_coefficient (list[float] | np.ndarray | torch.Tensor | None, optional): 
+                Additive bias term. Can be a scalar or 1D vector. 
+                Defaults to zeros matching scale shape when None.
+            input_size (int | None, optional):
+                Size of input features. Required when using 'batchnorm' scaling mode.
+                Defaults to None.
+            adapter_cfg (ScalerAdapterConfig | None, optional):
+                Configuration object for the adapter. When provided, overrides
+                individual parameter settings. Defaults to None.
+                
+        Raises:
+            TypeError: If scale_coefficient or bias_coefficient has invalid type.
+            ValueError: If scale and bias dimensions don't match or if required
+                parameters are missing for the selected scaling mode.
+        """
         
         super().__init__()
-        # Handle scale input
-        if isinstance(scale_coefficient, list) or isinstance(scale_coefficient, np.ndarray):
-            scale = torch.as_tensor(scale_coefficient, dtype=torch.float32)
-        elif torch.is_tensor(scale_coefficient):
-            scale = scale_coefficient.to(dtype=torch.float32)
-        elif isinstance(scale_coefficient, (int, float)):
-            # Convert scalar to 0-D tensor
-            scale = torch.tensor(scale_coefficient, dtype=torch.float32)
-        else:
-            raise TypeError(
-                "`scale_coefficient` must be a list, a 1-D numpy array, or a torch Tensor")
         
-        if scale.ndim > 1:
-            raise ValueError("`scale_coefficient` must be 1-D (or 0-D)")
-
-        # Handle bias input
-        if bias_coefficient is None:
-            bias = torch.zeros_like(scale)
-
-        elif isinstance(bias_coefficient, list) or isinstance(bias_coefficient, np.ndarray):
-            bias = torch.as_tensor(bias_coefficient, dtype=torch.float32)
-        elif torch.is_tensor(bias_coefficient):
-            bias = bias_coefficient.to(dtype=torch.float32)
-        elif isinstance(bias_coefficient, (int, float)):
-            # Convert scalar to 0-D tensor
-            bias = torch.tensor(bias_coefficient, dtype=torch.float32)
-
+        # TODO this code is temporary. Need to update applications using scaler adapter first
+        if adapter_cfg is None:
+            self.scaling_mode = 'precomputed_stats'
         else:
-            raise TypeError(
-                "`bias_coefficient` must be None, a list, a 1-D numpy array, or a torch Tensor"
-            )
-        if bias.ndim > 1:
-            raise ValueError("`bias_coefficient` must be 1-D (or 0-D)")
+            self.scaling_mode = adapter_cfg.scaling_mode
 
-        # Check consistency of dimensions
-        if scale.ndim == 1 and bias.ndim == 1 and scale.shape != bias.shape:
-            raise ValueError("`scale_coefficient` and `bias_coefficient` must have the same length")
+        match self.scaling_mode:
+            case 'precomputed_stats':
+                
+                # Check input validity
+                if scale_coefficient is None:
+                    raise ValueError("`scale_coefficient` must be provided and cannot be None.")
 
-        # Register scale and bias as buffers
-        self.register_buffer('scale', scale)
-        self.register_buffer('bias',  bias)
+                # Handle scale input
+                if isinstance(scale_coefficient, list) or isinstance(scale_coefficient, np.ndarray):
+                    scale = torch.as_tensor(scale_coefficient, dtype=torch.float32)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+                elif torch.is_tensor(scale_coefficient):
+                    scale = scale_coefficient.to(dtype=torch.float32)
+
+                elif isinstance(scale_coefficient, (int, float)):
+                    # Convert scalar to 0-D tensor
+                    scale = torch.tensor(scale_coefficient, dtype=torch.float32)
+                else:
+                    raise TypeError(
+                        "`scale_coefficient` must be a list, a 1-D numpy array, or a torch Tensor")
+                
+                if scale.ndim > 1:
+                    raise ValueError("`scale_coefficient` must be 1-D (or 0-D)")
+
+                # Handle bias input
+                if bias_coefficient is None:
+                    bias = torch.zeros_like(scale)
+
+                elif isinstance(bias_coefficient, list) or isinstance(bias_coefficient, np.ndarray):
+                    bias = torch.as_tensor(bias_coefficient, dtype=torch.float32)
+                elif torch.is_tensor(bias_coefficient):
+                    bias = bias_coefficient.to(dtype=torch.float32)
+                elif isinstance(bias_coefficient, (int, float)):
+                    # Convert scalar to 0-D tensor
+                    bias = torch.tensor(bias_coefficient, dtype=torch.float32)
+
+                else:
+                    raise TypeError(
+                        "`bias_coefficient` must be None, a list, a 1-D numpy array, or a torch Tensor"
+                    )
+                if bias.ndim > 1:
+                    raise ValueError("`bias_coefficient` must be 1-D (or 0-D)")
+
+                # Check consistency of dimensions
+                if scale.ndim == 1 and bias.ndim == 1 and scale.shape != bias.shape:
+                    raise ValueError("`scale_coefficient` and `bias_coefficient` must have the same length")
+
+                # Register scale and bias as buffers
+                self.register_buffer('scale', scale)
+                self.register_buffer('bias',  bias)
+
+                # Define forward method
+                self._forward_impl = self._forward_precomputed_stats 
+            
+            case "batchnorm":
+                assert input_size is not None, \
+                    "For batch normalization scaling mode, `input_size` must be provided."
+                
+                self.batchnorm_layer = nn.BatchNorm1d(num_features=input_size, 
+                    eps=1e-5, 
+                    momentum=0.1, 
+                    affine=True, 
+                    track_running_stats=True
+                )
+
+                self._forward_impl = self.batchnorm_layer
+
+    def _forward_precomputed_stats(self, x: torch.Tensor) -> torch.Tensor:
 
         if self.scale.ndim == 1:
             if x.dim() != 2 or x.shape[1] != self.scale.numel():
@@ -173,6 +231,10 @@ class ScalerAdapter(BaseAdapter):
             bias_broadcast = self.bias
 
         return x * scale_broadcast + bias_broadcast
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self._forward_impl(x)
+
 
 class Conv2dResolutionChannelsAdapter(BaseAdapter):
     """
@@ -387,4 +449,7 @@ def _(cfg: ImageMaskFilterAdapterConfig) -> ImageMaskFilterAdapter:
 
 @InputAdapterFactory.register
 def _(cfg: ScalerAdapterConfig) -> ScalerAdapter:
-    return ScalerAdapter(cfg.scale, cfg.bias)
+    return ScalerAdapter(cfg.scale, 
+                         cfg.bias, 
+                        input_size=cfg.input_size, 
+                        adapter_cfg=cfg)
