@@ -35,7 +35,6 @@
 """
 from ast import Continue
 import torch
-import warnings
 import platform
 from typing import Literal
 import os 
@@ -58,9 +57,9 @@ if not on_rtd:
     if is_jetson:
         # GetDevice for Jetson devices
         @functools.lru_cache(maxsize=1)
-        def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+        def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps']:
             if torch.cuda.is_available():
-                return "cuda:0"
+                return "cuda"
             return "cpu"
 
         def Wait_for_gpu_memory(min_free_mb: int, gpu_index: int = 0, check_interval_in_seconds: int = 30):
@@ -105,7 +104,7 @@ if not on_rtd:
 
             @functools.lru_cache(maxsize=1)
             def GetDeviceMulti(selection_override : str | None = None, 
-                               expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps'] | str:
+                               expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps'] | str:
                 """
                 GetDeviceMulti Determines the optimal device for computation based on available memory and compatibility.
 
@@ -116,8 +115,8 @@ if not on_rtd:
                 If no GPU meets these requirements, it falls back to MPS (for Apple Silicon) or CPU as a last resort.
 
                 Returns:
-                    Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
-                        The selected device: a CUDA GPU (e.g., 'cuda:0'), MPS (for Apple Silicon), or CPU.
+                    Literal['cuda'] | Literal['cpu'] | Literal['mps']:
+                        The selected device: a CUDA GPU (e.g., 'cuda'), MPS (for Apple Silicon), or CPU.
                 """
 
                 if selection_override is not None:
@@ -177,8 +176,7 @@ if not on_rtd:
 
                 # If no GPU is available, return CPU
                 if torch.cuda.is_available():
-                    warnings.warn(
-                        "CUDA is available, but no GPU meets the minimum requirements. Using CPU instead.")
+                    print("\033[38;5;208mCUDA is available, but no GPU meets the minimum requirements.\033[0m")
 
                     invalid_input = True
                     while invalid_input:
@@ -202,7 +200,7 @@ if not on_rtd:
                 return "cpu"
 
         except ImportError:
-            print("pynvml import error. Package is required to use more advanced GetDeviceMulti functionalities memory management. Please install it using 'pip install pynvml'. PTAF will use simplified logic instead.")
+            print("\033[38;5;208mpynvml import error. Package is required to use more advanced GetDeviceMulti functionalities memory management. Please install it using 'pip install pynvml'. PTAF will use simplified logic instead.\033[0m")
 
             # Fall back to simplified logic/dummy functions
             def Wait_for_gpu_memory(min_free_mb: int, gpu_index: int = 0, check_interval_in_seconds: int = 30):
@@ -230,15 +228,15 @@ if not on_rtd:
 
 
             @functools.lru_cache(maxsize=1)
-            def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+            def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps']:
                 if torch.cuda.is_available():
-                    return "cuda:0"
+                    return "cuda"
                 return "cpu"
 
 else:
     # Define dummy version of GetDeviceMulti for ReadTheDocs
     @functools.lru_cache(maxsize=1)
-    def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda:0'] | Literal['cpu'] | Literal['mps']:
+    def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps']:
         return "cpu"    
 
 
@@ -262,7 +260,7 @@ def GetCudaAvailability():
         print(f"CUDA available but pynvml is not. Found {count} GPU(s).")
         for i in range(count):
             print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
-        return True, "cuda:0"
+        return True, "cuda"
 
     device_count = torch.cuda.device_count()
     print(f"Number of GPUs: {device_count}")

@@ -455,6 +455,6 @@ except ImportError:
     print("\033[38;5;208mSHAP or Captum not installed in this environment. "
         "ModelExplainerHelper() class won't be available\033[0m")    
     class ModelExplainerHelper():
-        def __init__():
+        def __init__(self):
             raise NotImplementedError('You tried to instantiate ModelExplainerHelper, but did not install SHAP and Captum in this environment. Please do so first.')
             
