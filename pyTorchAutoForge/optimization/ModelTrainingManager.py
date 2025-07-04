@@ -139,10 +139,12 @@ class LearnRateReductOnPlateauConfig():
 
 @dataclass()
 class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass 
-    '''Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.'''
+    '''
+    Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.
+    '''
 
     # REQUIRED fields
-    # Task type for training and validation --> How to enforce the definition of this?
+    # Task type for training and validation
     tasktype: TaskType
     batch_size: int
 
@@ -165,7 +167,6 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     lr_reduction_plateau_config: LearnRateReductOnPlateauConfig = field(
         default_factory=LearnRateReductOnPlateauConfig)
 
-
     # Logging
     mlflow_logging: bool = True  # Enable MLFlow logging
     mlflow_experiment_name : str | None = None
@@ -184,9 +185,10 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     checkpoint_to_load: str | None = None  # Path to model checkpoint to load
     load_strict : bool = False  # Load model checkpoint with strict matching of parameters
     load_traced : bool = False  # Load model as traced model
-    
-    # Hardware settings
+
+    # Hardware/special settings
     device: str = GetDeviceMulti()  # Default device is GPU if available
+    use_torch_amp : bool = False # Decide whether to use torch AMP for training
 
     # OPTUNA MODE options
     optuna_trial: Any = None  # Optuna optuna_trial object
@@ -198,7 +200,11 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
             print("\033[38;5;208mWarning: example_labels_scaling_factors is not a torch.Tensor. Overriden to None.\033[0m")
             # Set to none
             self.example_labels_scaling_factors = None
-            
+        
+        # Switch AMP off if device is CPU
+        if self.device == 'cpu' and self.use_torch_amp is True:
+            print("\033[38;5;208mWarning: torch AMP required, but device is CPU. Overriden to False.\033[0m")
+            self.use_torch_amp = False 
 
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
@@ -432,16 +438,19 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             else:
                 raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
 
-        # Additional initializations
+        ### Additional initializations
         if not (os.path.isdir(self.checkpoint_dir)):
             os.mkdir(self.checkpoint_dir)
-
 
         # Define reduction on plateau scheduler
         if self.enable_lr_reduction_on_plateau is not None and self.optimizer is not None:
             config = self.lr_reduction_plateau_config.to_scheduler_kwargs()
             self.lr_reduct_plateau = optim.lr_scheduler.ReduceLROnPlateau(optimizer=self.optimizer, 
                                                                           **config)
+
+        ### Torch AMP objects
+        self.grad_scaler = torch.amp.GradScaler(device=self.device, enabled=self.use_torch_amp)
+
 
     ### Instance methods below
     def _define_optimizer(self, optimizer: optim.Optimizer | enumOptimizerType) -> None:
@@ -553,7 +562,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             print(f"\033[38;5;208mError while tracing model: {e}\033[0m. Model instance will be return as python object instead.")
             return model 
 
-    def printSessionInfo(self):
+    def _print_session_info(self):
         """
         Prints the session information and configuration settings for the model training.
 
@@ -624,7 +633,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
     #def trainInternalModelOneEpoch_(self):
     #    self.trainModelOneEpoch_(model)
 
-    def trainModelOneEpoch_(self):
+    def _train_model_one_epoch(self):
         '''
         Internal method to train the model using the specified datasets and loss function. Not intended to be called as standalone.
         '''
@@ -670,19 +679,20 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     with torch.no_grad():
                         X, Y = self.augment_data_batch(X, Y)
 
-            # Perform FORWARD PASS to get predictions
-            # Evaluate model at input, calls forward() method
-            predicted_values = self.model(X)
+            # Perform FORWARD PASS to get predictions (autocast is no-ops if use_torch_amp == false)
+            with torch.autocast(device_type=self.device, dtype=torch.float16, enabled=self.use_torch_amp):
+                # Evaluate model at input, calls forward() method
+                predicted_values = self.model(X)
 
-            # Evaluate loss function to get loss value dictionary
-            train_loss_dict = self.loss_fcn(predicted_values, Y)
+                # Evaluate loss function to get loss value dictionary
+                train_loss_dict = self.loss_fcn(predicted_values, Y)
 
-            # Get loss value from dictionary
-            train_loss_value = train_loss_dict.get('lossValue') if isinstance(
-                train_loss_dict, dict) else train_loss_dict
+                # Get loss value from dictionary
+                train_loss_value = train_loss_dict.get('lossValue') if isinstance(
+                    train_loss_dict, dict) else train_loss_dict
 
-            if self.batch_accumulation_factor > 1:
-                train_loss_value /= self.batch_accumulation_factor
+                if self.batch_accumulation_factor > 1:
+                    train_loss_value /= self.batch_accumulation_factor
 
             # TODO: here one may log intermediate metrics at each update
             # if self.mlflow_logging:
@@ -692,11 +702,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             running_loss += train_loss_value.detach().cpu().float()
             
             # Perform BACKWARD PASS to update parameters
-            train_loss_value.backward()     # Compute gradients
+            self.grad_scaler.scale(train_loss_value).backward() # Compute gradients (wrapped in grad scaler for AMP)
             
             if ((batch_idx + 1) % self.batch_accumulation_factor == 0) or is_last_batch:
                 # Make optimization step and reset gradients
-                self.optimizer.step()       # Apply gradients from the loss
+                # Apply gradients from the loss
+                self.grad_scaler.step(self.optimizer)
+                self.grad_scaler.update() # Update grad scaler for AMP
+
                 self.optimizer.zero_grad()  # Reset gradients for next iteration
                 self.num_of_updates += 1
             else:
@@ -891,7 +904,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.startMlflowRun()  # DEVNOTE: TODO split into more subfunctions
 
         print(f'\n\n{colorama.Style.BRIGHT}{colorama.Fore.BLUE}-------------------------- Training and validation session start --------------------------\n')
-        self.printSessionInfo()
+        self._print_session_info()
 
         model_save_name = None
         no_new_best_counter = 0
@@ -916,7 +929,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                       step=self.current_epoch)
                        
                 # Perform training for one epoch
-                tmp_train_loss = self.trainModelOneEpoch_()
+                tmp_train_loss = self._train_model_one_epoch()
 
                 # Perform validation at current epoch
                 tmp_valid_loss = self.validateInternalModel_()
@@ -1448,10 +1461,18 @@ def FreezeModel(model: nn.Module) -> nn.Module:
 # %% Function to perform one step of training of a model using dataset and specified loss function - 04-05-2024
 # Updated by PC 04-06-2024
 
-def TrainModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module,
-               optimizer, epochID: int, device=GetDeviceMulti(), taskType: str = 'classification', lr_scheduler=None,
-               swa_scheduler=None, swa_model=None, swa_start_epoch: int = 15) -> float | int:
-    '''Function to perform one step of training of a model using dataset and specified loss function'''
+# TODO Update function to resemble trainer "train one epoch", useful for experiments
+def TrainModel(dataloader: DataLoader, 
+               model: nn.Module, 
+               lossFcn: nn.Module,
+               optimizer, 
+               epochID: int, 
+               device=GetDeviceMulti(), 
+               lr_scheduler=None,
+               swa_scheduler=None, 
+               swa_model=None, 
+               swa_start_epoch: int = 15) -> float | int:
+    '''Function to perform one step of training of a model using input dataloader and loss function'''
     model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
 
     counterForPrint = np.round(len(dataloader)/75)
