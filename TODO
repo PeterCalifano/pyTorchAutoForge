@@ -31,7 +31,7 @@
   - [ ] Implement export method (traced, onnx, model pth) in ModelTrainingManager
   - [x] Add automatic check of equivalence in model export helpers (onnx mainly)
   - [ ] Modify mlflow logging to unpack dict and dataclasses and save each key separately (better grouping)
-  - [ ] Add automatic mixed precision support from torch
+  - [x] Add automatic mixed precision support from torch
   - [x] Add optional validation check in Augmentation helper to ensure all inputs are valid ones with remedy action
 
 - [ ] v0.2.1
