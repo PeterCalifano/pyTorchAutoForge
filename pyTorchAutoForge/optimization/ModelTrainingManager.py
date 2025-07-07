@@ -167,13 +167,14 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     lr_reduction_plateau_config: LearnRateReductOnPlateauConfig = field(
         default_factory=LearnRateReductOnPlateauConfig)
 
-    # Logging
+    # Logging and export
     mlflow_logging: bool = True  # Enable MLFlow logging
     mlflow_experiment_name : str | None = None
     eval_example: bool = False  # Evaluate example input during training
     example_labels_scaling_factors : torch.Tensor | None = None
-    checkpoint_dir: str = "./checkpoints"  # Directory to save model checkpoints
-    modelName: str = "trained_model"      # Name of the model to be saved
+    checkpoint_dir: str = "./checkpoints"   # Directory to save model checkpoints
+    modelName: str = "trained_model"        # Name of the model to be saved
+    export_best_to_onnx : bool = False      # Option to enable automatic export to ONNx (attempt)
 
     # Optimization parameters
     lr_scheduler: Any | None = None
