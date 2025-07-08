@@ -62,7 +62,10 @@ if not on_rtd:
                 return "cuda"
             return "cpu"
 
-        def Wait_for_gpu_memory(min_free_mb: int, gpu_index: int = 0, check_interval_in_seconds: int = 30):
+        def Wait_for_gpu_memory(min_free_mb: int, 
+                                gpu_index: int = 0, 
+                                check_interval_in_seconds: int = 30,
+                                wait_for_seconds_after_ok: int = 0):
             pass # Dummy function for rtd-docs
 
     else:
@@ -70,7 +73,10 @@ if not on_rtd:
         try:
             import pynvml
 
-            def Wait_for_gpu_memory(min_free_mb: int, gpu_index: int = 0, check_interval_in_seconds: int = 30):
+            def Wait_for_gpu_memory(min_free_mb: int, 
+                                    gpu_index: int = 0, 
+                                    check_interval_in_seconds: int = 30,
+                                    wait_for_seconds_after_ok: int = 0):
                 """
                 Wait_for_gpu_memory waits until at least `min_free_mb` of GPU memory is available on the specified GPU.
 
@@ -100,6 +106,16 @@ if not on_rtd:
                         time.sleep(check_interval_in_seconds)
 
                 pynvml.nvmlShutdown()  # Shutdown NVML after use
+
+                # Wait for additional wait_for_seconds_after_ok seconds after a successful check
+                if wait_for_seconds_after_ok > 0:
+                    print(
+                        f"Waiting for additional {wait_for_seconds_after_ok} seconds after successful memory check...")
+                    time.sleep(wait_for_seconds_after_ok)
+
+                # Recheck mem again without wait
+                Wait_for_gpu_memory(min_free_mb=min_free_mb, 
+                                    gpu_index=gpu_index, check_interval_in_seconds=check_interval_in_seconds, wait_for_seconds_after_ok=0)
 
 
             @functools.lru_cache(maxsize=1)
