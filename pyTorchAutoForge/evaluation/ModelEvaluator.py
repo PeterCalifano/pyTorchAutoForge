@@ -269,31 +269,38 @@ class ModelEvaluator():
         max_abs_residual = torch_to_numpy(max_abs_residual)
         std_residual = torch_to_numpy(std_residual)
 
+        quantile68_residual = np.quantile(np.abs(residuals), 0.68, axis=0)
         quantile95_residual = np.quantile(np.abs(residuals), 0.95, axis=0)
+        quantile99p7_residual = np.quantile(np.abs(residuals), 0.997, axis=0)
 
         # Pack data into dict
         # TODO replace with dedicated object!
         self.stats = {}
+        # Errors with sign
         self.stats['prediction_err'] = residuals
-        self.stats['average_abs_prediction_err'] = avg_abs_residual
-        self.stats['median_abs_prediction_err'] = median_abs_residual
-        self.stats['max_abs_prediction_err'] = max_abs_residual
         self.stats['mean_prediction_err'] = mean_residual
         self.stats['median_prediction_err'] = median_residual
         self.stats['std_prediction_err'] = std_residual
+        # Absolute errors and quantiles
+        self.stats['average_abs_prediction_err'] = avg_abs_residual
+        self.stats['median_abs_prediction_err'] = median_abs_residual
+        self.stats['quant68_abs_prediction_err'] = quantile68_residual
         self.stats['quant95_abs_prediction_err'] = quantile95_residual
+        self.stats['quant99p7_abs_prediction_err'] = quantile99p7_residual
+        self.stats['max_abs_prediction_err'] = max_abs_residual
         self.stats['num_samples'] = dataset_size
 
         error_labels = [f"Output {i}" for i in range(residuals.shape[1])]
 
         if self.plotter.entriesNames is not None:
             error_labels = self.plotter.entriesNames
+
         if self.plotter.units is not None:
             error_labels = [f"{label} ({unit})" for label, unit in zip(
                 error_labels, self.plotter.units)]
 
         # TODO (PC) come back here when changed plotter. Some fields are assigned dynamically and mypy fails to detect those
-        self.stats["error_labels"] = tuple(error_labels)
+        self.stats["error_labels"] = tuple(error_labels)[:residuals.shape[1]]
 
         if self.loss_fcn is not None:
             self.stats['avg_loss'] = avg_loss
@@ -305,14 +312,12 @@ class ModelEvaluator():
 
     def printAndSaveStats(self, stats: dict, output_folder: str = "."):
         """
-        printAndSaveStats _summary_
+        Prints evaluation statistics in a Markdown table and saves them as a JSON file.
 
-        _extended_summary_
+        Args:
+            stats (dict): Dictionary containing evaluation statistics, including error metrics and labels.
+            output_folder (str, optional): Directory to save the statistics file. Defaults to ".".
 
-        :param stats: _description_
-        :type stats: dict
-        :param output_folder: _description_, defaults to "."
-        :type output_folder: str, optional
         """
 
         # Build output table of stats
