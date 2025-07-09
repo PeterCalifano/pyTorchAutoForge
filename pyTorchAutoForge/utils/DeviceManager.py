@@ -114,8 +114,8 @@ if not on_rtd:
                     time.sleep(wait_for_seconds_after_ok)
 
                 # Recheck mem again without wait
-                Wait_for_gpu_memory(min_free_mb=min_free_mb, 
-                                    gpu_index=gpu_index, check_interval_in_seconds=check_interval_in_seconds, wait_for_seconds_after_ok=0)
+                #Wait_for_gpu_memory(min_free_mb=min_free_mb, 
+                #                    gpu_index=gpu_index, check_interval_in_seconds=check_interval_in_seconds, wait_for_seconds_after_ok=0)
 
 
             @functools.lru_cache(maxsize=1)
