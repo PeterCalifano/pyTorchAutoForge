@@ -159,6 +159,7 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
     # Additional options
     intensity_scaling_mode: Literal['none', 'dtype', 'custom'] = 'dtype'
     intensity_scale_value: float | None = None  # Used only if intensity_scaling is 'custom'
+    output_size_limit: int = -1 
 
     def __post_init__(self):
         super().__post_init__()
@@ -166,6 +167,9 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
         if self.intensity_scaling_mode not in ['none', 'dtype', 'custom']:
             raise ValueError(
                 f"Unsupported intensity scaling mode: {self.intensity_scaling_mode}. Supported modes are 'none', 'dtype', and 'custom'.")
+        else:
+            print('Selected intensity scaling mode:', self.intensity_scaling_mode)
+            
        
         if self.intensity_scale_value is not None and self.intensity_scaling_mode != 'custom':
             raise ValueError(
@@ -428,7 +432,8 @@ class ImagesLabelsDatasetBase(Dataset):
     def __init__(self, 
                  dset_cfg: ImagesDatasetConfig, 
                  transform: torch.nn.Module | None = None, 
-                 lbl_transform: torch.nn.Module | None = None):
+                 lbl_transform: torch.nn.Module | None = None,
+                 skip_output_slicing: bool = False):
         """
         Initialize a base dataset for images and labels.
         
@@ -448,6 +453,8 @@ class ImagesLabelsDatasetBase(Dataset):
         super().__init__()
         # Store configuration
         self.dset_cfg = dset_cfg
+        self.skip_output_slicing = skip_output_slicing
+ 
         # Setup backend loader
         if self.dset_cfg.image_backend == 'cv2':
             try:
@@ -494,6 +501,10 @@ class ImagesLabelsDatasetBase(Dataset):
         )
 
         self.dataset_size = len(self.dataset_paths_container)
+
+        # TODO add code to determine input scale factor based on dtype
+        #self.input_scale_factor
+
 
     def _load_yaml(self, path: str) -> dict[str, Any]:
         """
@@ -609,8 +620,7 @@ class ImagesLabelsDatasetBase(Dataset):
         image_path, label_path = self.dataset_paths_container[idx]
 
         # Load image
-        img = torch.tensor(self._load_image(image_path), 
-                           dtype=self.dset_cfg.image_dtype) # type:ignore
+        img = numpy_to_torch(self._load_image(image_path)) # type:ignore
 
         # Load labels from YAML file
         lbl = LabelsContainer.load_from_yaml(label_path)
@@ -626,6 +636,11 @@ class ImagesLabelsDatasetBase(Dataset):
         if self.lbl_transform is not None:
             # Apply target transform to the label
             lbl = self.lbl_transform(lbl)
+
+        # Slice lbl if output_size_limit is set
+        if self.dset_cfg.output_size_limit > 0 and not(self.skip_output_slicing):
+            if lbl.shape[0] > self.dset_cfg.output_size_limit:
+                lbl = lbl[:self.dset_cfg.output_size_limit]
 
         # Load image and labels
         return img, lbl
@@ -657,6 +672,34 @@ class ImagesLabelsDatasetBase(Dataset):
 
         return cls(image_paths, camera_path, transform, image_backend)
 
+    def get_all_labels_container(self):
+        """
+        Get the labels container for this dataset.
+        
+        Returns:
+            LabelsContainer: The labels container with the specified data keys.
+        """
+
+        # Loop over paths and get labels vectors
+        lbl_vector_size, lbl_size_dict = LabelsContainer.get_lbl_1d_vector_size(
+            data_keys=self.dset_cfg.lbl_vector_data_keys)
+
+        lbl_array = np.zeros((len(self.dataset_paths_container.lbl_filepaths), lbl_vector_size))
+
+        for id_lbl, lbl_path in enumerate(self.dataset_paths_container.lbl_filepaths):
+            print(f"Fetching labels from disk: {id_lbl + 1}/{len(self.dataset_paths_container.lbl_filepaths)}", end='\r')
+            # Load labels from YAML file
+            lbl = LabelsContainer.load_from_yaml(lbl_path)
+
+            # Extract lbl data based on datakeys
+            lbl = lbl.get_labels(data_keys=self.dset_cfg.lbl_vector_data_keys)
+            lbl_array[id_lbl] = np.array(lbl)
+
+        container = ImagesLabelsContainer(images=np.empty_like((0,0)),
+                                           labels=lbl_array, 
+                                          labels_datakeys=self.dset_cfg.lbl_dtype,
+                                          labels_sizes=lbl_size_dict)
+        return container
 
 class ImagesLabelsCachedDataset(TensorDataset, ImagesLabelsDatasetBase):
     """
