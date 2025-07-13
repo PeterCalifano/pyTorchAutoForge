@@ -122,7 +122,11 @@ if not on_rtd:
                 """
 
                 if isinstance(gpu_index, torch.device):
-                    gpu_index = int(str(gpu_index).split(":")[-1])
+                    try:
+                        gpu_index = int(str(gpu_index).split(":")[-1])
+                    except:
+                        gpu_index = 0
+
                 elif isinstance(gpu_index, str):
                     if "cuda" in gpu_index:
                         gpu_index = int(gpu_index.split(":")[-1])
