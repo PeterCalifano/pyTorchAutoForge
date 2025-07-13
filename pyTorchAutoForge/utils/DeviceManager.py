@@ -93,7 +93,7 @@ if not on_rtd:
             return "cpu"
 
         def Wait_for_gpu_memory(min_free_mb: int, 
-                                gpu_index: int = 0, 
+                                gpu_index: int | str | torch.device = 0,
                                 check_interval_in_seconds: int = 30,
                                 wait_for_seconds_after_ok: int = 0) -> None:
             pass # Dummy function for rtd-docs
@@ -107,7 +107,7 @@ if not on_rtd:
             import pynvml
 
             def Wait_for_gpu_memory(min_free_mb: int, 
-                                    gpu_index: int = 0, 
+                                    gpu_index: int | str | torch.device = 0, 
                                     check_interval_in_seconds: int = 30,
                                     wait_for_seconds_after_ok: int = 0) -> None:
                 """
@@ -120,6 +120,16 @@ if not on_rtd:
 
                 This function pauses execution until the specified amount of free memory is available.
                 """
+
+                if isinstance(gpu_index, torch.device):
+                    gpu_index = int(str(gpu_index).split(":")[-1])
+                elif isinstance(gpu_index, str):
+                    if "cuda" in gpu_index:
+                        gpu_index = int(gpu_index.split(":")[-1])
+                    else:
+                        raise ValueError(
+                            f"Invalid gpu_index string format: {gpu_index}")
+
                 pynvml.nvmlInit()
                 device_handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
                 import time
@@ -299,7 +309,7 @@ if not on_rtd:
 
             # Fall back to simplified logic/dummy functions
             def Wait_for_gpu_memory(min_free_mb: int,
-                                    gpu_index: int = 0,
+                                    gpu_index: int | str | torch.device = 0,
                                     check_interval_in_seconds: int = 30,
                                     wait_for_seconds_after_ok: int = 0) -> None:
                 """
