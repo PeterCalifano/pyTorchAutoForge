@@ -927,7 +927,8 @@ class TemplateFullyConnectedDeepNet(AutoForgeModule):
             elif isinstance(layer, nn.BatchNorm1d):
                 val = layer(val)
             elif isinstance(layer, nn.Flatten):
-                val = layer(val)
+                if len(val.shape) > 1:
+                    val = layer(val)
 
         # Output layer
         prediction = val
