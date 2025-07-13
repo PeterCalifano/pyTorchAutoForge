@@ -52,11 +52,42 @@ else:
     is_jetson = "tegra" in platform.uname().machine.lower()  # Tegra-based ARM devices
 
 
+def _handle_selection_override(selection_override: torch.device | str | None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu'] | None:
+    """
+    _handle_selection_override _summary_
+
+    _extended_summary_
+
+    :param selection_override: _description_
+    :type selection_override: torch.device | str | None
+    :raises ValueError: _description_
+    :return: _description_
+    :rtype: torch.device | str | None
+    """
+    if selection_override is not None and isinstance(selection_override, str):
+        # If a specific device is requested, return it directly
+        if "cuda" in selection_override:
+            return torch.device(selection_override)
+        elif selection_override.lower() in ['cpu']:
+            return 'cpu'
+        elif selection_override.lower() in ['mps']:
+            return 'mps'
+        elif selection_override.lower() in ['xpu']:
+            return 'xpu'
+        else:
+            raise ValueError(
+                f"Invalid device selection override: {selection_override}")
+
 if not on_rtd:
     if is_jetson:
         # GetDevice for Jetson devices
         @functools.lru_cache(maxsize=1)
-        def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps']:
+        def GetDeviceMulti(selection_override: torch.device | str | None = None,
+                           expected_max_vram: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
+            selection_override = _handle_selection_override(selection_override)
+            if selection_override is not None:
+                return selection_override
+
             if torch.cuda.is_available():
                 return "cuda"
             return "cpu"
@@ -64,8 +95,11 @@ if not on_rtd:
         def Wait_for_gpu_memory(min_free_mb: int, 
                                 gpu_index: int = 0, 
                                 check_interval_in_seconds: int = 30,
-                                wait_for_seconds_after_ok: int = 0):
+                                wait_for_seconds_after_ok: int = 0) -> None:
             pass # Dummy function for rtd-docs
+
+        def GetCudaAvailability() -> tuple[Literal[False], torch.device] | tuple[Literal[True], torch.device]:
+            return True, torch.device("cuda:0")  # Always return cuda for Jetson devices
 
     else:
         # GetDevice for Non-Tegra devices
@@ -75,7 +109,7 @@ if not on_rtd:
             def Wait_for_gpu_memory(min_free_mb: int, 
                                     gpu_index: int = 0, 
                                     check_interval_in_seconds: int = 30,
-                                    wait_for_seconds_after_ok: int = 0):
+                                    wait_for_seconds_after_ok: int = 0) -> None:
                 """
                 Wait_for_gpu_memory waits until at least `min_free_mb` of GPU memory is available on the specified GPU.
 
@@ -118,8 +152,8 @@ if not on_rtd:
 
 
             @functools.lru_cache(maxsize=1)
-            def GetDeviceMulti(selection_override : str | None = None, 
-                               expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps'] | str:
+            def GetDeviceMulti(selection_override : torch.device | str | None = None, 
+                               expected_max_vram: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
                 """
                 GetDeviceMulti Determines the optimal device for computation based on available memory and compatibility.
 
@@ -134,17 +168,9 @@ if not on_rtd:
                         The selected device: a CUDA GPU (e.g., 'cuda'), MPS (for Apple Silicon), or CPU.
                 """
 
+                selection_override = _handle_selection_override(selection_override)
                 if selection_override is not None:
-                    # If a specific device is requested, return it directly
-                    if "cuda" in selection_override.lower():
-                        return selection_override.lower()
-                    elif selection_override.lower() in ['cpu']:
-                        return "cpu"
-                    elif selection_override.lower() in ['mps']:
-                        return "mps"
-                    else:
-                        raise ValueError(
-                            f"Invalid device selection override: {selection_override}")
+                    return selection_override
 
                 if expected_max_vram is not None and not (isinstance(expected_max_vram, (float, int))):
                     raise TypeError(
@@ -214,14 +240,14 @@ if not on_rtd:
 
                 return "cpu"
 
-            def GetCudaAvailability():
+            def GetCudaAvailability() -> tuple[Literal[False], torch.device] | tuple[Literal[True], torch.device]:
                 """
                 GetCudaAvailability prints GPU info, selects the GPU with the most free memory,
                 and returns its device string ("cuda:<idx>") or "cpu" if no CUDA device is available.
                 """
                 if not torch.cuda.is_available():
                     print("CUDA is not available. Suggesting CPU...")
-                    return False, "cpu"
+                    return False, torch.device("cpu")
 
                 has_pynvml = False
                 try:
@@ -234,7 +260,7 @@ if not on_rtd:
                     print(f"CUDA available but pynvml is not. Found {count} GPU(s).")
                     for i in range(count):
                         print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
-                    return True, "cuda"
+                    return True, torch.device("cuda:0")
 
                 device_count = torch.cuda.device_count()
                 print(f"Number of GPUs: {device_count}")
@@ -263,16 +289,19 @@ if not on_rtd:
                 if best_gpu is not None:
                     print(
                         f"Selecting GPU {best_gpu} with {max_free:.2f} GB free memory")
-                    return True, f"cuda:{best_gpu}"
+                    return True, torch.device(f"cuda:{best_gpu}")
 
                 print("No suitable GPU found. Suggesting CPU...")
-                return False, "cpu"
-            
+                return False, torch.device("cpu")
+
         except ImportError:
             print("\033[38;5;208mpynvml import error. Package is required to use more advanced GetDeviceMulti functionalities memory management. Please install it using 'pip install pynvml'. PTAF will use simplified logic instead.\033[0m")
 
             # Fall back to simplified logic/dummy functions
-            def Wait_for_gpu_memory(min_free_mb: int, gpu_index: int = 0, check_interval_in_seconds: int = 30):
+            def Wait_for_gpu_memory(min_free_mb: int,
+                                    gpu_index: int = 0,
+                                    check_interval_in_seconds: int = 30,
+                                    wait_for_seconds_after_ok: int = 0) -> None:
                 """
                 Wait_for_gpu_memory is a dummy function that does nothing.
                 It is used as a placeholder when pynvml is not available.
@@ -296,22 +325,29 @@ if not on_rtd:
                         break
 
             @functools.lru_cache(maxsize=1)
-            def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps']:
+            def GetDeviceMulti(selection_override: torch.device | str | None = None,
+                               expected_max_vram: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
+                
+                selection_override = _handle_selection_override(selection_override)
+                if selection_override is not None:
+                    return selection_override
+                
                 if torch.cuda.is_available():
                     return "cuda"
                 return "cpu"
             
-            def GetCudaAvailability():
-                return False, "cuda:0"
+            def GetCudaAvailability() -> tuple[Literal[False], torch.device] | tuple[Literal[True], torch.device]:
+                return False, torch.device("cuda:0")
 
 else:
     # Define dummy version of GetDeviceMulti for ReadTheDocs
     @functools.lru_cache(maxsize=1)
-    def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps']:
+    def GetDeviceMulti(selection_override: torch.device | str | None = None,
+                       expected_max_vram: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
         return "cpu"    
 
-    def GetCudaAvailability():
-        return False, "cpu"
+    def GetCudaAvailability() -> tuple[Literal[False], torch.device] | tuple[Literal[True], torch.device]:
+        return False, torch.device("cpu")
 
     
 # Temporary placeholder class (extension wil be needed for future implementations, e.g. multi GPUs)
