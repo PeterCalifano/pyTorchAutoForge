@@ -239,6 +239,10 @@ class TemplateFullyConnectedNetConfig(TemplateNetBaseConfig):
         if self.input_layer_size is None:
             raise ValueError(
                 "TemplateFullyConnectedNetConfig: 'input_layer_size' cannot be None")
+                
+        elif self.input_layer_size <= 0:
+            raise ValueError(
+                "TemplateFullyConnectedNetConfig: 'input_layer_size' must be a positive integer")
 
         if self.output_layer_size is None:
             # Assume last layer is given by last entry of out_channels_sizes
