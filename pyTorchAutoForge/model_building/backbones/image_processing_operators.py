@@ -312,7 +312,6 @@ class LocalVarianceMap(nn.Module):
 
         return _restore_shape(var, orig_dim)
 
-
 # Functional wrappers for both NumPy and Torch inputs
 def Compute_threshold_mask(img, thr: float | None = None, 
                            quantile: float = 0.85, 
@@ -363,7 +362,6 @@ def Compute_threshold_mask(img, thr: float | None = None,
     
     return out_np
 
-
 def Apply_sobel_gradient(img):
     """Applies the Sobel gradient to an input image.
 
@@ -405,7 +403,6 @@ def Apply_sobel_gradient(img):
         out_np = out_np.transpose(1, 2, 0)
 
     return out_np
-
 
 def Apply_laplacian_of_gaussian(img, kernel_size: int = 5, sigma: float = 1.0):
     """
@@ -479,8 +476,6 @@ def Compute_distance_transform_map(img):
     out_np = torch_to_numpy(out)
 
     return out_np
-
-
 
 def Compute_local_variance_map(img, kernel_size: int = 5):
     """

@@ -33,7 +33,6 @@
         - Optimize NVML initialization and shutdown to reduce overhead.
         - Extend the DeviceManager class for multi-GPU support and additional features.
 """
-from ast import Continue
 import torch
 import platform
 from typing import Literal
@@ -215,6 +214,60 @@ if not on_rtd:
 
                 return "cpu"
 
+            def GetCudaAvailability():
+                """
+                GetCudaAvailability prints GPU info, selects the GPU with the most free memory,
+                and returns its device string ("cuda:<idx>") or "cpu" if no CUDA device is available.
+                """
+                if not torch.cuda.is_available():
+                    print("CUDA is not available. Suggesting CPU...")
+                    return False, "cpu"
+
+                has_pynvml = False
+                try:
+                    pynvml.nvmlInit()
+                    has_pynvml = True
+
+                except ImportError:
+                    # Fallback: list device count and names
+                    count = torch.cuda.device_count()
+                    print(f"CUDA available but pynvml is not. Found {count} GPU(s).")
+                    for i in range(count):
+                        print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
+                    return True, "cuda"
+
+                device_count = torch.cuda.device_count()
+                print(f"Number of GPUs: {device_count}")
+
+                best_gpu = None
+                max_free = 0.0
+
+                for idx in range(device_count):
+
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
+                    mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+
+                    free_gb = mem.free / (1024 ** 3)
+                    total_gb = mem.total / (1024 ** 3)
+                    name = torch.cuda.get_device_name(idx)
+
+                    print(
+                        f"GPU {idx}: {name}, Free: {free_gb:.2f} GB / Total: {total_gb:.2f} GB")
+                    if free_gb > max_free:
+                        max_free = free_gb
+                        best_gpu = idx
+
+                if has_pynvml:
+                    pynvml.nvmlShutdown()
+
+                if best_gpu is not None:
+                    print(
+                        f"Selecting GPU {best_gpu} with {max_free:.2f} GB free memory")
+                    return True, f"cuda:{best_gpu}"
+
+                print("No suitable GPU found. Suggesting CPU...")
+                return False, "cpu"
+            
         except ImportError:
             print("\033[38;5;208mpynvml import error. Package is required to use more advanced GetDeviceMulti functionalities memory management. Please install it using 'pip install pynvml'. PTAF will use simplified logic instead.\033[0m")
 
@@ -242,12 +295,14 @@ if not on_rtd:
                         print(f"Continuing program execution without checking GPU memory availability, using 'cuda' as default device.")
                         break
 
-
             @functools.lru_cache(maxsize=1)
             def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps']:
                 if torch.cuda.is_available():
                     return "cuda"
                 return "cpu"
+            
+            def GetCudaAvailability():
+                return False, "cuda:0"
 
 else:
     # Define dummy version of GetDeviceMulti for ReadTheDocs
@@ -255,58 +310,9 @@ else:
     def GetDeviceMulti(expected_max_vram: float | None = None) -> Literal['cuda'] | Literal['cpu'] | Literal['mps']:
         return "cpu"    
 
-
-def GetCudaAvailability():
-    """
-    GetCudaAvailability prints GPU info, selects the GPU with the most free memory,
-    and returns its device string ("cuda:<idx>") or "cpu" if no CUDA device is available.
-    """
-    if not torch.cuda.is_available():
-        print("CUDA is not available. Suggesting CPU...")
+    def GetCudaAvailability():
         return False, "cpu"
 
-    has_pynvml = False
-    try:
-        pynvml.nvmlInit()
-        has_pynvml = True
-
-    except ImportError:
-        # Fallback: list device count and names
-        count = torch.cuda.device_count()
-        print(f"CUDA available but pynvml is not. Found {count} GPU(s).")
-        for i in range(count):
-            print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
-        return True, "cuda"
-
-    device_count = torch.cuda.device_count()
-    print(f"Number of GPUs: {device_count}")
-
-    best_gpu = None
-    max_free = 0.0
-
-    for idx in range(device_count):
-
-        handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
-        mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-
-        free_gb = mem.free / (1024 ** 3)
-        total_gb = mem.total / (1024 ** 3)
-        name = torch.cuda.get_device_name(idx)
-
-        print(f"GPU {idx}: {name}, Free: {free_gb:.2f} GB / Total: {total_gb:.2f} GB")
-        if free_gb > max_free:
-            max_free = free_gb
-            best_gpu = idx
-
-    if has_pynvml:
-        pynvml.nvmlShutdown()
-    
-    if best_gpu is not None:
-        print(f"Selecting GPU {best_gpu} with {max_free:.2f} GB free memory")
-        return True, f"cuda:{best_gpu}"
-
-    print("No suitable GPU found. Suggesting CPU...")
-    return False, "cpu"
     
 # Temporary placeholder class (extension wil be needed for future implementations, e.g. multi GPUs)
 class DeviceManager():
@@ -319,7 +325,6 @@ class DeviceManager():
 
 
 # TODO move to tests folder
-
 
 if __name__ == "__main__":
     GetCudaAvailability()

@@ -51,15 +51,17 @@ class AutoForgeModule(torch.nn.Module):
         else:
             self.moduleName = moduleName
 
-    def save(self, exampleInput=None, target_device: str | None = None) -> None:
+    def save(self, 
+             example_input=None, 
+             target_device: torch.device | str | None = None) -> None:
 
-        if self.enable_tracing == True and exampleInput is None:
+        if self.enable_tracing == True and example_input is None:
             self.enable_tracing = False
             raise Warning(
                 'You must provide an example input to trace the model through torch.jit.trace(). Overriding enable_tracing to False.')
 
         if target_device is None:
-            target_device = self.device
+            target_device = self.device if self.device is not None else GetDeviceMulti()
 
     def load(self):
         pass

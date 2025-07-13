@@ -46,7 +46,7 @@ def TrainAndValidateModelForOptunaOptim(trial, dataloaderIndex: dict, model: nn.
     '''Training and validation loop for PyTorch models with MLFlow logging for Optuna optimization studies'''
     # NOTE: Classification is not well developed (July, 2024). Default is regression
     taskType = options.get('taskType', 'regression')
-    device = options.get('device', GetDevice())
+    device = options.get('device', None)
     numOfEpochs = options.get('epochs', 10)
     enableSave = options.get('saveCheckpoints', True)
     checkpointDir = options.get('checkpointsOutDir', './checkpoints')
@@ -56,6 +56,9 @@ def TrainAndValidateModelForOptunaOptim(trial, dataloaderIndex: dict, model: nn.
 
     lr_scheduler = options.get('lr_scheduler', None)
 
+    if device is None:
+        device = GetDevice()
+        
     # if 'enableAddImageToTensorboard' in options.keys():
     #    ADD_IMAGE_TO_TENSORBOARD = options['enableAddImageToTensorboard']
     # else:

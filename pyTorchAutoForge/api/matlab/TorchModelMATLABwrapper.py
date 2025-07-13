@@ -11,7 +11,7 @@ from dataclasses import dataclass
 class MatlabWrapperConfig():
     # Default wrapper configuration
     DEBUG_MODE: bool = False
-    device = GetDevice()
+    device : torch.device | str | None = None
     input_shape_validation: list | None = None # None for no validation
     loading_mode: str | None = None # 'traced', 'state_dict', None
     trained_model_path: str | None = None
@@ -31,7 +31,7 @@ class TorchModelMATLABwrapper():
 
         # Initialize using configuration class
         self.DEBUG_MODE = wrapperConfig.DEBUG_MODE
-        self.device = wrapperConfig.device
+        self.device = wrapperConfig.device if wrapperConfig.device is not None else GetDevice()
         self.enable_warning = True # To disable warning for batch size
         self.input_shape_validation = wrapperConfig.input_shape_validation
         self.loading_mode = wrapperConfig.loading_mode

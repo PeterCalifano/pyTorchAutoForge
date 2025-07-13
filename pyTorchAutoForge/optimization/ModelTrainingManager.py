@@ -188,7 +188,7 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     load_traced : bool = False  # Load model as traced model
 
     # Hardware/special settings
-    device: str = GetDeviceMulti()  # Default device is GPU if available
+    device: torch.device | str | None = None  # Default device is None at import time
     use_torch_amp : bool = False # Decide whether to use torch AMP for training
 
     # OPTUNA MODE options
@@ -196,6 +196,9 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
 
     def __post_init__(self):
         
+        if self.device is None:
+            self.device = GetDeviceMulti(expected_max_vram=1024.0)
+
         if not(torch.is_tensor(self.example_labels_scaling_factors)):
             # Print warning
             print("\033[38;5;208mWarning: example_labels_scaling_factors is not a torch.Tensor. Overriden to None.\033[0m")
@@ -1468,13 +1471,16 @@ def TrainModel(dataloader: DataLoader,
                lossFcn: nn.Module,
                optimizer, 
                epochID: int, 
-               device=GetDeviceMulti(), 
+               device=None, 
                lr_scheduler=None,
                swa_scheduler=None, 
                swa_model=None, 
                swa_start_epoch: int = 15) -> float | int:
     '''Function to perform one step of training of a model using input dataloader and loss function'''
     model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
+
+    if device is None:
+        device = GetDeviceMulti()
 
     counterForPrint = np.round(len(dataloader)/75)
     numOfUpdates = 0
@@ -1544,10 +1550,17 @@ def TrainModel(dataloader: DataLoader,
 # Updated by PC 04-06-2024
 
 
-def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDeviceMulti(), taskType: str = 'classification') -> float | dict:
+def ValidateModel(dataloader: DataLoader, 
+                    model: nn.Module, 
+                    lossFcn: nn.Module, 
+                    device=None, 
+                    taskType: str = 'classification') -> float | dict:
     '''Function to validate model using dataset and specified loss function'''
     # Get size of dataset (How many samples are in the dataset)
     size = len(dataloader.dataset)
+
+    if device is None:
+        device = GetDeviceMulti()
 
     model.eval()  # Set the model in evaluation mode
     validationLoss = 0  # Accumulation variables
@@ -1666,7 +1679,11 @@ def ValidateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, 
 
 # %% TRAINING and VALIDATION template function (LEGACY, no longer maintained) - 04-06-2024
 #@deprecated() # DEVNOTE requires Python 3.13
-def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lossFcn: nn.Module, optimizer, config: dict = {}):
+def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, 
+                          model: nn.Module, 
+                          lossFcn: nn.Module, 
+                          optimizer, 
+                          config: dict = {}):
 
     '''Function to train and validate a model using specified dataloaders and loss function'''
     # NOTE: is the default dictionary considered as "single" object or does python perform a merge of the fields?
@@ -1913,9 +1930,18 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, model: nn.Module, lo
 # %% Model evaluation function on a random number of samples from dataset - 06-06-2024
 # Possible way to solve the issue of having different cost function terms for training and validation --> add setTrain and setEval methods to switch between the two
 
-def EvaluateModel(dataloader: DataLoader, model: nn.Module, lossFcn: nn.Module, device=GetDeviceMulti(), numOfSamples: int = 10,
-                  inputSample: torch.tensor = None, labelsSample: torch.tensor = None) -> np.array:
+def EvaluateModel(dataloader: DataLoader, 
+                  model: nn.Module, 
+                  lossFcn: nn.Module, 
+                  device=None, 
+                  numOfSamples: int = 10,
+                  inputSample: torch.Tensor | None = None, 
+                  labelsSample: torch.Tensor | None = None) -> np.ndarray:
     '''Torch model evaluation function to perform inference using either specified input samples or input dataloader'''
+
+    if device is None:
+        device = GetDeviceMulti()
+
     model.eval()  # Set model in prediction mode
     with torch.no_grad():
         if inputSample is None and labelsSample is None:

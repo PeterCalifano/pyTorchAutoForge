@@ -17,7 +17,6 @@ from pyTorchAutoForge.api.tcp import tcpServerPy
 from pyTorchAutoForge.api.tcp.tcpServerPy import DataProcessor, pytcp_server, pytcp_requestHandler, ProcessingMode
 import torch, kornia
 from torch import nn
-from pyTorchAutoForge.model_building.modelBuildingBlocks import ReloadModelFromOptuna
 from functools import partial
 import cv2 as ocv
 from pyTorchAutoForge.utils import GetDevice

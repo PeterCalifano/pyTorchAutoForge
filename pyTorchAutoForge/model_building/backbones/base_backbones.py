@@ -5,7 +5,7 @@ from functools import singledispatch
 from torch import nn
 from dataclasses import dataclass, field
 from pyTorchAutoForge.model_building.backbones.input_adapters import BaseAdapterConfig, InputAdapterFactory
-
+import torch
 
 @dataclass
 class FeatureExtractorConfig(BaseConfigClass):
@@ -24,12 +24,15 @@ class FeatureExtractorConfig(BaseConfigClass):
     # Dimension of the final linear layer (if you want to add a linear layer)
     output_size: int | None = None
     remove_classifier: bool = True
-    device: str = GetDeviceMulti()
+    device: torch.device | str | None = None
     input_channels: int = 3 # Placeholder value
 
     # Whether to return only the final feature map, or all intermediate outputs
     output_type: Literal['last', 'spill_features', 'spatial_features'] = 'last'
 
+    def __post_init__(self):
+        if self.device is None:
+            self.device = GetDeviceMulti()
 
 @dataclass
 class BackboneConfig(BaseConfigClass):

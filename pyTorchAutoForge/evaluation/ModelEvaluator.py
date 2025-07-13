@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pyTorchAutoForge.utils import torch_to_numpy, numpy_to_torch
 from pyTorchAutoForge.datasets import DataloaderIndex
 from torch.utils.data import DataLoader
-from pyTorchAutoForge.utils.utils import GetDevice
+from pyTorchAutoForge.utils import GetDevice, GetDeviceMulti
 from pyTorchAutoForge.optimization import CustomLossFcn
 
 from collections.abc import Callable
@@ -23,7 +23,7 @@ import seaborn as sns
 
 @dataclass
 class ModelEvaluatorConfig():
-    device = GetDevice()
+    device : torch.device | str | None = None
     # TODO
 
 # TODO (PC) rework this class. Not general enough, hint types are to review, constrain more.
@@ -55,7 +55,7 @@ class ModelEvaluator():
                  lossFcn: nn.Module | CustomLossFcn,
                  dataLoader: DataLoader,
                  plotter: ResultsPlotterHelper,
-                 device: str = 'cpu',
+                 device: torch.device | str | None = None,
                  custom_eval_fcn: Callable | None = None,
                  make_plot_predict_vs_target: bool = False,
                  output_scale_factors: NDArray[np.generic] | torch.Tensor | None = None,
@@ -69,7 +69,7 @@ class ModelEvaluator():
         self.loss_fcn = lossFcn
         self.validationDataloader: DataLoader = dataLoader
         self.custom_eval_function = custom_eval_fcn
-        self.device = device
+        self.device = device if device is not None else GetDeviceMulti()
         self.model = model.to(self.device)
         self.stats: dict = {}
         self.plotter = plotter
