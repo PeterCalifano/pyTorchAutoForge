@@ -104,7 +104,7 @@ class ModelHandlerONNx:
                      onnx_model_name: str | None = None, 
                      dynamic_axes: dict | None = None, 
                      IO_names: dict | None = None,
-                     verbose: bool = True) -> str:
+                     enable_verbose: bool = False) -> str:
         """Export the model to ONNx format using TorchScript backend."""
 
         # Prepare export folder and compose name
@@ -142,7 +142,7 @@ class ModelHandlerONNx:
                         input_names=IO_names['input'],              
                         output_names=IO_names['output'],            
                         dynamic_axes=dynamic_axes,
-                        verbose=verbose, report=self.generate_report)
+                        verbose=enable_verbose, report=self.generate_report)
 
         print(f"Model exported to ONNx format: {self.onnx_filepath}")
 
@@ -165,7 +165,7 @@ class ModelHandlerONNx:
                             onnx_model_name: str = 'onnx_dynamo_export', 
                             dynamic_axes: dict | None = None,
                             IO_names: dict | None = None,
-                            verbose: bool = True) -> None:
+                            enable_verbose: bool = False) -> None:
         """Export the model to ONNx format using TorchDynamo."""
 
         # Prepare export folder and compose name
@@ -203,7 +203,8 @@ class ModelHandlerONNx:
                                         input_names=['input'],
                                         output_names=['output'],
                                         dynamic_axes=self.dynamic_axes, 
-                                        dynamo=True, report=self.generate_report)
+                                        dynamo=True, report=self.generate_report,
+                                         verbose=enable_verbose)
 
         # Call model optimization
         onnx_program.optimize()
