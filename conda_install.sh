@@ -1,9 +1,9 @@
 # Default values
-jetson_target=0
-editable_mode=0
-sudo_mode=0
+jetson_target=false
+editable_mode=false
+sudo_mode=false
 venv_name="autoforge"
-create_conda_env=0
+create_conda_env=false
 
 # Parse options using getopt
 # NOTE: no ":" after option means no argument, ":" means required argument, "::" means optional argument
@@ -36,18 +36,18 @@ while true; do
       shift 2
       ;;
     -s|--sudo_mode)
-      sudo_mode=1
+      sudo_mode=true
       echo "Sudo mode requested..."
       shift
       ;;
     
     -c|--create_conda_env)
-      create_conda_env=1
+      create_conda_env=true
       echo "Creating and initializing conda environment..."
       shift
       ;;
     -e|--editable_mode)
-      editable_mode=1
+      editable_mode=true
       echo "Editable mode selected..."
       shift
       ;;
@@ -62,15 +62,15 @@ while true; do
   esac
 done
 
-if [ $jetson_target -eq 1 ] && [ ! $sudo_mode -eq 1 ]; then
+if [ $jetson_target = true ] && [ ! $sudo_mode = true ]; then
   echo "Jetson target requires sudo mode. Please use -s option."
   exit 1
 fi
 
-if [ $create_conda_env -eq 1 ]; then
+if [ $create_conda_env = true ]; then
   # Create and activate conda environment
-  conda create -n $venv_name python=3.11
-  conda init bash
+  conda create -n $venv_name python=3.12
+  source $(conda info --base)/etc/profile.d/conda.sh
   conda activate $venv_name
 else
   echo "Attempt to activate existing conda environment..."
@@ -89,7 +89,7 @@ fi
 
 sleep 1
 
-if [ $jetson_target -eq 1 ] && [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
+if [ $jetson_target = false ] && [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
     echo "libcusparseLt.so not found. Downloading and installing..."
     # if not exist, download and copy to the directory
     wget https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/linux-sbsa/libcusparse_lt-linux-sbsa-0.5.2.1-archive.tar.xz
@@ -100,8 +100,8 @@ if [ $jetson_target -eq 1 ] && [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; 
     rm -r libcusparse_lt-linux-sbsa-0.5.2.1-archive
 fi
 
-if [ $jetson_target -eq 1 ]; then
-    
+if [ $jetson_target = true ]; then
+
   #pip install -r requirements.txt  # Install dependencies
   #pip install -e .  # Install the package in editable mode
 
