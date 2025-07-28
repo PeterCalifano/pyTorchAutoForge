@@ -5,6 +5,7 @@ import torch
 import os
 import sys
 from dataclasses import dataclass, field
+import copy
 
 from torch.utils.data.dataset import TensorDataset
 from pathlib import Path
@@ -401,6 +402,17 @@ class ImagesLabelsContainer:
         """
         for img, lbl in zip(self.images, self.labels):
             yield img, lbl
+
+    def __copy__(self):
+        """
+        Create a deep copy of the container.
+        """
+        return ImagesLabelsContainer(
+            images=copy.deepcopy(self.images),
+            labels=copy.deepcopy(self.labels),
+            labels_datakeys=copy.deepcopy(self.labels_datakeys),
+            labels_sizes=copy.deepcopy(self.labels_sizes)
+        )
 
 
 # TODO Update/remove
