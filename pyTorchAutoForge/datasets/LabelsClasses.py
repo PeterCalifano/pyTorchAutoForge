@@ -29,6 +29,7 @@ class PTAF_Datakey(enum.Enum):
     REFERENCE_SIZE = 8  # Reference size of the object, e.g. diameter or radius
     PHASE_ANGLE = 9  # Phase angle of the scene
     CENTRE_OF_FIGURE = 10  # Centre of figure of the object
+    APPARENT_SIZE = 11  # Apparent size of the object in pixels
 
     def get_lbl_vector_size(self):
         # Define sizes for data keys
@@ -48,6 +49,7 @@ class PTAF_Datakey(enum.Enum):
             PTAF_Datakey.REFERENCE_SIZE: 1,
             PTAF_Datakey.PHASE_ANGLE: 1,
             PTAF_Datakey.CENTRE_OF_FIGURE: 2,  # x, y coordinates of the centre of figure
+            PTAF_Datakey.APPARENT_SIZE: 1  # Apparent size in pixels
         }
 
         return sizes.get(self, None)
@@ -283,9 +285,12 @@ class LabelsContainer(BaseLabelsContainer):
         elif item == PTAF_Datakey.PHASE_ANGLE:
             return float(self.auxiliary.phase_angle_in_deg)
 
+        elif item == PTAF_Datakey.APPARENT_SIZE:
+            return float(self.geometric.obj_apparent_size_in_pix)
+
         else:
             # Raise AttributeError to maintain standard behavior
-            raise AttributeError(f"'{self.__class__.__name__}' object has no definition for PTAF_Datakey '{item}'.")
+            raise AttributeError(f"'{self.__class__.__name__}' object has no definition for PTAF_Datakey '{item}'. Make sure it exists or add it.")
 
     def get_labels(self, data_keys: tuple[PTAF_Datakey | str, ...]) -> list[Any]:
         """
