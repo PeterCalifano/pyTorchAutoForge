@@ -5,8 +5,7 @@ from .mlflow import StartMLflowUI
 from .matlab import TorchModelMATLABwrapper
 #from .telegram import AutoForgeAlertSystemBot
 
-__all__ = ['ExportTorchModelToONNx', 
-           'LoadTorchModelFromONNx', 
+__all__ = ['LoadTorchModelFromONNx', 
            'LoadModel', 
            'SaveModel', 
            'LoadDataset', 

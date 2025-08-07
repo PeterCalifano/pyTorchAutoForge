@@ -38,6 +38,9 @@
 		},
 		{
 			"path": "../MachineLearningGears_for_SpaceNav"
+		},
+		{
+			"path": "../eda_PeterCdev"
 		}
 	],
 	"settings": {}
