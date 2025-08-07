@@ -461,7 +461,7 @@ class AugmentationConfig:
     enable_batch_validation_check: bool = False
     invalid_sample_remedy_action: Literal["discard", "resample", "original"] = "original"
     max_invalid_resample_attempts: int = 10  # Max attempts to resample invalid images
-    min_num_bright_pixels: int = 1000  
+    min_num_bright_pixels: int = 500
 
     def __post_init__(self):
 
@@ -885,7 +885,7 @@ class ImageAugmentationsHelper(nn.Module):
         Validate input images after augmentation. Attempt fix according to selected remedy action.
         """
         # Determine validity of input images according to is_valid_image_ criteria (default or custom)
-        # TODO: allow _is_valid_image to be custom by overloading with user-specified function returning a mask of size (B, N)
+        # TODO: allow _is_valid_image to be custom by overloading with user-specified function returning a mask of size (B, N). Use a functor to enforce constraints on the method signature
         # TODO: requires extensive testing!
 
         inputs = list(inputs)
@@ -982,8 +982,7 @@ class ImageAugmentationsHelper(nn.Module):
         inputs = tuple(input.to(self.augs_cfg.device) for input in inputs)
 
         # A threshold to detect near-black images (tune if needed)
-        is_pixel_bright_count_mask = (
-            torch.abs(inputs[img_index]) > 5E-2).view(B, -1).sum(dim=1)
+        is_pixel_bright_count_mask = (torch.abs(inputs[img_index]) > 1).view(B, -1).sum(dim=1)
         is_valid_mask = is_pixel_bright_count_mask >= self.augs_cfg.min_num_bright_pixels
 
         # Indices of invalid images
