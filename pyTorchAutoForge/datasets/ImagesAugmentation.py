@@ -444,12 +444,12 @@ class AugmentationConfig:
 
         # Check max_shift_img_fraction is in (0,1) 
         if isinstance(self.max_shift_img_fraction, (tuple, list)):
-            if not (0.0 < self.max_shift_img_fraction[0] <= 1.0 and
-                    0.0 < self.max_shift_img_fraction[1] <= 1.0):
+            if not (0.0 <= self.max_shift_img_fraction[0] <= 1.0 and
+                    0.0 <= self.max_shift_img_fraction[1] <= 1.0):
                 raise ValueError(
                     "max_shift_img_fraction values must be in the range (0, 1) as fraction of the input image size.")
         else:
-            if not (0.0 < self.max_shift_img_fraction <= 1.0):
+            if not (0.0 <= self.max_shift_img_fraction <= 1.0):
                 raise ValueError(
                     "max_shift_img_fraction values must be in the range (0, 1) as fraction of the input image size.")
 
