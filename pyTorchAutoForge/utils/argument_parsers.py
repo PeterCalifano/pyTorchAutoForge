@@ -93,8 +93,9 @@ PTAF_training_parser.add_argument(
 
 # Parser base arguments
 # Dataset processing
-PTAF_training_parser.add_argument("--augment_validation_set", type=bool,
-                                  default=False, help="Whether to augment the validation set.")
+PTAF_training_parser.add_argument("--augment_validation_set", 
+                                  action='store_true', 
+                                  help="Enable augmentation applied to the validation set.")
 
 
 def parse_eval_dataset(arg):
@@ -146,9 +147,8 @@ PTAF_training_parser.add_argument(
     '--mlflow_tracking_uri', type=str, default=None, help='MLflow tracking URI')
 # Mlflow experiment name
 PTAF_training_parser.add_argument(
-    '--mlflow_exper_name', type=str, default=None, help='MLflow experiment name')
+    '--mlflow_experiment_name', type=str, default=None, help='MLflow experiment name')
 
-# DOUBT, what are the actions? Can it accept false in that case?
 PTAF_training_parser.add_argument('--device', type=str, default=None,
                                   help='Device to use for training (e.g., "cuda" or "cpu")')
 

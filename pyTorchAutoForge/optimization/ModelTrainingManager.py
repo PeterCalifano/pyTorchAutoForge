@@ -805,7 +805,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Run data agmentations
-                    if self.data_augmentation_module is not None:
+                    if self.data_augmentation_module is not None and self.augment_validation_data:
                         # DEVNOTE current implementation limited to keypoints. 
                         # How to allow extraction of entries in Y? 
                         X, Y = self.augment_data_batch(X, Y)
@@ -849,7 +849,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform data augmentation on batch
-                    if self.data_augmentation_module is not None:
+                    if self.data_augmentation_module is not None and self.augment_validation_data:
                         X, Y = self.augment_data_batch(X, Y)
 
                     # Perform FORWARD PASS
