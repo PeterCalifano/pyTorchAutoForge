@@ -1,9 +1,6 @@
 from enum import Enum
 import numpy as np
-from sympy import NDimArray
 from torch import nn, cat
-# Auxiliar functions
-from typing import Any
 from numpy.typing import NDArray
 
 conv_size_autocomp_input_types = tuple[int,...] | list[int] | NDArray[np.integer]
@@ -27,7 +24,6 @@ def ComputeConv2dOutputSize(input_size: conv_size_autocomp_input_types,
     """
     return int(((input_size[0] + 2*padding_size - (kernel_size-1)-1) / stride_size) + 1), int(((input_size[1] + 2*padding_size - (kernel_size-1)-1) / stride_size) + 1)
 
-
 def ComputePooling2dOutputSize(inputSize: conv_size_autocomp_input_types, 
                                kernelSize: int = 2, 
                                strideSize: int = 2, 
@@ -47,8 +43,6 @@ def ComputePooling2dOutputSize(inputSize: conv_size_autocomp_input_types,
     return int(((inputSize[0] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1), int(((inputSize[1] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1)
 
 # ConvBlock 2D and flatten sizes computation (SINGLE BLOCK)
-
-
 def ComputeConvBlock2dOutputSize(input_size: conv_size_autocomp_input_types, 
                                out_channels_size: int,
                                conv2d_kernel_size: int = 3, 
@@ -185,7 +179,6 @@ class EnumMultiHeadOutMode(Enum):
     Append = 1
     Sum = 2  # TODO not implemented yet
     Average = 3  # TODO not implemented yet
-
 
 # TODO (PC) move to modelBuildingBlocks module (or maybe a new one, it is already quite large)
 class MultiHeadRegressor(nn.Module):

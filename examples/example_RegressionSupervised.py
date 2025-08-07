@@ -12,10 +12,10 @@ import pandas as pd
 import time
 
 from sklearn.preprocessing import StandardScaler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 # Import classes from PTAF
-from pyTorchAutoForge.datasets import RegressionDataset, DataloaderIndex
+from pyTorchAutoForge.datasets import DataloaderIndex
 from pyTorchAutoForge.optimization import ModelTrainingManagerConfig, ModelTrainingManager, TaskType
 from pyTorchAutoForge.model_building import ModelMutator
 from pyTorchAutoForge.utils import GetDevice
@@ -45,7 +45,7 @@ dummy_y = torch.randn(1000, 2)   # 1000 samples, 2 targets
 # For simple tasks like vector to vector regression, PTAF provides a "RegressionDataset" class. 
 batch_size = 512
 
-train_dataset = RegressionDataset() # TODO change name
+train_dataset = TensorDataset(dummy_X, dummy_y)
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
 # Then, define the dataloader index. This class allows one to store training and validation dataloader in a single object, whereas a random split can be used in case only the first is provided. 
@@ -80,7 +80,7 @@ trainerConfig = ModelTrainingManagerConfig(
     num_of_epochs=num_of_epochs,
     optimizer=optimizer,
     eval_example=True, # Set whether you want intermediate evaluation of the model on the validation datasets, with some statistics
-    checkpointDir="checkpoints", # Specify the directory where the checkpoints will be saved. Created if not existing.
+    checkpoint_dir="checkpoints", # Specify the directory where the checkpoints will be saved. Created if not existing.
     optuna_trial=None, # This is a special entry for hyperparameter optimization with optuna, do not consider for now
     device=GetDevice(),
     mlflow_logging=True) # Note: currently, checkpoints loading is not yet automated, but soon it will ;)

@@ -149,7 +149,7 @@ PTAF_training_parser.add_argument(
     '--mlflow_exper_name', type=str, default=None, help='MLflow experiment name')
 
 # DOUBT, what are the actions? Can it accept false in that case?
-PTAF_training_parser.add_argument('--device', type=str, default=GetDeviceMulti(),
+PTAF_training_parser.add_argument('--device', type=str, default=None,
                                   help='Device to use for training (e.g., "cuda" or "cpu")')
 
 PTAF_training_parser.add_argument(

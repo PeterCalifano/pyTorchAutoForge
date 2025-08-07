@@ -22,6 +22,8 @@ from pyTorchAutoForge.model_building.backbones.input_adapters import (
     ScalerAdapterConfig,
 )
 
+# TODO (PC) add tests for new functionalities in ScalerAdapter and ScalerAdapterConfig!
+
 def test_conv2d_adapter_forward_and_factory_dispatch():
     # Prepare a float64 input to test dtype casting and resizing
     batch, in_ch, H_in, W_in = 2, 3, 12, 16
@@ -155,7 +157,6 @@ def test_input_adapter_factory_unknown_config():
     class DummyConfig: pass
     with pytest.raises(ValueError):
         InputAdapterFactory(DummyConfig())
-
 
 def test_scaler_adapter_vector_scale_and_bias_numpy():
     # using numpy arrays

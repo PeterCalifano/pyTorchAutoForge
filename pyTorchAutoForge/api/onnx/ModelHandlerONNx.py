@@ -2,10 +2,8 @@ import numpy
 import torch, onnx, os
 from pyTorchAutoForge.model_building.modelBuildingBlocks import AutoForgeModule
 from pyTorchAutoForge.utils import AddZerosPadding, torch_to_numpy, timeit_averaged_
-from onnxruntime import InferenceSession
 from numpy.testing import assert_allclose
-
-
+from pyTorchAutoForge.utils import numpy_to_torch
 
 # TODO: add support to use onnx simplify 
 #simplified_model, check_status = onnxsim.simplify(onnx_model)
@@ -18,15 +16,15 @@ class ModelHandlerONNx:
     _extended_summary_
     """
     # CONSTRUCTOR
-
     def __init__(self, 
                  model: torch.nn.Module | AutoForgeModule | onnx.ModelProto, 
                  dummy_input_sample: torch.Tensor | numpy.ndarray, 
                  onnx_export_path: str = '.', 
                  opset_version: int = 13, 
                  run_export_validation: bool = True,
-                 generate_report: bool = False) -> None:
-        
+                 generate_report: bool = False,
+                 run_onnx_simplify: bool = False) -> None:
+
         # Store shallow copy of model
         if isinstance(model, torch.nn.Module):
             self.torch_model: torch.nn.Module = model
@@ -47,21 +45,15 @@ class ModelHandlerONNx:
         self.IO_names = {'input': ['input'], 'output': ['output']}
         self.dynamic_axes = {'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
         self.generate_report = generate_report
+        self.run_onnx_simplify = run_onnx_simplify
 
         # Get version of modules installed in working environment
         self.torch_version = torch.__version__
 
     # METHODS
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def torch_export(self, 
-                     input_tensor: torch.Tensor | None = None, 
-                     onnx_model_name: str | None = None, 
-                     dynamic_axes: dict | None = None, 
-                     IO_names: dict | None = None,
-                     verbose: bool = True) -> str:
-        """Export the model to ONNx format using TorchScript backend."""
-
-        # TODO (PC) move all this preliminary code to a dedicated method
+    def _make_model_filename_and_folder(self, onnx_model_name) -> str:
+        """Method to generate a filename for the model based on its class name and version, and to prepare the export folder."""
         if onnx_model_name is None and self.onnx_export_path is not None:
             onnx_model_name = os.path.basename(self.onnx_export_path)
 
@@ -76,11 +68,47 @@ class ModelHandlerONNx:
 
         # Check if any model is already exported in the export path and append ID to the filename if any
         nameID = 0
-        onnx_model_name_tmp = onnx_model_name
+        onnx_model_name_tmp = onnx_model_name + "_" + str(nameID)
         while os.path.isfile(os.path.join(os.path.dirname(self.onnx_export_path), onnx_model_name_tmp + ".onnx")):
-            onnx_model_name_tmp = onnx_model_name + str(nameID)
+            onnx_model_name_tmp = onnx_model_name + "_" + str(nameID)
             nameID += 1
+
         onnx_model_name = onnx_model_name_tmp
+        self.onnx_filepath = os.path.join(
+            self.onnx_export_path, onnx_model_name + ".onnx")
+        
+        return onnx_model_name
+
+    def _run_onnx_simplify(self, onnx_model: onnx.ModelProto) -> onnx.ModelProto:
+        
+        from onnxsim import simplify
+        model_simplified, check = simplify(onnx_model)
+
+        # Reload the model from disk
+        self.onnx_model = self.onnx_load(onnx_filepath=self.onnx_filepath)
+
+        # Simplify the ONNX model
+        model_simplified, check = simplify(onnx_model)
+
+        # Save simplified model
+        onnx.save(model_simplified, self.onnx_filepath)
+        print(f"ONNX model simplified and saved: {self.onnx_filepath}")
+
+        if not check:
+            print('\033[38;5;208mWarning: ONNX model simplifier internal validation failed.\033[0m')
+        
+        return self.onnx_filepath, model_simplified
+
+    def torch_export(self, 
+                     input_tensor: torch.Tensor | None = None, 
+                     onnx_model_name: str | None = None, 
+                     dynamic_axes: dict | None = None, 
+                     IO_names: dict | None = None,
+                     enable_verbose: bool = False) -> str:
+        """Export the model to ONNx format using TorchScript backend."""
+
+        # Prepare export folder and compose name
+        onnx_model_name = self._make_model_filename_and_folder(onnx_model_name=onnx_model_name)
 
         # Assign input tensor from init if not provided
         if input_tensor is None and self.dummy_input_sample is not None:
@@ -105,9 +133,6 @@ class ModelHandlerONNx:
         # 7) Model input name
         # 8) Model output name
 
-        self.onnx_filepath = os.path.join(
-            self.onnx_export_path + ".onnx")
-
         torch.onnx.export(self.torch_model,               
                         input_tensor,                      
                         self.onnx_filepath,
@@ -117,7 +142,7 @@ class ModelHandlerONNx:
                         input_names=IO_names['input'],              
                         output_names=IO_names['output'],            
                         dynamic_axes=dynamic_axes,
-                        verbose=verbose, report=self.generate_report)
+                        verbose=enable_verbose, report=self.generate_report)
 
         print(f"Model exported to ONNx format: {self.onnx_filepath}")
 
@@ -125,7 +150,12 @@ class ModelHandlerONNx:
             # Reload the model from disk
             self.onnx_model = self.onnx_load(onnx_filepath=self.onnx_filepath)
             
-            self.onnx_validate(self.onnx_model)
+            self.onnx_validate(self.onnx_model,
+                               test_sample=numpy_to_torch(self.dummy_input_sample))
+
+        if self.run_onnx_simplify:
+            self.onnx_filepath, model_simplified = self._run_onnx_simplify(self.onnx_model)
+            print(f"ONNX model simplified and saved: {self.onnx_filepath}")
 
         return self.onnx_filepath
     
@@ -135,19 +165,12 @@ class ModelHandlerONNx:
                             onnx_model_name: str = 'onnx_dynamo_export', 
                             dynamic_axes: dict | None = None,
                             IO_names: dict | None = None,
-                            verbose: bool = True) -> None:
+                            enable_verbose: bool = False) -> None:
         """Export the model to ONNx format using TorchDynamo."""
 
-        # TODO update as torch_export. Revisit and merge common functionalities
-
-        # Check if any model is already exported in the export path and append ID to the filename if any
-        # FIXME renaming routine breaks
-        nameID = 0
-        onnx_model_name_tmp = onnx_model_name
-        while os.path.isfile(os.path.join(os.path.dirname(self.onnx_export_path), onnx_model_name_tmp + ".onnx")):
-            onnx_model_name_tmp = onnx_model_name + str(nameID)
-            nameID += 1
-        onnx_model_name = onnx_model_name_tmp
+        # Prepare export folder and compose name
+        onnx_model_name = self._make_model_filename_and_folder(
+            onnx_model_name=onnx_model_name)
 
         # Assign input tensor from init if not provided
         if input_tensor is None and self.dummy_input_sample is not None:
@@ -172,31 +195,35 @@ class ModelHandlerONNx:
         # 7) Model input name
         # 8) Model output name
         
-        onnx_program = torch.onnx.export(self.torch_model, input_tensor,
-                          export_params=True,
-                          opset_version=self.opset_version,
-                          do_constant_folding=True,
-                          input_names=['input'],
-                          output_names=['output'],
-                          dynamic_axes=self.dynamic_axes, 
-                          dynamo=True, report=self.generate_report)
+        onnx_program = torch.onnx.export(self.torch_model, 
+                                         input_tensor,
+                                        export_params=True,
+                                        opset_version=self.opset_version,
+                                        do_constant_folding=True,
+                                        input_names=['input'],
+                                        output_names=['output'],
+                                        dynamic_axes=self.dynamic_axes, 
+                                        dynamo=True, report=self.generate_report,
+                                         verbose=enable_verbose)
 
         # Call model optimization
         onnx_program.optimize()
 
         # Save optimized model (serialized ONNx model)
-        self.onnx_filepath = os.path.join(
-            self.onnx_export_path + ".onnx")
-        
         onnx_program.save(self.onnx_filepath)
-
         print(f"Model exported to ONNx format using TorchDynamo: {self.onnx_filepath}")
 
         if self.run_export_validation:
             # Reload the model from disk
             self.onnx_model = self.onnx_load(onnx_filepath=self.onnx_filepath)
 
-            self.onnx_validate(onnx_model=self.onnx_model)
+            self.onnx_validate(onnx_model=self.onnx_model,
+                               test_sample=numpy_to_torch(self.dummy_input_sample))
+
+        if self.run_onnx_simplify:
+            # Reload the model from disk
+            self.onnx_filepath, model_simplified = self._run_onnx_simplify(self.onnx_model)
+            print(f"ONNX model simplified and saved: {self.onnx_filepath}")
 
         return self.onnx_filepath
 
@@ -226,38 +253,59 @@ class ModelHandlerONNx:
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def onnx_validate(self, 
-                      onnx_model: onnx.ModelProto, 
+                      onnx_model: onnx.ModelProto | str, 
                       test_sample : torch.Tensor | numpy.ndarray = None, 
                       output_sample : torch.Tensor | numpy.ndarray = None) -> None:
         """Validate the ONNx model using onnx.checker.check_model."""
 
-        print('Validating model using checker.check_model...')
-        onnx.checker.check_model(onnx_model, full_check=True)
+        # If onnx_model is a string, load the model from the file
+        if isinstance(onnx_model, str):
+            if not os.path.isfile(onnx_model):
+                raise FileNotFoundError(f"ONNX model file not found: {onnx_model}")
+            onnx_model = onnx.load(onnx_model)
 
+        elif not isinstance(onnx_model, onnx.ModelProto):
+            raise TypeError(f"Invalid ONNX model class: {type(onnx_model)}")
+
+        print('\033[94mValidating model using ONNx checker.check_model... \033[0m', end=' ')
+        onnx.checker.check_model(onnx_model, full_check=True)
+        print('\033[92mPASSED.\033[0m')
+        
         if test_sample is not None:
-            print('Validating model using onnxruntime...')
-            ort_session = InferenceSession(
-                onnx_model, providers=["CPUExecutionProvider"])
+            print('\033[94mValidating model inference using onnxruntime...\033[0m', end=' ')
+            from onnxruntime import InferenceSession
+
+            ort_session = InferenceSession(onnx_model.SerializeToString(), providers=["CPUExecutionProvider"])
 
             # Compute ONNX Runtime output prediction
             ort_inputs = {ort_session.get_inputs()[0].name: torch_to_numpy(tensor=test_sample)} # Assumes input is only one tensor
             ort_outs = ort_session.run(None, ort_inputs)
+            print('\033[92mPASSED.\033[0m')
 
             if output_sample is not None:
                 # Compare ONNX Runtime and PyTorch results
+                print('\033[94mOutput equivalence test. Using tolerances rtol=1e-03 and atol=1e-06...\033[0m', end=' ')
                 assert_allclose(torch_to_numpy(output_sample), ort_outs[0], rtol=1e-03, atol=1e-06)
+                print('\033[92mPASSED.\033[0m')
 
-                print('Output equivalence test passed successfully with tolerances rtol=1e-03 and atol=1e-06.')
+            else:
+                print('\033[38;5;208mNo output sample provided for ONNX model validation. Result validation test skipped.\033[0m')
+                # TODO (UM) add warning message here
 
-        # TODO (UM) extend validation method (equivalence test)
+            # TODO (UM) extend validation method (equivalence test)
+
+        else:
+            print('\033[38;5;208mNo test sample provided for ONNX model validation. Equivalence test vs torch model skipped.\033[0m')
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # TODO (PC) test method!
     def onnx_compare_timing(self, torch_model : torch.nn.Module, onnx_model: onnx.ModelProto, test_sample : torch.Tensor | numpy.ndarray, num_iterations : int = 100) -> dict:
         
         # Move model to cpu for comparison
         torch_model.to('cpu')
 
         # Prepare onnxruntime session
+        from onnxruntime import InferenceSession
         ort_session = InferenceSession(onnx_model, providers=["CPUExecutionProvider"])
 
         # Construct input dictionary for onnxruntime
@@ -283,7 +331,6 @@ class ModelHandlerONNx:
         if onnx_filepath == "": 
             onnx_filepath = self.onnx_filepath
 
-        # BUG onnx_filepath appears to be incorrect (unneeded trailing 0)
         self.onnx_model = onnx.load(onnx_filepath)
 
         return self.onnx_model
@@ -293,71 +340,3 @@ class ModelHandlerONNx:
         """Method to load ONNx model from disk and convert to torch."""
         # TODO
         pass
-
-
-################################## LEGACY CODE ##################################
-# %% Torch to/from ONNx format exporter/loader based on TorchDynamo (PyTorch >2.0) - 09-06-2024
-def ExportTorchModelToONNx(model: torch.nn.Module, dummyInputSample: torch.Tensor, onnxExportPath: str = '.', 
-                           onnxSaveName: str = 'trainedModelONNx', modelID: int = 0, onnx_version=None):
-
-    # Define filename of the exported model
-    if modelID > 999:
-        stringLength = modelID
-    else:
-        stringLength = 3
-
-    modelSaveName = os.path.join(
-        onnxExportPath, onnxSaveName + AddZerosPadding(modelID, stringLength))
-
-    # Export model to ONNx object
-    # NOTE: ONNx model is stored as a binary protobuf file!
-    modelONNx = torch.onnx.dynamo_export(model, dummyInputSample)
-    # modelONNx = torch.onnx.export(model, dummyInputSample) # NOTE: ONNx model is stored as a binary protobuf file!
-
-    # Save ONNx model
-    pathToModel = modelSaveName + '.onnx'
-    modelONNx.save(destination=pathToModel)  # NOTE: this is a torch utility, not onnx!
-
-    # Try to convert model to required version
-    if (onnx_version is not None) and type(onnx_version) is int:
-        convertedModel = None
-        print('Attempting conversion of ONNx model to version:', onnx_version)
-        try:
-            print(f"Model before conversion:\n{modelONNx}")
-            # Reload onnx object using onnx module
-            tmpModel = onnx.load(pathToModel)
-            # Convert model to get new model proto
-            convertedModelProto = onnx.version_converter.convert_version(
-                tmpModel, onnx_version)
-
-            # TEST
-            # convertedModelProto.ir_version = 7
-
-            # Save model proto to .onnbx
-            onnx.save_model(convertedModelProto, modelSaveName +
-                            '_ver' + str(onnx_version) + '.onnx')
-
-        except Exception as errorMsg:
-            print('Conversion failed due to error:', errorMsg)
-    else:
-        convertedModel = None
-
-    return modelONNx, pathToModel, convertedModel
-
-def LoadTorchModelFromONNx(dummyInputSample: torch.Tensor, onnxExportPath: str = '.', onnxSaveName: str = 'trainedModelONNx', modelID: int = 0):
-    
-    # Define filename of the exported model
-    if modelID > 999:
-        stringLength = modelID
-    else:
-        stringLength = 3
-
-    modelSaveName = os.path.join(
-        onnxExportPath, onnxSaveName + '_', AddZerosPadding(modelID, stringLength))
-
-    if os.path.isfile():
-        modelONNx = onnx.load(modelSaveName)
-        AutoForgeModule = None
-        return AutoForgeModule, modelONNx
-    else:
-        raise ImportError('Specified input path to .onnx model not found.')

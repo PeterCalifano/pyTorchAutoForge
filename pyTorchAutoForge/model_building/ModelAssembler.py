@@ -19,14 +19,16 @@ model_assembly = nn.Sequential(*[model, model2])
 print(model_assembly)
 exit(0)
 """
-from pyTorchAutoForge.utils import GetDevice 
+from pyTorchAutoForge.utils import GetDevice, GetDeviceMulti
 from pyTorchAutoForge.model_building import AutoForgeModule
-from typing import Union
+from typing import Literal
 from torch import nn
+import torch
 
 # DEVNOTE: verify is tracing now works with this class
 class MultiHeadAdapter(nn.Module):
-    def __init__(self, numOfHeads: int, headModels:Union[nn.Module, AutoForgeModule, nn.ModuleList, nn.ModuleDict]) -> "MultiHeadAdapter":
+    def __init__(self, numOfHeads: int, 
+                 headModels: nn.Module | AutoForgeModule | nn.ModuleList | nn.ModuleDict):
         self.numOfHeads = numOfHeads
         self.headList = nn.ModuleDict()
         self.headNames = None
@@ -65,8 +67,12 @@ class MultiHeadAdapter(nn.Module):
 # DEVNOTE: try to make it a subclass of nn.Module
 class ModelAssembler(nn.Module):
     # DEVNOTE: behaviour for each type is TBC
-    def __init__(self, device:str = GetDevice(),  *args: Union[AutoForgeModule, nn.Module, nn.ModuleList, nn.ModuleList]) -> "ModelAssembler":
-        super(self).__init__()
+    def __init__(self, 
+                 device: torch.device | str | None= None,  
+                 *args: AutoForgeModule | nn.Module | nn.ModuleList | nn.ModuleDict):
+        super().__init__()
+
+        self.device = device if device is not None else GetDeviceMulti()
 
         for idModule, module in enumerate(args):
             

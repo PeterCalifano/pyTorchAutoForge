@@ -51,15 +51,17 @@ class AutoForgeModule(torch.nn.Module):
         else:
             self.moduleName = moduleName
 
-    def save(self, exampleInput=None, target_device: str | None = None) -> None:
+    def save(self, 
+             example_input=None, 
+             target_device: torch.device | str | None = None) -> None:
 
-        if self.enable_tracing == True and exampleInput is None:
+        if self.enable_tracing == True and example_input is None:
             self.enable_tracing = False
             raise Warning(
                 'You must provide an example input to trace the model through torch.jit.trace(). Overriding enable_tracing to False.')
 
         if target_device is None:
-            target_device = self.device
+            target_device = self.device if self.device is not None else GetDeviceMulti()
 
     def load(self):
         pass
@@ -72,7 +74,7 @@ class TemplateNetBaseConfig(BaseConfigClass):
     model_name: str = "template_network"
 
     # Architecture design
-    regularization_layer_type: regularizer_types = 'batchnorm'
+    regularization_layer_type: regularizer_types = 'none'  # Regularization layer type, e.g. dropout, batchnorm, etc.
 
     out_channels_sizes: list[int] | None = None
 
@@ -237,6 +239,10 @@ class TemplateFullyConnectedNetConfig(TemplateNetBaseConfig):
         if self.input_layer_size is None:
             raise ValueError(
                 "TemplateFullyConnectedNetConfig: 'input_layer_size' cannot be None")
+                
+        elif self.input_layer_size <= 0:
+            raise ValueError(
+                "TemplateFullyConnectedNetConfig: 'input_layer_size' must be a positive integer")
 
         if self.output_layer_size is None:
             # Assume last layer is given by last entry of out_channels_sizes
@@ -925,7 +931,8 @@ class TemplateFullyConnectedDeepNet(AutoForgeModule):
             elif isinstance(layer, nn.BatchNorm1d):
                 val = layer(val)
             elif isinstance(layer, nn.Flatten):
-                val = layer(val)
+                if len(val.shape) > 1:
+                    val = layer(val)
 
         # Output layer
         prediction = val

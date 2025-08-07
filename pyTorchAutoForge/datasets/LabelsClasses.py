@@ -3,9 +3,57 @@ from typing import Any, Type, TypeVar
 import yaml
 import pathlib
 from typing import get_origin, get_args
+import numpy as np
+import enum
 
 T = TypeVar('T', bound='BaseLabelsContainer')
 
+try:
+    from kornia.constants import DataKey
+except ImportError:
+    print('\033[93m' + "kornia not installed, images augmentation functionalities won't be available." + '\033[0m')
+
+class PTAF_Datakey(enum.Enum):
+    """
+    Enumeration class for dataset keys. Interchangable with kornia datakeys (included in this enumeration class).
+    """
+    IMAGE = 0
+    INPUT = 0
+    MASK = 1
+    BBOX = 2
+    BBOX_XYXY = 3
+    BBOX_XYWH = 4
+    KEYPOINTS = 5
+    CLASS = 6
+    RANGE_TO_COM = 7  # Range to center of mass of object
+    REFERENCE_SIZE = 8  # Reference size of the object, e.g. diameter or radius
+    PHASE_ANGLE = 9  # Phase angle of the scene
+    CENTRE_OF_FIGURE = 10  # Centre of figure of the object
+    APPARENT_SIZE = 11  # Apparent size of the object in pixels
+
+    def get_lbl_vector_size(self):
+        # Define sizes for data keys
+        """
+        Get the size of the label vector based on the data key.
+        """
+        sizes = {
+            PTAF_Datakey.IMAGE: -1,
+            PTAF_Datakey.INPUT: -1,
+            PTAF_Datakey.MASK: -1,
+            PTAF_Datakey.BBOX: 4,  # x1, y1, x2, y2
+            PTAF_Datakey.BBOX_XYXY: 4,  # x1, y1, x2, y2
+            PTAF_Datakey.BBOX_XYWH: 4,  # x, y, width, height
+            PTAF_Datakey.KEYPOINTS: 2,  # x, y for each keypoint
+            PTAF_Datakey.CLASS: 1,
+            PTAF_Datakey.RANGE_TO_COM: 1,
+            PTAF_Datakey.REFERENCE_SIZE: 1,
+            PTAF_Datakey.PHASE_ANGLE: 1,
+            PTAF_Datakey.CENTRE_OF_FIGURE: 2,  # x, y coordinates of the centre of figure
+            PTAF_Datakey.APPARENT_SIZE: 1  # Apparent size in pixels
+        }
+
+        return sizes.get(self, None)
+    
 @dataclass
 class BaseLabelsContainer:
     """
@@ -80,12 +128,20 @@ class BaseLabelsContainer:
                     # Nested container
                     if hasattr(f.type, 'from_dict') and isinstance(raw_value, dict):
                         value = f.type.from_dict(raw_value, yaml_aliases=yaml_aliases)  # type: ignore
+
                     else:
                         value = raw_value
                         # Coerce lists to tuples if field annotation is Tuple
                         origin = get_origin(f.type)
                         if origin is tuple and isinstance(value, list):
                             value = tuple(value)
+
+                        elif ("float" in str(f.type) and not ("list" in str(f.type) or "tuple" in str(f.type))) and not isinstance(value, float):
+                            # Check if value is convertible to float
+                            try:
+                                value = float(value)
+                            except (TypeError, ValueError):
+                                raise TypeError(f"Cannot convert value '{value}' of type {type(value)} to float for field '{f.name}'")
 
             else:
                 value = data.get(f.name, None)
@@ -148,6 +204,7 @@ class GeometricLabels(BaseLabelsContainer):
                                                               metadata={'yaml': 'dObjProjectedEllipsoidMatrix'})
 
 
+
 @dataclass
 class AuxiliaryLabels(BaseLabelsContainer):
     phase_angle_in_deg: float = field(
@@ -181,6 +238,73 @@ class LabelsContainer(BaseLabelsContainer):
     kpts_heatmaps: KptsHeatmapsLabels = field(default_factory=KptsHeatmapsLabels,
                                               metadata={'yaml': 'kpts_heatmaps'})
 
+    # Dispatcher of property method from PTAF_Datakey enum:
+    def __getattr__(self, item: str) -> Any:
+        """
+        Dispatches attribute access for PTAF_Datakey enum members to the appropriate
+        label field within the container.
+
+        Args:
+            item (str): The PTAF_Datakey enum member or its string representation.
+
+        Raises:
+            AttributeError: If the provided item does not correspond to a supported PTAF_Datakey.
+
+        Returns:
+            Any: The value of the corresponding label field.
+        """
+        # Convert item to PTAF_Datakey if it's a string
+        if isinstance(item, str):
+            try:
+                item = PTAF_Datakey[item]
+            except KeyError:
+                raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'.")
+        
+        if item == PTAF_Datakey.BBOX or item == PTAF_Datakey.BBOX_XYXY or item == PTAF_Datakey.BBOX_XYWH:
+            
+            # If bbox is specified with given coordinates, check it
+            if item == PTAF_Datakey.BBOX_XYXY:
+                assert(self.geometric.bbox_coords_order == 'xyxy'), \
+                    "BBOX_XYXY requires bbox_coords_order to be 'xyxy'."
+                
+            elif item == PTAF_Datakey.BBOX_XYWH:
+                assert(self.geometric.bbox_coords_order == 'xywh'), \
+                    "BBOX_XYWH requires bbox_coords_order to be 'xywh'."
+                
+            return self.geometric.bound_box_coordinates
+    
+        elif item == PTAF_Datakey.CENTRE_OF_FIGURE:
+            return self.geometric.centre_of_figure
+        
+        elif item == PTAF_Datakey.REFERENCE_SIZE:
+            return float(self.geometric.object_reference_size)
+
+        elif item == PTAF_Datakey.RANGE_TO_COM:
+            return float(self.geometric.distance_to_obj_centre)
+
+        elif item == PTAF_Datakey.PHASE_ANGLE:
+            return float(self.auxiliary.phase_angle_in_deg)
+
+        elif item == PTAF_Datakey.APPARENT_SIZE:
+            return float(self.geometric.obj_apparent_size_in_pix)
+
+        else:
+            # Raise AttributeError to maintain standard behavior
+            raise AttributeError(f"'{self.__class__.__name__}' object has no definition for PTAF_Datakey '{item}'. Make sure it exists or add it.")
+
+    def get_labels(self, data_keys: tuple[PTAF_Datakey | str, ...]) -> list[Any]:
+        """
+        Get a list of label values corresponding to the provided data keys.
+        
+        Args:
+            data_keys (tuple[PTAF_Datakey | str, ...]): The keys for which to retrieve label values.
+
+        Returns:
+            list[Any]: A list of label values corresponding to the provided keys.
+        """
+        return np.concatenate([np.array(getattr(self, str(key.name))).ravel() for key in data_keys])
+
+
     # Convenience getters for common fields:
     @property
     def centre_of_figure(self) -> tuple[float, float]:
@@ -213,3 +337,24 @@ class LabelsContainer(BaseLabelsContainer):
     @property
     def phase_angle_in_deg(self) -> float:
         return self.auxiliary.phase_angle_in_deg
+    
+    @classmethod
+    def get_lbl_1d_vector_size(cls, data_keys: tuple[PTAF_Datakey | str, ...]):
+        """
+        Calculate the size of the label vector based on the provided data keys.
+        """
+        size = 0
+        sizes_dict = {}
+        for key in data_keys:
+                        
+            if key in (PTAF_Datakey.IMAGE, PTAF_Datakey.INPUT, PTAF_Datakey.MASK):
+                raise ValueError("is not a valid label key.")
+
+            # Check key is a valid one for which size is defined
+            if isinstance(key, PTAF_Datakey):
+                size += key.get_lbl_vector_size()
+                sizes_dict[key.name] = key.get_lbl_vector_size()
+            else:
+                raise TypeError(f"Unsupported key type: {type(key)}")
+        
+        return size, sizes_dict
