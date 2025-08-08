@@ -208,7 +208,7 @@ class ModelTrainingManagerConfig():  # TODO update to use BaseConfigClass
         if self.device is None:
             self.device = GetDeviceMulti(expected_max_vram=1024.0)
 
-        if not(torch.is_tensor(self.example_labels_scaling_factors)) and self.example_labels_scaling_factors is not None:
+        if not(torch.is_tensor(self.label_scaling_factors)) and self.label_scaling_factors is not None:
             # Print warning
             print(
                 "\033[38;5;208mWARNING: labels_scaling_factors is not a torch.Tensor. Overriden to None.\033[0m")
