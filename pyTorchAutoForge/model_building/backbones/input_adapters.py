@@ -114,7 +114,7 @@ class ScalerAdapterConfig(BaseAdapterConfig):
             raise ValueError(
                 f"Invalid scaling mode: {self.scaling_mode}. Must be 'auto_compute_stats', 'precomputed_stats', or 'batchnorm'.")
 
-        if self.scaling_mode is 'auto_compute_stats':
+        if self.scaling_mode == 'auto_compute_stats':
             if self.data_matrix is None:
                 raise ValueError(
                     "`data_matrix` must be provided in `auto_compute_stats` mode. It is used to compute the scale and bias coefficients.")
