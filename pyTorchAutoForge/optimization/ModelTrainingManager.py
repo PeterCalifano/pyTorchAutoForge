@@ -67,13 +67,18 @@
 # to set the configuration class. Default values are specified as the class defaults.
 # Loading methods only modify the parameters the user has specified
 
-#from warnings import deprecated
+# from warnings import deprecated
+from typing import Literal
 import pprint
 from typing import Any, IO
 import torch
 import mlflow
 import optuna
-import os, sys, time, colorama, glob
+import os
+import sys
+import time
+import colorama
+import glob
 import traceback
 from torch import nn
 import numpy as np
@@ -111,19 +116,18 @@ class TaskType(Enum):
 # 2) Logging of all relevat config and results to file (either csv or text from std output)
 # 3) Main training logbook to store all data to be used for model selection and hyperparameter tuning, this should be "per project"
 # 4) Training mode: k-fold cross validation leveraging scikit-learn
-from typing import Literal
+
 
 @dataclass
 class LearnRateReductOnPlateauConfig():
     '''Configuration dataclass for learning rate reduction on plateau. Contains all parameters for learning rate reduction on plateau.'''
-    lr_reduction_plateau_patience : int = 25  # Number of epochs to wait before reducing learning rate
-    lr_reduct_factor : float = 0.2
-    score_mode : Literal['min', 'max'] = 'min'
-    score_eval_thr : float = 1e-3
-    score_eval_thr_mode : Literal['rel', 'abs'] = 'rel'
-    min_lr : float = 1E-8
-    num_cooldown_epochs : int = 5
-
+    lr_reduction_plateau_patience: int = 25  # Number of epochs to wait before reducing learning rate
+    lr_reduct_factor: float = 0.2
+    score_mode: Literal['min', 'max'] = 'min'
+    score_eval_thr: float = 1e-3
+    score_eval_thr_mode: Literal['rel', 'abs'] = 'rel'
+    min_lr: float = 1E-8
+    num_cooldown_epochs: int = 5
 
     def to_scheduler_kwargs(self) -> dict:
         return {
@@ -135,10 +139,10 @@ class LearnRateReductOnPlateauConfig():
             "threshold":        self.score_eval_thr,
             "threshold_mode":   self.score_eval_thr_mode,
         }
-    
+
 
 @dataclass()
-class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass 
+class ModelTrainingManagerConfig():  # TODO update to use BaseConfigClass
     '''
     Configuration dataclass for ModelTrainingManager class. Contains all parameters ModelTrainingManager accepts as configuration.
     '''
@@ -151,30 +155,34 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
     # DIFFERENTIABLE DATA AUGMENTATION
     data_augmentation_module: torch.nn.Sequential | ImageAugmentationsHelper | None = None
     augment_validation_data: bool = False
-    enable_augs_autograd : bool = False
-    
+    enable_augs_autograd: bool = False
+
     # FIELDS with DEFAULTS
     # Optimization strategy
     num_of_epochs: int = 100  # Number of epochs for training
     keep_best: bool = True  # Keep best model during training
     enable_early_pruning: bool = False  # Enable early pruning
     pruning_patience: int = 50  # Number of epochs to wait before pruning
-    batch_accumulation_factor: int = 1  # Number of batches to accumulate gradients before updating weights
-    EXIT_ON_PRUNING: bool = True # Flag to determine whether to stop process if pruning is triggered
-    example_eval_size : int = 256 # Number of samples used to compute running evaluation stats
+    # Number of batches to accumulate gradients before updating weights
+    batch_accumulation_factor: int = 1
+    # Flag to determine whether to stop process if pruning is triggered
+    EXIT_ON_PRUNING: bool = True
+    # Number of samples used to compute running evaluation stats
+    example_eval_size: int = 256
 
-    enable_lr_reduction_on_plateau : bool = False
+    enable_lr_reduction_on_plateau: bool = False
     lr_reduction_plateau_config: LearnRateReductOnPlateauConfig = field(
         default_factory=LearnRateReductOnPlateauConfig)
 
     # Logging and export
     mlflow_logging: bool = True  # Enable MLFlow logging
-    mlflow_experiment_name : str | None = None
+    mlflow_experiment_name: str | None = None
     eval_example: bool = False  # Evaluate example input during training
-    example_labels_scaling_factors : torch.Tensor | None = None
+    label_scaling_factors: torch.Tensor | None = None
     checkpoint_dir: str = "./checkpoints"   # Directory to save model checkpoints
     modelName: str = "trained_model"        # Name of the model to be saved
-    export_best_to_onnx : bool = False      # Option to enable automatic export to ONNx (attempt)
+    # Option to enable automatic export to ONNx (attempt)
+    export_best_to_onnx: bool = False
 
     # Optimization parameters
     lr_scheduler: Any | None = None
@@ -184,31 +192,47 @@ class ModelTrainingManagerConfig(): # TODO update to use BaseConfigClass
 
     # Model checkpoint load if any
     checkpoint_to_load: str | None = None  # Path to model checkpoint to load
-    load_strict : bool = False  # Load model checkpoint with strict matching of parameters
-    load_traced : bool = False  # Load model as traced model
+    load_strict: bool = False  # Load model checkpoint with strict matching of parameters
+    load_traced: bool = False  # Load model as traced model
 
     # Hardware/special settings
-    device: torch.device | str | None = None  # Default device is None at import time
-    use_torch_amp : bool = False # Decide whether to use torch AMP for training
+    # Default device is None at import time
+    device: torch.device | str | None = None
+    use_torch_amp: bool = False  # Decide whether to use torch AMP for training
 
     # OPTUNA MODE options
     optuna_trial: Any = None  # Optuna optuna_trial object
 
     def __post_init__(self):
-        
+
         if self.device is None:
             self.device = GetDeviceMulti(expected_max_vram=1024.0)
 
         if not(torch.is_tensor(self.example_labels_scaling_factors)) and self.example_labels_scaling_factors is not None:
             # Print warning
-            print("\033[38;5;208mWarning: example_labels_scaling_factors is not a torch.Tensor. Overriden to None.\033[0m")
+            print(
+                "\033[38;5;208mWARNING: labels_scaling_factors is not a torch.Tensor. Overriden to None.\033[0m")
             # Set to none
-            self.example_labels_scaling_factors = None
+            self.label_scaling_factors = None
         
+        if self.label_scaling_factors is None and self.data_augmentation_module is None:
+            # Print warning
+            print("\033[38;5;208mWARNING: labels_scaling_factors is None and data_augmentation_module is None. No labels scaling will be applied.\033[0m")
+
+        elif isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
+            if self.data_augmentation_module.augs_cfg.label_scaling_factors is not None:
+                self.label_scaling_factors = torch.Tensor(
+                    self.data_augmentation_module.augs_cfg.label_scaling_factors)
+
+        # Compute reciprocal of label_scaling_factors to use multiplication instead of division at runtime
+        if self.label_scaling_factors is not None:
+            self.label_scaling_factors = 1 / self.label_scaling_factors
+
         # Switch AMP off if device is CPU
         if self.device == 'cpu' and self.use_torch_amp is True:
-            print("\033[38;5;208mWarning: torch AMP required, but device is CPU. Overriden to False.\033[0m")
-            self.use_torch_amp = False 
+            print(
+                "\033[38;5;208mWARNING: torch AMP required, but device is CPU. Overriden to False.\033[0m")
+            self.use_torch_amp = False
 
     def __copy__(self, instanceToCopy: 'ModelTrainingManagerConfig') -> 'ModelTrainingManagerConfig':
         """
@@ -312,12 +336,14 @@ class enumOptimizerType(Enum):
 
 # %% ModelTrainingManager class - 24-07-2024
 # TODO rework trainer NOT to inherit from Config object!
+
+
 class ModelTrainingManager(ModelTrainingManagerConfig):
-    def __init__(self, model: nn.Module | None, 
-                 lossFcn: nn.Module | CustomLossFcn, 
-                 config: ModelTrainingManagerConfig | dict | str, 
-                 optimizer: optim.Optimizer | enumOptimizerType | None = None, 
-                 dataLoaderIndex: DataloaderIndex | None = None, 
+    def __init__(self, model: nn.Module | None,
+                 lossFcn: nn.Module | CustomLossFcn,
+                 config: ModelTrainingManagerConfig | dict | str,
+                 optimizer: optim.Optimizer | enumOptimizerType | None = None,
+                 dataLoaderIndex: DataloaderIndex | None = None,
                  paramsToLogDict: dict | None = None) -> None:
         """
         Initializes the ModelTrainingManager class.
@@ -349,67 +375,78 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         # Check that checkpoint_dir exists, if not create it
         if not os.path.isdir(self.checkpoint_dir):
-            Warning(f"Checkpoint directory {self.checkpoint_dir} does not exist. Creating it...")
+            Warning(
+                f"Checkpoint directory {self.checkpoint_dir} does not exist. Creating it...")
             os.makedirs(self.checkpoint_dir)
-        
+
         # Initialize ModelTrainingManager-specific attributes
 
         if self.checkpoint_to_load is not None and model is not None:
             # Load model checkpoint
             try:
-                print(f"Checkpoint path specified: {self.checkpoint_to_load}. Attempting to load model with strict flag set to {self.load_strict}...")
-                model = LoadModel(model, self.checkpoint_to_load, False, load_strict=self.load_strict)
+                print(
+                    f"Checkpoint path specified: {self.checkpoint_to_load}. Attempting to load model with strict flag set to {self.load_strict}...")
+                model = LoadModel(model, self.checkpoint_to_load,
+                                  False, load_strict=self.load_strict)
 
             except Exception as errMsg:
                 # DEVNOTE: here there should be a timer to automatically stop if no input is given for TBD seconds. Use the library for timed input requests?
-                print(f"\033[31mModel checkpoint loading failed with error: \n{errMsg}\033[0m")
-                
-                user_input = input("Continue without loading model checkpoint? [Y/n]: ").lower()
+                print(
+                    f"\033[31mModel checkpoint loading failed with error: \n{errMsg}\033[0m")
+
+                user_input = input(
+                    "Continue without loading model checkpoint? [Y/n]: ").lower()
 
                 while user_input not in ['y', 'n', 'yes', 'no']:
-                    user_input = input("Please enter a valid input [Y/n]: ").lower()
+                    user_input = input(
+                        "Please enter a valid input [Y/n]: ").lower()
 
                 if user_input == 'y' or user_input == 'yes':
                     print("Continuing without loading model checkpoint...")
                 elif user_input == 'n' or user_input == 'no':
                     print("Exiting program...")
                     sys.exit(0)
-            
+
         elif self.checkpoint_to_load is not None and model is None:
             # Load model directly
-            model = LoadModel(model=None, model_filename=self.checkpoint_to_load, load_as_traced=self.load_traced, load_strict=False)
+            model = LoadModel(model=None, model_filename=self.checkpoint_to_load,
+                              load_as_traced=self.load_traced, load_strict=False)
         elif model is None:
-            raise ValueError("Neither model nor model checkpoint path provided. Cannot continue with optimization process.")
-        
+            raise ValueError(
+                "Neither model nor model checkpoint path provided. Cannot continue with optimization process.")
+
         self.model: torch.nn.Module = (model).to(self.device)
-        self.bestModel : torch.nn.Module | None = None
-        self.loss_fcn : torch.nn.Module = lossFcn
-        
-        self.trainingDataloader : torch.utils.data.Dataloader | None = None
-        self.validationDataloader : torch.utils.data.Dataloader | None = None
-        self.testingDataloader : torch.utils.data.Dataloader | None = None # For additional evaluation phase if set provided. Validation loader is used if not.
+        self.bestModel: torch.nn.Module | None = None
+        self.loss_fcn: torch.nn.Module = lossFcn
 
-        self.trainingDataloaderSize : int = 0
-        self.current_epoch : int = 0
-        self.num_of_updates : int = 0
+        self.trainingDataloader: torch.utils.data.Dataloader | None = None
+        self.validationDataloader: torch.utils.data.Dataloader | None = None
+        # For additional evaluation phase if set provided. Validation loader is used if not.
+        self.testingDataloader: torch.utils.data.Dataloader | None = None
 
-        self.currentTrainingLoss : float | None = None
-        self.currentValidationLoss : float | None = None
+        self.trainingDataloaderSize: int = 0
+        self.current_epoch: int = 0
+        self.num_of_updates: int = 0
+
+        self.currentTrainingLoss: float | None = None
+        self.currentValidationLoss: float | None = None
         self.currentMlflowRun = mlflow.active_run()  # Returns None if no active run
 
         if self.mlflow_experiment_name is not None:
             # Update checkpointing directory to split in subfolders
-            self.checkpoint_dir = os.path.join(self.checkpoint_dir, self.mlflow_experiment_name)
+            self.checkpoint_dir = os.path.join(
+                self.checkpoint_dir, self.mlflow_experiment_name)
             os.makedirs(self.checkpoint_dir, exist_ok=True)
 
-        self.current_lr : float = self.initial_lr
+        self.current_lr: float = self.initial_lr
 
         self.paramsToLogDict = None
         if paramsToLogDict is not None:
             self.paramsToLogDict = paramsToLogDict
 
         # OPTUNA parameters
-        self.optuna_custom_score = None # DEVNOTE a Function or Callable object may be placed here. Define abstract class for this
+        # DEVNOTE a Function or Callable object may be placed here. Define abstract class for this
+        self.optuna_custom_score = None
         if self.optuna_trial is not None:
             self.OPTUNA_MODE = True
         else:
@@ -417,7 +454,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         # Set kornia transform device
         if self.data_augmentation_module is not None:
-            self.data_augmentation_module = self.data_augmentation_module.to(self.device)
+            self.data_augmentation_module = self.data_augmentation_module.to(
+                self.device)
 
         # Initialize dataloaders if provided
         if dataLoaderIndex is not None:
@@ -425,38 +463,41 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         # Handle override of optimizer inherited from ModelTrainingManagerConfig
         # TODO review implementation
-        if optimizer is not None: # Override
+        if optimizer is not None:  # Override
             if isinstance(optimizer, optim.Optimizer):
                 self._reinstantiate_optimizer(optimizer)
             elif isinstance(optimizer, enumOptimizerType) or issubclass(optimizer, optim.Optimizer):
                 self._define_optimizer(optimizer)
             else:
-                Warning('Overriding of optimizer failed. Attempt to use optimizer from ModelTrainingManagerConfig...')
+                Warning(
+                    'Overriding of optimizer failed. Attempt to use optimizer from ModelTrainingManagerConfig...')
 
-        else: # Use optimizer from ModelTrainingManagerConfig
+        else:  # Use optimizer from ModelTrainingManagerConfig
             if self.optimizer is not None:
                 if isinstance(self.optimizer, optim.Optimizer):
                     self._reinstantiate_optimizer()
                 elif isinstance(self.optimizer, enumOptimizerType) or issubclass(self.optimizer, optim.Optimizer):
                     self._define_optimizer(self.optimizer)
             else:
-                raise ValueError('Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
+                raise ValueError(
+                    'Optimizer must be specified either in the ModelTrainingManagerConfig as torch.optim.Optimizer instance or as an argument in __init__ of this class!')
 
-        ### Additional initializations
+        # Additional initializations
         if not (os.path.isdir(self.checkpoint_dir)):
             os.mkdir(self.checkpoint_dir)
 
         # Define reduction on plateau scheduler
         if self.enable_lr_reduction_on_plateau is not None and self.optimizer is not None:
             config = self.lr_reduction_plateau_config.to_scheduler_kwargs()
-            self.lr_reduct_plateau = optim.lr_scheduler.ReduceLROnPlateau(optimizer=self.optimizer, 
+            self.lr_reduct_plateau = optim.lr_scheduler.ReduceLROnPlateau(optimizer=self.optimizer,
                                                                           **config)
 
-        ### Torch AMP objects
-        self.grad_scaler = torch.amp.GradScaler(device=self.device, enabled=self.use_torch_amp)
+        # Torch AMP objects
+        self.grad_scaler = torch.amp.GradScaler(
+            device=self.device, enabled=self.use_torch_amp)
 
+    # Instance methods below
 
-    ### Instance methods below
     def _define_optimizer(self, optimizer: optim.Optimizer | enumOptimizerType) -> None:
         """
         Define and set the optimizer for the model training.
@@ -475,17 +516,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         if optimizer == enumOptimizerType.SGD or optimizer == torch.optim.SGD:
             self.optimizer = torch.optim.SGD(
                 self.model.parameters(), lr=self.initial_lr, momentum=self.optim_momentum)
-            
+
         elif optimizer == enumOptimizerType.ADAM or optimizer == torch.optim.Adam:
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.initial_lr, fused=fused_)
-            
+
         elif optimizer == enumOptimizerType.ADAMW or optimizer == torch.optim.AdamW:
             self.optimizer = torch.optim.AdamW(
                 self.model.parameters(), lr=self.initial_lr, fused=fused_)
-        else: 
-            raise ValueError('Optimizer not recognized. Please provide a valid optimizer type or ID from enumOptimizerType enumeration class.')
-        
+        else:
+            raise ValueError(
+                'Optimizer not recognized. Please provide a valid optimizer type or ID from enumOptimizerType enumeration class.')
 
     def _reinstantiate_optimizer(self, optimizer_override: optim.Optimizer | None = None) -> None:
         """
@@ -495,18 +536,21 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             self.optimizer = optimizer_override
 
         if self.model is None:
-            raise ValueError('Model is not defined. Cannot reinstantiate optimizer.')
+            raise ValueError(
+                'Model is not defined. Cannot reinstantiate optimizer.')
         optim_class = self.optimizer.__class__
         optim_params = self.optimizer.param_groups[0]
-        
+
         # Determine which keys __init__ actually accepts
         class_signature_ = inspect.signature(optim_class.__init__)
         valid_keys = set(class_signature_.parameters) - {'self', 'params'}
-        
-        filtered_params = {k: v for k, v in optim_params.items() if k in valid_keys}
+
+        filtered_params = {k: v for k,
+                           v in optim_params.items() if k in valid_keys}
 
         # Reinstantiate with valid kwargs arguments
-        self.optimizer = optim_class(self.model.parameters(), **filtered_params)
+        self.optimizer = optim_class(
+            self.model.parameters(), **filtered_params)
 
         if self.lr_scheduler is not None:
             # Reset initial_lr of each group
@@ -526,7 +570,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             children_scheduler = getattr(lr_scheduler, attr, None)
             if children_scheduler is not None:
                 for subscheduler in children_scheduler:
-                    self._reassign_optimizer_to_scheduler(subscheduler)  # Recurse assignment
+                    self._reassign_optimizer_to_scheduler(
+                        subscheduler)  # Recurse assignment
                 break
 
     def setDataloaders(self, dataloaderIndex: DataloaderIndex) -> None:
@@ -538,20 +583,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                                                the training and validation dataloaders.
         """
         if not isinstance(dataloaderIndex, DataloaderIndex):
-            raise TypeError(f'{colorama.Fore.RED}Expected dataloaderIndex to be of type DataloaderIndex, but found {type(dataloaderIndex)} instead.')
+            raise TypeError(
+                f'{colorama.Fore.RED}Expected dataloaderIndex to be of type DataloaderIndex, but found {type(dataloaderIndex)} instead.')
 
-        self.trainingDataloader : DataLoader = dataloaderIndex.TrainingDataLoader
-        self.validationDataloader : DataLoader = dataloaderIndex.ValidationDataLoader
+        self.trainingDataloader: DataLoader = dataloaderIndex.TrainingDataLoader
+        self.validationDataloader: DataLoader = dataloaderIndex.ValidationDataLoader
 
-        self.trainingDataloaderSize : int = len(self.trainingDataloader)
-        self.validationDataloaderSize : int = len(self.validationDataloader)
+        self.trainingDataloaderSize: int = len(self.trainingDataloader)
+        self.validationDataloaderSize: int = len(self.validationDataloader)
 
         if dataloaderIndex.testingDataLoader is not None:
-            self.testingDataloader : DataLoader = dataloaderIndex.testingDataLoader
+            self.testingDataloader: DataLoader = dataloaderIndex.testingDataLoader
 
-        print(f"Training DataLoader size: {self.trainingDataloaderSize}, Validation DataLoader size: {self.validationDataloaderSize}")
+        print(
+            f"Training DataLoader size: {self.trainingDataloaderSize}, Validation DataLoader size: {self.validationDataloaderSize}")
 
-    def get_traced_model(self, device = None):
+    def get_traced_model(self, device=None):
         # TODO make fail safe (i.e. try except print without stopping execution, because this step can fail for a wide variety of reasons)
         if device is None:
             device = self.device
@@ -561,10 +608,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         try:
             raise NotImplementedError('Method not implemented yet.')
-        
+
         except Exception as e:
-            print(f"\033[38;5;208mError while tracing model: {e}\033[0m. Model instance will be return as python object instead.")
-            return model 
+            print(
+                f"\033[38;5;208mError while tracing model: {e}\033[0m. Model instance will be return as python object instead.")
+            return model
 
     def _print_session_info(self):
         """
@@ -629,12 +677,12 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         elif isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
             print(
                 "\033[35mImage Augmentation helper pipeline configuration:\033[0m")
-            pprint.pprint(object=self.data_augmentation_module.augs_cfg, indent=2)
+            pprint.pprint(
+                object=self.data_augmentation_module.augs_cfg, indent=2)
         else:
             print("No Kornia augmentation pipeline defined.")
 
-
-    #def trainInternalModelOneEpoch_(self):
+    # def trainInternalModelOneEpoch_(self):
     #    self.trainModelOneEpoch_(model)
 
     def _train_model_one_epoch(self):
@@ -643,26 +691,27 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         '''
 
         if self.optimizer is None:
-            raise TypeError('Optimizer is not defined. Cannot proceed with training.')
-        
+            raise TypeError(
+                'Optimizer is not defined. Cannot proceed with training.')
+
         if self.trainingDataloader is None:
             raise ValueError('No training dataloader provided.')
 
-        running_loss : float = 0.0
-        run_time_total : float = 0.0
-        loop_iter_number : int = 0
-        current_batch : int = 1
-        is_last_batch : bool = False
+        running_loss: float = 0.0
+        run_time_total: float = 0.0
+        loop_iter_number: int = 0
+        current_batch: int = 1
+        is_last_batch: bool = False
 
         # Set model instance in training mode and zero out gradients
         self.model.train()
         self.optimizer.zero_grad()
-        
-        current_loop_time : float = 0.0
-        start_time = time.perf_counter() # Start timer 
+
+        current_loop_time: float = 0.0
+        start_time = time.perf_counter()  # Start timer
 
         for batch_idx, (X, Y) in enumerate(self.trainingDataloader):
-            
+
             loop_iter_number += 1
 
             # Check if batch is the last one
@@ -683,6 +732,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     with torch.no_grad():
                         X, Y = self.augment_data_batch(X, Y)
 
+            elif self.label_scaling_factors is not None:
+                # Apply label scaling factors if provided and no augmentation module is set
+                Y = Y * self.label_scaling_factors.to(Y.device)
+
             # Perform FORWARD PASS to get predictions (autocast is no-ops if use_torch_amp == false)
             with torch.autocast(device_type=self.device, dtype=torch.float16, enabled=self.use_torch_amp):
                 # Evaluate model at input, calls forward() method
@@ -695,6 +748,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 train_loss_value = train_loss_dict.get('lossValue') if isinstance(
                     train_loss_dict, dict) else train_loss_dict
 
+                assert train_loss_value is not None, "Loss value cannot be None. Check loss function implementation."
+
                 if self.batch_accumulation_factor > 1:
                     train_loss_value /= self.batch_accumulation_factor
 
@@ -704,24 +759,31 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Update running value of loss for status bar at current epoch
             running_loss += train_loss_value.detach().cpu().float()
-            
+
             # Perform BACKWARD PASS to update parameters
-            self.grad_scaler.scale(train_loss_value).backward() # Compute gradients (wrapped in grad scaler for AMP)
-            
+            # Compute gradients (wrapped in grad scaler for AMP)
+            self.grad_scaler.scale(train_loss_value).backward()
+
             if ((batch_idx + 1) % self.batch_accumulation_factor == 0) or is_last_batch:
                 # Make optimization step and reset gradients
                 # Apply gradients from the loss
                 self.grad_scaler.step(self.optimizer)
-                self.grad_scaler.update() # Update grad scaler for AMP
+                self.grad_scaler.update()  # Update grad scaler for AMP
 
                 self.optimizer.zero_grad()  # Reset gradients for next iteration
                 self.num_of_updates += 1
             else:
-                continue # Accumulate more batches before update
-            
-            if self.device.startswith('cuda'): 
-                # Synchronize CUDA stream once here
-                torch.cuda.synchronize()
+                continue  # Accumulate more batches before update
+
+            if self.device is not None:
+                if isinstance(self.device, str):
+                    if self.device.startswith('cuda'):
+                        # Synchronize CUDA stream once here
+                        torch.cuda.synchronize()
+                elif isinstance(self.device, torch.device):
+                    if self.device.type == 'cuda':
+                        # Synchronize CUDA stream once here
+                        torch.cuda.synchronize()
 
             # Update total loop time
             current_loop_time = time.perf_counter() - start_time
@@ -737,11 +799,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Reset timer
             start_time = time.perf_counter()
 
-
             # TODO: implement management of SWA model
             # if swa_model is not None and epochID >= swa_start_epoch:
 
-        print('\n') # Add newline after progress bar
+        print('\n')  # Add newline after progress bar
         return running_loss / current_batch
 
     def validateInternalModel_(self):
@@ -751,14 +812,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         return validation_loss_value
 
-
-    def validateModel_(self, model : torch.nn.Module):
+    def validateModel_(self, model: torch.nn.Module):
         """Method to validate the model using the specified datasets and loss function. Not intended to be called as standalone."""
         if self.validationDataloader is None:
             raise ValueError('No validation dataloader provided.')
         if self.model is None:
             raise ValueError('No model provided.')
-        
+
         # TODO improve this method, no real need to have two separate cycles for classification and regression. Just move different code to submethods. Moreover, need to adapt for other applications
 
         model.eval()
@@ -770,19 +830,28 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         original_dataloader = self.validationDataloader
 
         # Temporarily initialize a new dataloader for validation
-        newBatchSizeTmp = 2 * self.validationDataloader.batch_size  # TODO replace this heuristics with something more grounded and memory aware!
+        # TODO replace this heuristics with something more grounded and memory aware!
+        newBatchSizeTmp = 2 * self.validationDataloader.batch_size
 
-        tmpdataloader = DataLoader(
-            original_dataloader.dataset,
-            batch_size=newBatchSizeTmp,
-            shuffle=False,
-            drop_last=False,
-            pin_memory=True if self.device.startswith('cuda') else False,
-            num_workers=0
-        )
+        device_is_cuda = False
+        if self.device is not None:
+            if isinstance(self.device, str):
+                if self.device.startswith('cuda'):
+                    device_is_cuda = True
+            elif isinstance(self.device, torch.device):
+                if self.device.type == 'cuda':
+                    device_is_cuda = True
 
-        num_of_batches = len(tmpdataloader)
-        dataset_size = len(tmpdataloader.dataset)
+        tmpDataloader = DataLoader(original_dataloader.dataset,
+                                   batch_size=newBatchSizeTmp,
+                                   shuffle=False,
+                                   drop_last=False,
+                                   pin_memory=device_is_cuda,
+                                   num_workers=0
+                                   )
+
+        num_of_batches = len(tmpDataloader)
+        dataset_size = len(tmpDataloader.dataset)
 
         with torch.no_grad():
             run_time_total = 0.0
@@ -796,7 +865,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 correct_predictions = 0
 
-                for batch_idx, (X, Y) in enumerate(tmpdataloader):
+                for batch_idx, (X, Y) in enumerate(tmpDataloader):
 
                     # Start timer for batch processing time
                     start_time = time.perf_counter()
@@ -806,9 +875,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Run data agmentations
                     if self.data_augmentation_module is not None and self.augment_validation_data:
-                        # DEVNOTE current implementation limited to keypoints. 
-                        # How to allow extraction of entries in Y? 
+                        # DEVNOTE current implementation limited to keypoints.
+                        # How to allow extraction of entries in Y?
                         X, Y = self.augment_data_batch(X, Y)
+                    else:
+                        # Use internal scaling factors to scale labels
+                        assert self.label_scaling_factors is not None, 'Labels scaling factors are not defined. Cannot scale labels.'
+                        Y = Y * self.label_scaling_factors.to(Y.device)
 
                     # Perform FORWARD PASS
                     predicted_val = model(X)  # Evaluate model at input
@@ -819,28 +892,30 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         valid_loss_dict, dict) else valid_loss_dict.item()
 
                     # Evaluate how many correct predictions (assuming CrossEntropyLoss)
-                    correct_predictions += (predicted_val.argmax(1) == Y).type(torch.float).sum().item()
+                    correct_predictions += (predicted_val.argmax(1)
+                                            == Y).type(torch.float).sum().item()
 
                     # Accumulate batch processing time
                     run_time_total += time.perf_counter() - start_time
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress_info = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, avg. loss: { validation_loss_value / current_batch:4.5g}, per-batch avg. time: {1000*run_time_total/(current_batch):4.4g} [ms]"
+                    progress_info = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, avg. loss: {validation_loss_value / current_batch:4.5g}, per-batch avg. time: {1000*run_time_total/(current_batch):4.4g} [ms]"
 
                     # Print progress on the same line
                     print(progress_info, end="\r")
 
-
-                validation_loss_value /= num_of_batches  # Compute batch size normalized loss value
+                # Compute batch size normalized loss value
+                validation_loss_value /= num_of_batches
                 # Compute percentage of correct classifications over dataset size
                 correct_predictions /= dataset_size
-                print(f"\n\t\tFinal score - accuracy: {(100*correct_predictions):0.2f}%, average loss: {validation_loss_value:.4f}\n")
+                print(
+                    f"\n\t\tFinal score - accuracy: {(100*correct_predictions):0.2f}%, average loss: {validation_loss_value:.4f}\n")
                 return validation_loss_value, correct_predictions
 
             elif self.tasktype == TaskType.REGRESSION:
 
-                for batch_idx, (X, Y) in enumerate(tmpdataloader):
+                for batch_idx, (X, Y) in enumerate(tmpDataloader):
 
                     # Start timer for batch processing time
                     start_time = time.perf_counter()
@@ -849,9 +924,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform data augmentation on batch
+                    # BUG when augmentation module is not run validation loss is not computed correctly!
                     if self.data_augmentation_module is not None and self.augment_validation_data:
                         X, Y = self.augment_data_batch(X, Y)
-
+                    else:
+                        # Use internal scaling factors to scale labels
+                        assert self.label_scaling_factors is not None, 'Labels scaling factors are not defined. Cannot scale labels.'
+                        Y = Y * self.label_scaling_factors.to(Y.device)
+                    
                     # Perform FORWARD PASS
                     predicted_val = model(X)  # Evaluate model at input
 
@@ -868,13 +948,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Calculate progress
                     current_batch = batch_idx + 1
                     progress = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, average loss: {validation_loss_value / current_batch:4.5g}, average loop time: {1000 * run_time_total/(current_batch):4.2f} [ms]"
-                    
+
                     # Print progress on the same line
                     sys.stdout.write('\r' + progress)
                     sys.stdout.flush()
 
-                validation_loss_value /= num_of_batches  # Compute batch size normalized loss value
-                print(f"\n\t\tFinal score - avg. loss: {validation_loss_value:4.5g}\n")
+                # Compute batch size normalized loss value
+                validation_loss_value /= num_of_batches
+                print(
+                    f"\n\t\tFinal score - avg. loss: {validation_loss_value:4.5g}\n")
 
                 return validation_loss_value
 
@@ -894,15 +976,16 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         :raises optuna.TrialPruned: _description_
         :return: _description_
         :rtype: _type_
-        """        
+        """
         colorama.init(autoreset=True)
 
         if self.trainingDataloader is None:
-            raise ValueError(f'{colorama.Fore.RED}No training dataloader provided. Cannot proceed.')
-        
-        if self.validationDataloader is None:
-            raise ValueError(f'{colorama.Fore.RED}No validation dataloader provided or split from training. Cannot proceed.')
+            raise ValueError(
+                f'{colorama.Fore.RED}No training dataloader provided. Cannot proceed.')
 
+        if self.validationDataloader is None:
+            raise ValueError(
+                f'{colorama.Fore.RED}No validation dataloader provided or split from training. Cannot proceed.')
 
         # Spin mlflow pipeline if required
         self.startMlflowRun()  # DEVNOTE: TODO split into more subfunctions
@@ -918,10 +1001,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 trial_printout = f" of trial {self.optuna_trial.number}"
             else:
                 trial_printout = ""
-            
+
             for epoch_num in range(self.num_of_epochs):
 
-                print(f"\n{colorama.Style.BRIGHT}{colorama.Fore.GREEN}Training epoch" + trial_printout, f"{colorama.Style.BRIGHT}{colorama.Fore.GREEN}: {epoch_num+1}/{self.num_of_epochs}")
+                print(f"\n{colorama.Style.BRIGHT}{colorama.Fore.GREEN}Training epoch" + trial_printout,
+                      f"{colorama.Style.BRIGHT}{colorama.Fore.GREEN}: {epoch_num+1}/{self.num_of_epochs}")
                 cycle_start_time = time.time()
 
                 # Update current learning rate
@@ -931,7 +1015,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if self.mlflow_logging:
                     mlflow.log_metric('lr', self.current_lr,
                                       step=self.current_epoch)
-                       
+
                 # Perform training for one epoch
                 tmp_train_loss = self._train_model_one_epoch()
 
@@ -940,29 +1024,31 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # TODO clarify intent of this, remove if not really necessary
                 if isinstance(tmp_valid_loss, tuple):
-                    tmp_valid_loss = tmp_valid_loss[0] 
-                
+                    tmp_valid_loss = tmp_valid_loss[0]
+
                 # At epoch 0, set initial validation loss
-                if self.currentValidationLoss is None: 
-                    self.currentValidationLoss : float = tmp_valid_loss
-                    self.bestValidationLoss : float = tmp_valid_loss
+                if self.currentValidationLoss is None:
+                    self.currentValidationLoss: float = tmp_valid_loss
+                    self.bestValidationLoss: float = tmp_valid_loss
 
                 # Optuna functionalities
                 # Report validation loss to Optuna pruner
                 if self.OPTUNA_MODE == True:
                     # Compute average between training and validation loss // TODO: verify feasibility of using the same obj function as sampler
                     if self.optuna_custom_score is not None:
-                        #optuna_loss = self.optuna_custom_score()
-                        raise NotImplementedError('Branch of code still in development.')
+                        # optuna_loss = self.optuna_custom_score()
+                        raise NotImplementedError(
+                            'Branch of code still in development.')
                     else:
                         optuna_loss = (tmp_train_loss + tmp_valid_loss) / 2
+
                     self.optuna_trial.report(optuna_loss, step=epoch_num)
 
                     if self.optuna_trial.should_prune():
                         raise optuna.TrialPruned()
                 else:
                     # Execute post-epoch operations
-                    self.evalExample(self.example_eval_size)        # Evaluate example if enabled
+                    self.evalExample(self.example_eval_size)
 
                 # Update stats if new best model found (independently of keep_best flag)
                 if tmp_valid_loss <= self.bestValidationLoss:
@@ -976,30 +1062,33 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # DEVNOTE: this could go into a separate method
                 if self.keep_best:
                     if tmp_valid_loss <= self.bestValidationLoss:
-                        
+
                         # Transfer best model to CPU to avoid additional memory allocation on GPU
-                        self.bestModel: torch.nn.Module | None = copy.deepcopy(self.model).to('cpu') 
+                        self.bestModel: torch.nn.Module | None = copy.deepcopy(
+                            self.model).to('cpu')
 
                         # Delete previous best model checkpoint if it exists
                         if model_save_name is not None:
 
                             # Get file name with modelSaveName as prefix
-                            checkpoint_files = glob.glob( f"{os.path.join(self.checkpoint_dir, self.modelName)}_epoch*" )
+                            checkpoint_files = glob.glob(
+                                f"{os.path.join(self.checkpoint_dir, self.modelName)}_epoch*")
 
                             if checkpoint_files:
                                 # If multiple files match, delete all or choose one (e.g., the first one)
                                 for file in checkpoint_files:
                                     if os.path.exists(file):
                                         os.remove(file)
-                                        break  
+                                        break
 
                         # Save temporary best model
-                        model_save_name = os.path.join(self.checkpoint_dir, self.modelName + f"_epoch_{self.bestEpoch}")
+                        model_save_name = os.path.join(
+                            self.checkpoint_dir, self.modelName + f"_epoch_{self.bestEpoch}")
 
                         if self.bestModel is not None:
                             SaveModel(model=self.bestModel, model_filename=model_save_name,
-                                    save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
-                                    target_device='cpu')
+                                      save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE,
+                                      target_device='cpu')
 
                 # Update current training and validation loss values
                 self.currentTrainingLoss: float = tmp_train_loss
@@ -1007,17 +1096,22 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 if self.mlflow_logging and self.currentMlflowRun is not None:
                     if self.currentTrainingLoss is not None:
-                        mlflow.log_metric( 'train_loss', self.currentTrainingLoss, step=self.current_epoch)
+                        mlflow.log_metric(
+                            'train_loss', self.currentTrainingLoss, step=self.current_epoch)
 
                     if self.currentValidationLoss is not None:
-                        mlflow.log_metric( 'validation_loss', self.currentValidationLoss, step=self.current_epoch)
+                        mlflow.log_metric(
+                            'validation_loss', self.currentValidationLoss, step=self.current_epoch)
 
-                    mlflow.log_metric( 'best_validation_loss', self.bestValidationLoss, step=self.current_epoch)
-                    mlflow.log_metric( 'num_of_updates', self.num_of_updates, step=self.current_epoch)
+                    mlflow.log_metric(
+                        'best_validation_loss', self.bestValidationLoss, step=self.current_epoch)
+                    mlflow.log_metric(
+                        'num_of_updates', self.num_of_updates, step=self.current_epoch)
 
                 print('\tCurrent best at epoch {best_epoch}, with validation loss: {best_loss:.06g}'.format(
                     best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
-                print(f'\tEpoch cycle duration: {((time.time() - cycle_start_time) / 60):.4f} [min]')
+                print(
+                    f'\tEpoch cycle duration: {((time.time() - cycle_start_time) / 60):.4f} [min]')
 
                 # "Early stopping" strategy implementation
                 if self.OPTUNA_MODE == False:
@@ -1031,15 +1125,16 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 # Post epoch operations
                 self.updateLearningRate_()  # Update learning rate if scheduler is provided
                 self.current_epoch += 1
-            ### END OF TRAINING-VALIDATION LOOP
+            # END OF TRAINING-VALIDATION LOOP
 
             # Model saving code
             if model_save_name is not None:
                 if os.path.exists(model_save_name):
-                    os.remove(model_save_name) 
-            
+                    os.remove(model_save_name)
+
             if self.keep_best:
-                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
+                print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(
+                    best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
 
             with torch.no_grad():
                 examplePair = next(iter(self.validationDataloader))
@@ -1048,25 +1143,27 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 if self.bestModel is not None:
                     SaveModel(model=self.bestModel, model_filename=model_save_name,
-                            save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
-                            example_input=examplePair[0], 
-                            target_device=self.device)
+                              save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE,
+                              example_input=examplePair[0],
+                              target_device=self.device)
                 else:
-                    print("\033[38;5;208mWarning: SaveModel skipped due to bestModel being None!\033[0m")
+                    print(
+                        "\033[38;5;208mWARNING: SaveModel skipped due to bestModel being None!\033[0m")
 
             if self.mlflow_logging:
                 mlflow.log_param('checkpoint_best_epoch', self.bestEpoch)
-                
+
             # Post-training operations
             print('Training and validation cycle completed.')
             if self.mlflow_logging:
                 mlflow.end_run(status='FINISHED')
-            
+
             return self.bestModel if self.keep_best else self.model
 
         except KeyboardInterrupt:
-            print('\n\033[38;5;208mModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.\033[0m')
-            
+            print(
+                '\n\033[38;5;208mModelTrainingManager stopped execution due to KeyboardInterrupt. Run marked as KILLED.\033[0m')
+
             # Save best model up to current epoch if not None
             try:
                 # TODO replace by a trainer export method
@@ -1077,10 +1174,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     if self.bestModel is not None:
                         SaveModel(model=self.bestModel, model_filename=model_save_name,
-                                save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
-                                example_input=examplePair[0], 
-                                target_device=self.device)
-                        
+                                  save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE,
+                                  example_input=examplePair[0],
+                                  target_device=self.device)
+
                         # TODO
                         try:
                             if self.export_best_to_onnx:
@@ -1088,38 +1185,41 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         except:
                             pass
 
-
-                    print(f"\t\033[38;5;208mBest model checkpoint saved correctly.\033[0m")
-            except Exception as err: 
-                print(f"\t\033[31mAttempt to save best model checkpoint failed due to: {str(err)}\033[0m")
+                    print(
+                        f"\t\033[38;5;208mBest model checkpoint saved correctly.\033[0m")
+            except Exception as err:
+                print(
+                    f"\t\033[31mAttempt to save best model checkpoint failed due to: {str(err)}\033[0m")
 
             if self.mlflow_logging:
-                mlflow.end_run(status='KILLED') # Mark run as killed
+                mlflow.end_run(status='KILLED')  # Mark run as killed
 
             if self.OPTUNA_MODE:
-                #signal.signal(signal.SIGALRM, _timeout_handler) # Does not work for Windows
+                # signal.signal(signal.SIGALRM, _timeout_handler) # Does not work for Windows
                 while True:
                     try:
                         user_input = inputimeout(
-                            '\n\n\033[38;5;208mStop execution (Y) or mark as pruned (N)?\033[0m', 
+                            '\n\n\033[38;5;208mStop execution (Y) or mark as pruned (N)?\033[0m',
                             timeout=60
-                            ).strip().lower()
-                    
+                        ).strip().lower()
+
                         if user_input in ('n', 'no'):
                             raise optuna.TrialPruned()
-                        
+
                         elif user_input in ('y', 'yes'):
                             # exit the loop & program gracefully
                             sys.exit(0)
                         else:
-                            print("Invalid choice — please type Y or N (timeout set to 60 s).")
+                            print(
+                                "Invalid choice — please type Y or N (timeout set to 60 s).")
 
                     except TimeoutOccurred:
-                        print("\033[31mTimeout error triggered, program stop.\033[0m")
+                        print(
+                            "\033[31mTimeout error triggered, program stop.\033[0m")
 
                     except EOFError:
                         sys.exit("No input available, program stop.")
-            
+
             # Exit from program gracefully
             if self.EXIT_ON_PRUNING:
                 sys.exit(0)
@@ -1127,20 +1227,23 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         except optuna.TrialPruned:
 
             # Optuna trial kill raised
-            print('\033[33m\nModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.\033[0m')
+            print(
+                '\033[33m\nModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.\033[0m')
 
             if self.mlflow_logging:
                 mlflow.end_run(status='KILLED')
-            raise optuna.TrialPruned() # Re-raise exception to stop optuna trial --> this is required due to how optuna handles it.
+            # Re-raise exception to stop optuna trial --> this is required due to how optuna handles it.
+            raise optuna.TrialPruned()
 
-        except Exception as e: # Any other exception
+        except Exception as e:  # Any other exception
             max_chars = 2000  # Define the max length you want to print
             error_message = str(e)[:max_chars]
 
             traceback_limit = 8
             traceback_ = traceback.format_exc(limit=traceback_limit)
 
-            print(f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback includes most recent {traceback_limit} calls. {traceback_}\033[0m")
+            print(
+                f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback includes most recent {traceback_limit} calls. {traceback_}\033[0m")
 
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
@@ -1151,22 +1254,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
     def augment_data_batch(self, *raw_inputs: torch.Tensor):
 
         if self.data_augmentation_module is None:
-            print(f"{colorama.Fore.LIGHTRED_EX}Warning: augment_data_batch was called, but data_augmentation_module is None. No transformation was applied.")
+            print(f"{colorama.Fore.LIGHTRED_EX}WARNING: augment_data_batch was called, but data_augmentation_module is None. No transformation was applied.")
             return raw_inputs
-
-        # Perform data augmentation on batch using kornia modules
-        #if not isinstance(self.data_augmentation_module, #ImageAugmentationsHelper):
-        #    # DEVNOTE: legacy branch, should be removed in later releases, assumes specific input #conditions, not configurable
-        #    other_data = None
-        #    if isinstance(X, tuple):
-        #        # If X is a tuple, assume it contains (image, other_data)
-        #        other_data = X[1:] if len(X) > 1 else None
-        #        X = X[0]
-        #    # Normalize from [0,1], apply transform, clamp to [0, 255], normalize again
-        #    X = (self.data_augmentation_module(255 * X).clamp(0, 255))/255
-        #    # Pack tuple again
-        #    if other_data is not None:
-        #        X = (X, *other_data)
 
         # Apply ImageAugmentationsHelper forward method
         aug_inputs = self.data_augmentation_module(*raw_inputs)
@@ -1177,162 +1266,180 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         # TODO Extend method distinguishing between regression and classification tasks
 
         if self.model is None:
-            raise ValueError(f'{colorama.Fore.RED}No model provided. Cannot proceed with inference!')
+            raise ValueError(
+                f'{colorama.Fore.RED}No model provided. Cannot proceed with inference!')
 
         self.model.eval()
-        if self.eval_example:
-            # exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
-            # if self.mlflow_logging: # TBC, not sure it is useful
-            #    # Log example input to mlflow
-            #    mlflow.log_???('example_input', exampleInput)
+        try:
+            if self.eval_example:
+                # exampleInput = GetSamplesFromDataset(self.validationDataloader, 1)[0][0].reshape(1, -1)
+                # if self.mlflow_logging: # TBC, not sure it is useful
+                #    # Log example input to mlflow
+                #    mlflow.log_???('example_input', exampleInput)
 
-            with torch.no_grad():
-                average_loss = 0.0
-                num_of_batches = 0
-                samples_counter = 0
+                with torch.no_grad():
+                    average_loss = 0.0
+                    num_of_batches = 0
+                    samples_counter = 0
 
-                average_prediction = None
-                worst_prediction_err = None
-                prediction_errors = None
-                correct_predictions = 0
+                    average_prediction = None
+                    worst_prediction_err = None
+                    prediction_errors = None
+                    correct_predictions = 0
 
-                # Define temporary dataloader
-                if self.testingDataloader is not None:
-                    tmp_loader = self.testingDataloader
-                else:
-                    tmp_loader = self.validationDataloader
+                    # Define temporary dataloader
+                    if self.testingDataloader is not None:
+                        tmp_loader = self.testingDataloader
+                    else:
+                        tmp_loader = self.validationDataloader
 
-                eval_dataloader = DataLoader(
-                                            dataset=tmp_loader.dataset,
-                                            batch_size=tmp_loader.batch_size,
-                                            shuffle=False,
-                                            drop_last=False,
-                                            pin_memory=False,
-                                            num_workers=0
-                                            )
-                    
-                if eval_dataloader is None:
-                    print(f'{colorama.Fore.RED}Evaluation dataloader is None. Cannot proceed in testing the model. Manager will continue with training and validation.')
-                    return
+                    eval_dataloader = DataLoader(
+                        dataset=tmp_loader.dataset,
+                        batch_size=tmp_loader.batch_size,
+                        shuffle=False,
+                        drop_last=False,
+                        pin_memory=False,
+                        num_workers=0
+                    )
 
-                label_scaling_factors = 1.0
-                while samples_counter < num_samples:
-                    # Note that this returns a batch of size given by the dataloader
-                    examplePair = next(iter(eval_dataloader))
-
-                    X = examplePair[0].to(self.device) # TODO modify for tuple input support
-                    Y = examplePair[1].to(self.device)
-
-                    if self.data_augmentation_module is not None:
-                        X, Y = self.augment_data_batch(X, Y)
-
-                        # Assign labels scaling factors from helper if provided
-                        if isinstance(self.data_augmentation_module, ImageAugmentationsHelper):
-                            if self.data_augmentation_module.augs_cfg.label_scaling_factors is not None:
-                                label_scaling_factors = self.data_augmentation_module.augs_cfg.label_scaling_factors.to(Y.device)
-
-                        elif self.example_labels_scaling_factors is not None:
-                            label_scaling_factors = self.example_labels_scaling_factors.to(Y.device)
-
-                    elif self.example_labels_scaling_factors is not None:
-                        label_scaling_factors = self.example_labels_scaling_factors.to(Y.device)
-
-                
-                    # Perform FORWARD PASS
-                    example_predictions = self.model(X)  # Evaluate model at input
-
-                    try:
-                        if example_predictions.shape != Y.shape:
-                            # Attempt to match shapes
-                            Y = Y[:, 0:example_predictions.size(1)]
-                    except:
-                        print(f'{colorama.Fore.RED}Predicted value shape {example_predictions.shape} did not match labels shape {Y.shape} and automatic matching attempt failed. Evaluation stopped.')
+                    if eval_dataloader is None:
+                        print(f'{colorama.Fore.RED}Evaluation dataloader is None. Cannot proceed in testing the model. Manager will continue with training and validation.')
                         return
 
-                    # Task specific code
-                    if not self.tasktype == TaskType.REGRESSION and not self.tasktype == TaskType.CLASSIFICATION: 
-                        print(f'{colorama.Fore.RED}Invalid Task type. Cannot proceed in evaluation. Continuing execution...')
-                        return
-                    
-                    if self.tasktype == TaskType.REGRESSION:
-                        if prediction_errors is None:
-                            # Initialize predictions errors tensor
-                            prediction_errors = example_predictions - Y
+                    label_scaling_factors = 1.0
+
+                    if self.label_scaling_factors is not None:
+                        # Use internal scaling factors to scale labels
+                        label_scaling_factors = 1 / self.label_scaling_factors.to(self.device)
+                        
+                    while samples_counter < num_samples:
+                        # Note that this returns a batch of size given by the dataloader
+                        examplePair = next(iter(eval_dataloader))
+
+                        # TODO modify for tuple input support
+                        X = examplePair[0].to(self.device)
+                        Y = examplePair[1].to(self.device)
+
+                        if self.data_augmentation_module is not None and self.augment_validation_data:
+                            X, Y = self.augment_data_batch(X, Y)
                         else:
-                            # Concatenate if existing, for later stats computation
-                            prediction_errors = torch.cat(
-                                [prediction_errors, example_predictions - Y], dim=0)
+                            # Use internal scaling factors to scale labels
+                            assert self.label_scaling_factors is not None, 'Labels scaling factors are not defined. Cannot scale labels.'
+                            Y = Y * self.label_scaling_factors.to(self.device)
 
-                        # Compute loss for each input separately
-                        output_loss = self.loss_fcn(example_predictions, Y) # DEVNOTE must return a Tensor!
+                        # Perform FORWARD PASS
+                        example_predictions = self.model(
+                            X)  # Evaluate model at input
 
-                        # Compute running average of loss
-                        average_loss += output_loss.item()
+                        try:
+                            if example_predictions.shape != Y.shape:
+                                # Attempt to match shapes
+                                Y = Y[:, 0:example_predictions.size(1)]
+                        except:
+                            print(f'{colorama.Fore.RED}Predicted value shape {example_predictions.shape} did not match labels shape {Y.shape} and automatic matching attempt failed. Evaluation stopped.')
+                            return
+
+                        # Task specific code
+                        if not self.tasktype == TaskType.REGRESSION and not self.tasktype == TaskType.CLASSIFICATION:
+                            print(
+                                f'{colorama.Fore.RED}Invalid Task type. Cannot proceed in evaluation. Continuing execution...')
+                            return
+
+                        if self.tasktype == TaskType.REGRESSION:
+                            if prediction_errors is None:
+                                # Initialize predictions errors tensor
+                                prediction_errors = example_predictions - Y
+                            else:
+                                # Concatenate if existing, for later stats computation
+                                prediction_errors = torch.cat(
+                                    [prediction_errors, example_predictions - Y], dim=0)
+
+                            # Compute loss for each input separately
+                            # DEVNOTE must return a Tensor!
+                            output_loss = self.loss_fcn(example_predictions, Y)
+
+                            # Compute running average of loss
+                            average_loss += output_loss.item()
+
+                        elif self.tasktype == TaskType.CLASSIFICATION:
+
+                            if not (isinstance(self.loss_fcn, torch.nn.CrossEntropyLoss)):
+                                raise NotImplementedError(
+                                    'Current classification validation function only supports nn.CrossEntropyLoss.')
+
+                            example_loss_output = self.loss_fcn(
+                                example_predictions, Y)
+
+                            average_loss += example_loss_output.get('lossValue') if isinstance(
+                                # This assumes a standard format of the output dictionary from custom loss
+                                example_loss_output, dict) else example_loss_output.item()
+
+                            # Evaluate how many correct predictions (assuming CrossEntropyLoss)
+                            correct_predictions += (example_predictions.argmax(1)
+                                                    == Y).type(torch.float).sum().item()
+
+                        # Count samples and batches
+                        samples_counter += X.size(0)
+                        num_of_batches += 1
+
+                    # Post evaluation stats computation
+                    if self.tasktype == TaskType.REGRESSION:
+
+                        # Compute average prediction over all samples
+                        average_prediction = label_scaling_factors * \
+                            torch.mean(prediction_errors, dim=0)
+                        average_loss /= num_of_batches
+
+                        # Get worst prediction error over all samples
+                        worst_prediction_err, _ = torch.max(
+                            torch.abs(prediction_errors), dim=0)
+                        worst_prediction_err *= label_scaling_factors
+
+                        # Get median prediction error over all samples
+                        median_prediction_err, _ = torch.median(
+                            torch.abs(prediction_errors), dim=0)
+                        median_prediction_err *= label_scaling_factors
+
+                        quantile95_prediction_err = torch.quantile(
+                            torch.abs(prediction_errors), 0.95, 0)
+                        quantile95_prediction_err *= label_scaling_factors
+
+                        quantile99_prediction_err = torch.quantile(
+                            torch.abs(prediction_errors), 0.99, 0)
+                        quantile99_prediction_err *= label_scaling_factors
+
+                        # TODO (TBC): log example in mlflow?
+                        # if self.mlflow_logging:
+                        #    print('TBC')
+
+                        print(f"{colorama.Style.BRIGHT}{colorama.Fore.YELLOW}\tSample error statistics on batch of {num_samples} samples:",
+                            "\n\tCorresponding average loss: ", average_loss, f"{colorama.Style.RESET_ALL}")
+
+                        print(
+                            f"\n\tAverage prediction (scaled) errors per component: \n\t\t", average_prediction)
+                        print(
+                            f"\n\tWorst abs. prediction (scaled) errors per component: \n\t\t", worst_prediction_err)
+                        print(f"\n\tQuantile 99 abs. prediction (scaled) errors per component: \n\t\t",
+                            quantile99_prediction_err)
+                        print(f"\n\tQuantile 95 abs. prediction (scaled) errors per component: \n\t\t",
+                            quantile95_prediction_err)
+                        print(
+                            f"\n\tMedian abs. prediction (scaled) errors per component: \n\t\t", median_prediction_err)
+                        print("\n")
 
                     elif self.tasktype == TaskType.CLASSIFICATION:
 
-                        if not (isinstance(self.loss_fcn, torch.nn.CrossEntropyLoss)):
-                            raise NotImplementedError(
-                                'Current classification validation function only supports nn.CrossEntropyLoss.')
+                        average_loss /= num_of_batches  # Compute batch size normalized loss value
 
-                        example_loss_output = self.loss_fcn(example_predictions, Y)
+                        # Compute percentage of correct classifications over dataset size
+                        correct_predictions /= samples_counter
+                        print(f"\n\tExample prediction with {samples_counter} samples: Classification accuracy:",
+                            f"{(100*correct_predictions):>0.2f} % , average loss: {average_loss:>4f}\n")
 
-                        average_loss += example_loss_output.get('lossValue') if isinstance(
-                            example_loss_output, dict) else example_loss_output.item()  # This assumes a standard format of the output dictionary from custom loss
-
-                        # Evaluate how many correct predictions (assuming CrossEntropyLoss)
-                        correct_predictions += (example_predictions.argmax(1)
-                                               == Y).type(torch.float).sum().item()
-
-                    # Count samples and batches
-                    samples_counter += X.size(0)
-                    num_of_batches += 1
-
-                # Post evaluation stats computation
-                if self.tasktype == TaskType.REGRESSION:
-
-                    # Compute average prediction over all samples
-                    average_prediction = label_scaling_factors * torch.mean(prediction_errors, dim=0)
-                    average_loss /= num_of_batches
-
-                    # Get worst prediction error over all samples
-                    worst_prediction_err, _ = torch.max(torch.abs(prediction_errors), dim=0)
-                    worst_prediction_err *= label_scaling_factors 
-
-                    # Get median prediction error over all samples
-                    median_prediction_err, _ = torch.median(torch.abs(prediction_errors), dim=0)
-                    median_prediction_err *= label_scaling_factors 
-
-                    quantile95_prediction_err = torch.quantile(torch.abs(prediction_errors), 0.95, 0)
-                    quantile95_prediction_err *= label_scaling_factors
-                    
-                    quantile99_prediction_err = torch.quantile(torch.abs(prediction_errors), 0.99, 0)
-                    quantile99_prediction_err *= label_scaling_factors
-
-                    # TODO (TBC): log example in mlflow?
-                    # if self.mlflow_logging:
-                    #    print('TBC')
-
-                    print(f"{colorama.Style.BRIGHT}{colorama.Fore.YELLOW}\tSample error statistics on batch of {num_samples} samples:", "\n\tCorresponding average loss: ", average_loss, f"{colorama.Style.RESET_ALL}")
-
-                    print(f"\n\tAverage prediction (scaled) errors per component: \n\t\t", average_prediction)
-                    print(f"\n\tWorst abs. prediction (scaled) errors per component: \n\t\t", worst_prediction_err)
-                    print(f"\n\tQuantile 99 abs. prediction (scaled) errors per component: \n\t\t", quantile99_prediction_err)
-                    print(f"\n\tQuantile 95 abs. prediction (scaled) errors per component: \n\t\t", quantile95_prediction_err)
-                    print(f"\n\tMedian abs. prediction (scaled) errors per component: \n\t\t", median_prediction_err)
-                    print("\n")
-
-                elif self.tasktype == TaskType.CLASSIFICATION:
-
-                    average_loss /= num_of_batches  # Compute batch size normalized loss value
-
-                    # Compute percentage of correct classifications over dataset size
-                    correct_predictions /= samples_counter
-                    print(f"\n\tExample prediction with {samples_counter} samples: Classification accuracy:",
-                          f"{(100*correct_predictions):>0.2f} % , average loss: {average_loss:>4f}\n")
-
-                else:
-                    raise TypeError('Invalid Task type.')
+                    else:
+                        raise TypeError('Invalid Task type.')
+        except Exception as err:
+            print(f"{colorama.Fore.RED}Error during example evaluation: {err}. Continuing execution...")
 
     def updateLearningRate_(self):
         """
@@ -1347,12 +1454,15 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             new_lr = self.lr_scheduler.get_last_lr()[0]
 
             if self.enable_lr_reduction_on_plateau and self.currentValidationLoss is not None:
-                self.lr_reduct_plateau.step(metrics=self.currentValidationLoss) # Verify if on plateau
+                self.lr_reduct_plateau.step(
+                    metrics=self.currentValidationLoss)  # Verify if on plateau
                 new_lrs = [g['lr'] for g in self.optimizer.param_groups]
-                has_reduced_on_plateau = any(lr < self.current_lr for lr in new_lrs)
+                has_reduced_on_plateau = any(
+                    lr < self.current_lr for lr in new_lrs)
 
                 if has_reduced_on_plateau:
-                    new_lr = min(new_lrs)  # Get the minimum learning rate after reduction
+                    # Get the minimum learning rate after reduction
+                    new_lr = min(new_lrs)
             else:
                 has_reduced_on_plateau = False
 
@@ -1362,16 +1472,16 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if has_reduced_on_plateau:
 
                 print('\n{light_blue}Learning rate reduced on plateau: {prev_lr:.6g} --> {new_lr:.6g} for {num_cooldown_epochs} epochs {reset}\n'.format(light_blue=colorama.Fore.LIGHTRED_EX,
-                prev_lr=self.current_lr,
-                new_lr=new_lr,
-                num_cooldown_epochs=self.lr_reduction_plateau_config.num_cooldown_epochs,
-                reset=colorama.Style.RESET_ALL))
+                                                                                                                                                         prev_lr=self.current_lr,
+                                                                                                                                                         new_lr=new_lr,
+                                                                                                                                                         num_cooldown_epochs=self.lr_reduction_plateau_config.num_cooldown_epochs,
+                                                                                                                                                         reset=colorama.Style.RESET_ALL))
 
             else:
                 print('\n{light_blue}Learning rate changed: {prev_lr:.6g} --> {new_lr:.6g}{reset}\n'.format(light_blue=colorama.Fore.LIGHTBLUE_EX,
-                    prev_lr=self.current_lr,
-                    new_lr=new_lr,
-                    reset=colorama.Style.RESET_ALL))
+                                                                                                            prev_lr=self.current_lr,
+                                                                                                            new_lr=new_lr,
+                                                                                                            reset=colorama.Style.RESET_ALL))
 
             # Save the new learning rate
             self.current_lr = new_lr
@@ -1388,7 +1498,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
         if self.enable_early_pruning:
             if counter >= self.pruning_patience:
-                print('\033[38;5;208mEarly stopping criteria met: ModelTrainingManager execution stop. Run marked as KILLED.\033[0m')
+                print(
+                    '\033[38;5;208mEarly stopping criteria met: ModelTrainingManager execution stop. Run marked as KILLED.\033[0m')
                 returnValue = True
                 if self.mlflow_logging:
                     mlflow.end_run(status='KILLED')
@@ -1417,7 +1528,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             if self.currentMlflowRun is not None:
                 mlflow.end_run()
-                print(('\033[38;5;208m\nActive mlflow run {active_run} ended before creating new one.\033[0m').format(active_run=self.currentMlflowRun.info.run_name))
+                print(('\033[38;5;208m\nActive mlflow run {active_run} ended before creating new one.\033[0m').format(
+                    active_run=self.currentMlflowRun.info.run_name))
 
             mlflow.start_run()
             # Update current mlflow run
@@ -1434,9 +1546,11 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                               for key in ModelTrainerConfigParamsNames})
 
             # Log model info (size, number of parameters)
-            mlflow.log_param('num_trainable_parameters', sum(p.numel() for p in self.model.parameters() if p.requires_grad))
+            mlflow.log_param('num_trainable_parameters', sum(p.numel()
+                             for p in self.model.parameters() if p.requires_grad))
 
-            mlflow.log_param('num_total_parameters', sum(p.numel() for p in self.model.parameters()))
+            mlflow.log_param('num_total_parameters', sum(p.numel()
+                             for p in self.model.parameters()))
 
             size_mb = ComputeModelParamsStorageSize(self.model)
             mlflow.log_param(key='model_storage_MB', value=round(size_mb, 4))
@@ -1448,13 +1562,16 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             if self.OPTUNA_MODE:
                 mlflow.log_param('optuna_trial_ID', self.optuna_trial.number)
                 self.optuna_trial.set_user_attr('mlflow_name', self.modelName)
-                self.optuna_trial.set_user_attr('mlflow_ID', self.currentMlflowRun.info.run_id)
+                self.optuna_trial.set_user_attr(
+                    'mlflow_ID', self.currentMlflowRun.info.run_id)
 
     def exportModel(self):
         pass
     # TODO move code to save models here, with tracing/onnx option (fail-safe: save pth if cannot save traced or equivalence fails)
 
 # %% Function to freeze a generic nn.Module model parameters to avoid backpropagation
+
+
 def FreezeModel(model: nn.Module) -> nn.Module:
     model.requires_grad_(False)
     return model
@@ -1466,15 +1583,17 @@ def FreezeModel(model: nn.Module) -> nn.Module:
 # Updated by PC 04-06-2024
 
 # TODO Update function to resemble trainer "train one epoch", useful for experiments
-def TrainModel(dataloader: DataLoader, 
-               model: nn.Module, 
+
+
+def TrainModel(dataloader: DataLoader,
+               model: nn.Module,
                lossFcn: nn.Module,
-               optimizer, 
-               epochID: int, 
-               device=None, 
+               optimizer,
+               epochID: int,
+               device=None,
                lr_scheduler=None,
-               swa_scheduler=None, 
-               swa_model=None, 
+               swa_scheduler=None,
+               swa_model=None,
                swa_start_epoch: int = 15) -> float | int:
     '''Function to perform one step of training of a model using input dataloader and loss function'''
     model.train()  # Set model instance in training mode ("informing" backend that the training is going to start)
@@ -1550,11 +1669,11 @@ def TrainModel(dataloader: DataLoader,
 # Updated by PC 04-06-2024
 
 
-def ValidateModel(dataloader: DataLoader, 
-                    model: nn.Module, 
-                    lossFcn: nn.Module, 
-                    device=None, 
-                    taskType: str = 'classification') -> float | dict:
+def ValidateModel(dataloader: DataLoader,
+                  model: nn.Module,
+                  lossFcn: nn.Module,
+                  device=None,
+                  taskType: str = 'classification') -> float | dict:
     '''Function to validate model using dataset and specified loss function'''
     # Get size of dataset (How many samples are in the dataset)
     size = len(dataloader.dataset)
@@ -1577,8 +1696,8 @@ def ValidateModel(dataloader: DataLoader,
         avgAbsAccuracy = 0.0
 
     elif taskType.lower() == 'custom':
-        raise NotImplementedError("This is a deprecated function, please use ModelTrainingManager.")
-
+        raise NotImplementedError(
+            "This is a deprecated function, please use ModelTrainingManager.")
 
     with torch.no_grad():  # Tell torch that gradients are not required
 
@@ -1678,13 +1797,12 @@ def ValidateModel(dataloader: DataLoader,
 
 
 # %% TRAINING and VALIDATION template function (LEGACY, no longer maintained) - 04-06-2024
-#@deprecated() # DEVNOTE requires Python 3.13
-def TrainAndValidateModel(dataloaderIndex: DataloaderIndex, 
-                          model: nn.Module, 
-                          lossFcn: nn.Module, 
-                          optimizer, 
+# @deprecated() # DEVNOTE requires Python 3.13
+def TrainAndValidateModel(dataloaderIndex: DataloaderIndex,
+                          model: nn.Module,
+                          lossFcn: nn.Module,
+                          optimizer,
                           config: dict = {}):
-
     '''Function to train and validate a model using specified dataloaders and loss function'''
     # NOTE: is the default dictionary considered as "single" object or does python perform a merge of the fields?
 
@@ -1859,12 +1977,14 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex,
                 1, -1)  # Get single input sample for model saving
             modelSaveName = os.path.join(
                 checkpoint_dir, modelName + '_' + AddZerosPadding(epochID + epochStart, stringLength=4))
-            
-            SaveModel(model, modelSaveName, save_mode=AutoForgeModuleSaveMode.TRACED_DYNAMO, example_input=exampleInput, target_device=device)
+
+            SaveModel(model, modelSaveName, save_mode=AutoForgeModuleSaveMode.TRACED_DYNAMO,
+                      example_input=exampleInput, target_device=device)
 
             if swa_model != None and swa_has_improved:
                 swa_model.eval()
-                SaveModel(swa_model, modelSaveName + '_SWA', save_mode=AutoForgeModuleSaveMode.TRACED_DYNAMO, example_input=exampleInput, target_device=device)
+                SaveModel(swa_model, modelSaveName + '_SWA', save_mode=AutoForgeModuleSaveMode.TRACED_DYNAMO,
+                          example_input=exampleInput, target_device=device)
                 swa_model.train()
 
         # MODEL PREDICTION EXAMPLES
@@ -1930,12 +2050,13 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex,
 # %% Model evaluation function on a random number of samples from dataset - 06-06-2024
 # Possible way to solve the issue of having different cost function terms for training and validation --> add setTrain and setEval methods to switch between the two
 
-def EvaluateModel(dataloader: DataLoader, 
-                  model: nn.Module, 
-                  lossFcn: nn.Module, 
-                  device=None, 
+
+def EvaluateModel(dataloader: DataLoader,
+                  model: nn.Module,
+                  lossFcn: nn.Module,
+                  device=None,
                   numOfSamples: int = 10,
-                  inputSample: torch.Tensor | None = None, 
+                  inputSample: torch.Tensor | None = None,
                   labelsSample: torch.Tensor | None = None) -> np.ndarray:
     '''Torch model evaluation function to perform inference using either specified input samples or input dataloader'''
 
