@@ -34,7 +34,7 @@ class EfficientNetBackbone(nn.Module):
             self.feature_extractor = nn.ModuleList(
                 list(feature_extractor_modules.children()))
 
-            # Add last layer (adaptive pooling) from modules
+            # Add last layer (global adaptive pooling) from modules
             self.feature_extractor.append(modules[1])
 
             # Build average pooling layer
@@ -46,9 +46,11 @@ class EfficientNetBackbone(nn.Module):
                 for key, value in self.cfg.feature_tapping_output_resolution_channels.items():
 
                     if len(value) == 2:
+                        # For spatial features, expects two keys only
                         target_res_key, target_channels_key = value.keys()
 
                     elif len(value) == 3:
+                        # For spill features, expects three keys
                         target_res_key, target_channels_key, target_linear_output_size = value.keys()
 
                     # Get target resolution and channels from configuration
@@ -59,8 +61,8 @@ class EfficientNetBackbone(nn.Module):
 
                     # Adaptive max pooling layer
                     # Pool to 4 times the target resolution
-                    pooled_res = (4*target_res[0], 4*target_res[1])
-                    adaptive_max_pool = nn.AdaptiveMaxPool2d(pooled_res)
+                    #pooled_res = (4*target_res[0], 4*target_res[1])
+                    #adaptive_max_pool = nn.AdaptiveMaxPool2d(pooled_res)
 
                     # Convolutional 2d extractor layer
                     max_pool_extractor_layer = nn.Conv2d(in_channels=self.cfg.feature_tapping_channel_input_size[key],
@@ -106,7 +108,8 @@ class EfficientNetBackbone(nn.Module):
                         # Outputs will be of shape (B, C, 2) where 2 is for x and y coordinates, C channels
                         spatial_kpt_extractor = SpatialKptFeatureSoftmaxLocator(input_resolution=target_res,
                                                                                 num_input_channels=target_channels,
-                                                                                downsampling_res_factor=downsampling_res_factor_)
+                                                                                downsampling_res_factor=downsampling_res_factor_,
+                                                                                expectation_normalization_factor=cfg.expectation_normalization_factor)
 
                         self.feature_spill_preprocessor[str(key)] = nn.Sequential(max_pool_extractor_layer, 
                                                                                   max_pool_extractor_out_layer,

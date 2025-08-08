@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, is_tensor
 import numpy as np
 
 def spatial_softargmax(feature_map):
@@ -37,7 +37,8 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
     def __init__(self, 
                  input_resolution: tuple[int, int], 
                  num_input_channels : int = 1,
-                 downsampling_res_factor: int | float | tuple[float, float] | tuple[int, int] = (1.0, 1.0)) -> None:
+                 downsampling_res_factor: int | float | tuple[float, float] | tuple[int, int] = (1.0, 1.0),
+                 expectation_normalization_factor: int | float | tuple[float, float] | tuple[int, int] = (1.0, 1.0)) -> None:
         super().__init__()
         
         self.height, self.width = input_resolution
@@ -61,15 +62,31 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
 
         # If int or float, convert to tuple
         if isinstance(downsampling_res_factor, (int, float)):
-            downsampling_res_factor = (downsampling_res_factor, downsampling_res_factor)
+            downsampling_res_factor = (float(downsampling_res_factor), float(downsampling_res_factor))
 
         elif isinstance(downsampling_res_factor, tuple) and len(downsampling_res_factor)== 2:
             downsampling_res_factor = (float(downsampling_res_factor[0]), float(downsampling_res_factor[1]))
 
+        else:
+            raise ValueError("downsampling_res_factor must be an int, float or a tuple of two floats.")
+
+        if isinstance(expectation_normalization_factor, (int, float)):
+            expectation_normalization_factor = (float(expectation_normalization_factor), float(expectation_normalization_factor))
+        
+        elif isinstance(expectation_normalization_factor, tuple) and len(expectation_normalization_factor) == 2:
+            expectation_normalization_factor = (float(expectation_normalization_factor[0]), float(expectation_normalization_factor[1]))
+
+        else:
+            raise ValueError("expectation_normalization_factor must be an int, float or a tuple of two floats.")
+
+
+        # Register data buffers
         self.register_buffer("x_coords", xs_flat.view(1,1,-1))  # shape (W,)
         self.register_buffer("y_coords", ys_flat.view(1,1,-1))  # shape (H,)
         self.register_buffer('downsampling_res_factor',
                              torch.tensor(downsampling_res_factor, dtype=torch.float32))
+        self.register_buffer('expectation_normalization_factor',
+                             torch.tensor(expectation_normalization_factor, dtype=torch.float32))
 
 
     def forward(self, feature_map: Tensor) -> Tensor:
@@ -89,6 +106,10 @@ class SpatialKptFeatureSoftmaxLocator(nn.Module):
         # Scale coordinates by downsampling factor to the original input resolution
         pred_x = x_expectation * self.downsampling_res_factor[0]
         pred_y = y_expectation * self.downsampling_res_factor[1]
+
+        # Normalize coordinates by expectation normalization factor
+        pred_x = pred_x / self.expectation_normalization_factor[0]
+        pred_y = pred_y / self.expectation_normalization_factor[1]
 
         # Stack coordinates into (B, C, 2) shape
         xy_pred_coordinates = torch.stack((pred_x, pred_y), dim=2)

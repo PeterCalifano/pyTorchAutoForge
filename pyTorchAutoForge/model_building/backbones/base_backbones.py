@@ -6,6 +6,7 @@ from torch import nn
 from dataclasses import dataclass, field
 from pyTorchAutoForge.model_building.backbones.input_adapters import BaseAdapterConfig, InputAdapterFactory
 import torch
+import numpy as np  
 
 @dataclass
 class FeatureExtractorConfig(BaseConfigClass):
@@ -95,7 +96,8 @@ def BackboneFactory(cfg: BackboneConfig) -> nn.Module:
 class EfficientNetConfig(FeatureExtractorConfig):
     # Which EfficientNet variant to use
     model_name: Literal['b0', 'b1', 'b2', 'b3', 'b4', 'b6'] = 'b0'
-    feature_tapping_output_resolution_channels: dict[str, dict[str, tuple[int, int] | int]] | None = field(default_factory=lambda: {"1": {"resolution": (32,32), "channels": 1}})
+    feature_tapping_output_resolution_channels: dict[str, dict[str, tuple[int, int] | int]] | None = field(default_factory=lambda: {"1": {"resolution": (32,32), "channels": 1, "linear_output_size": 128},})
+    expectation_normalization_factor: int | float | tuple[float, float] = (1.0, 1.0)
 
     def __post_init__(self):
         self.input_channels = 3
@@ -114,6 +116,7 @@ class EfficientNetConfig(FeatureExtractorConfig):
             self.feature_tapping_channel_input_size = {key: 0 for key in self.feature_tapping_output_resolution_channels.keys()}
 
             # Define feature_tapping_channel_input_size for each stage
+            # TODO (PC) clarify what is the scope of this loop?
             for key, value in self.feature_tapping_output_resolution_channels.items():
 
                 # Handle value being a tuple of length 2 or 3
@@ -126,6 +129,10 @@ class EfficientNetConfig(FeatureExtractorConfig):
                         resolution = self.feature_tapping_output_resolution_channels[key][key_resolution]
                         channels = self.feature_tapping_output_resolution_channels[key][key_channels]
 
+                        if self.output_type == 'spill_features':
+                            linear_output_size = 128
+                            print(f"\033[38;5;208mWARNING: missing linear_output_size for spill_features variant. Default value of {linear_output_size} will be used.\033[0m")
+                            
                     elif len(value) == 3:
                         key_resolution, key_channels, key_linear_output_size = value.keys()
 
@@ -133,8 +140,24 @@ class EfficientNetConfig(FeatureExtractorConfig):
                         resolution = self.feature_tapping_output_resolution_channels[key][key_resolution]
                         channels = self.feature_tapping_output_resolution_channels[key][key_channels]
                         linear_output_size = self.feature_tapping_output_resolution_channels[key][key_linear_output_size]
+
+                        # Check validity of linear_output_size
+                        assert isinstance(linear_output_size, int), "Linear output size must be a scalar integer."
+                        assert linear_output_size > 0, "Linear output size must be a positive integer."
+
+                        if self.output_type == 'spatial_features':
+                            print(f"\033[38;5;208mWARNING: linear_output_size provided but not used for spatial features. It will be ignored.\033[0m")
                     else:
                         raise ValueError(f"Value for key {key} must be a tuple of length 2 or 3.")
+                    
+                    # Check validity of settings
+                    assert isinstance(resolution, (tuple, list)) and len(resolution) == 2, "Resolution must be a tuple or list of two integers."
+                    assert np.all(np.array(resolution) >
+                                    0), "Resolution must be a positive integer."
+
+                    assert isinstance(channels, int), "Channels must be a scalar integer."
+                    assert channels > 0, "Channels must be a positive integer."
+
                 else:
                     raise ValueError(f"Value for key {key} must be a dict.")
 
