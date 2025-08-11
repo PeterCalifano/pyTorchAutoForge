@@ -292,7 +292,7 @@ class LabelsContainer(BaseLabelsContainer):
             # Raise AttributeError to maintain standard behavior
             raise AttributeError(f"'{self.__class__.__name__}' object has no definition for PTAF_Datakey '{item}'. Make sure it exists or add it.")
 
-    def get_labels(self, data_keys: tuple[PTAF_Datakey | str, ...]) -> list[Any]:
+    def get_labels(self, data_keys: tuple[PTAF_Datakey | str, ...] | str | PTAF_Datakey) -> list[Any]:
         """
         Get a list of label values corresponding to the provided data keys.
         
@@ -302,6 +302,10 @@ class LabelsContainer(BaseLabelsContainer):
         Returns:
             list[Any]: A list of label values corresponding to the provided keys.
         """
+
+        if isinstance(data_keys, (str, PTAF_Datakey)):
+            data_keys = (data_keys,) # Make tuple to ensure it is iterable
+
         return np.concatenate([np.array(getattr(self, str(key.name))).ravel() for key in data_keys])
 
 
