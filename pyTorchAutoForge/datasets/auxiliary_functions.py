@@ -21,7 +21,9 @@ try:
                         lbl_vector_data_keys: tuple[PTAF_Datakey | str, ...],
                         samples_limit_per_dataset: int = 0,
                         img_width_heigth: int | tuple[int, int] = (1024, 1024),
-                        label_vector_size: int | None = None) -> ImagesLabelsContainer:
+                        label_vector_size: int | None = None,
+                        max_apparent_size: float | int | None = None,
+                        min_bbox_width_height: tuple[float, float] | float | None = None) -> ImagesLabelsContainer:
         """
         Loads a dataset of images and labels into memory as tensors.
 
@@ -169,6 +171,27 @@ try:
                 # Get labels corresponding to datakeys
                 label_values = labelFile.get_labels(data_keys=lbl_vector_data_keys)
                 lblData[id, :] = torch.tensor(label_values, dtype=torch.float32)
+
+                # If discard based on apparent size is requested check it
+                if max_apparent_size is not None:
+                    lbl_check_val = labelFile.get_labels(data_keys=PTAF_Datakey.APPARENT_SIZE)
+
+                    if lbl_check_val is not None and lbl_check_val > max_apparent_size:
+                        print(f" - Warning: Image {id+1} has apparent size {lbl_check_val}, discarded as too large.")
+                        rejected_data_index.append(id)
+                        continue    
+
+                # If discard based on bounding box size is requested check it
+                if min_bbox_width_height is not None:
+                    if isinstance(min_bbox_width_height, (float, int)):
+                        min_bbox_width_height = (min_bbox_width_height, min_bbox_width_height)
+
+                    lbl_check_val = labelFile.get_labels(data_keys=PTAF_Datakey.BBOX_XYWH)
+
+                    if lbl_check_val is not None and lbl_check_val[2] < min_bbox_width_height[0] and lbl_check_val[3] < min_bbox_width_height[1]:
+                        print(f" - Warning: Image {id+1} has bounding box width, height = {lbl_check_val[2:4]} < {min_bbox_width_height}, discarded as too small.")
+                        rejected_data_index.append(id)
+                        continue
 
             else:
                 raise ValueError(
