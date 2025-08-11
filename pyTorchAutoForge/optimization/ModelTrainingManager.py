@@ -160,6 +160,7 @@ class ModelTrainingManagerConfig():  # TODO update to use BaseConfigClass
     # FIELDS with DEFAULTS
     # Optimization strategy
     num_of_epochs: int = 100  # Number of epochs for training
+    current_epoch: int = 0
     keep_best: bool = True  # Keep best model during training
     enable_early_pruning: bool = False  # Enable early pruning
     pruning_patience: int = 50  # Number of epochs to wait before pruning
@@ -791,7 +792,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             # Calculate progress
             current_batch = batch_idx + 1
-            progress_info = f"\tTraining: Batch {batch_idx+1}/{self.trainingDataloaderSize}, avg. loss: {running_loss / current_batch:4.5g}, num. of steps: {self.num_of_updates}, single loop time: {1000 * current_loop_time:4.4g} [ms], per-batch avg. time: {1000*run_time_total/loop_iter_number:4.4g} [ms], current lr: {self.current_lr:.06g}"
+            progress_info = f"  E[{self.current_epoch+1}/{self.num_of_epochs}] - Training: Batch {batch_idx+1}/{self.trainingDataloaderSize}, avg. loss: {running_loss / current_batch:4.5g}, num. of steps: {self.num_of_updates}, single loop time: {1000 * current_loop_time:4.4g} [ms], per-batch avg. time: {1000*run_time_total/loop_iter_number:4.4g} [ms], current lr: {self.current_lr:.06g}"
 
             # Print progress on the same line
             print(progress_info, end="\r")
@@ -900,7 +901,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                     # Calculate progress
                     current_batch = batch_idx + 1
-                    progress_info = f"\tValidation: Batch {batch_idx+1}/{num_of_batches}, avg. loss: {validation_loss_value / current_batch:4.5g}, per-batch avg. time: {1000*run_time_total/(current_batch):4.4g} [ms]"
+                    progress_info = f"  E[{self.current_epoch+1}/{self.num_of_epochs}] - Validation: Batch {batch_idx+1}/{num_of_batches}, avg. loss: {validation_loss_value / current_batch:4.5g}, per-batch avg. time: {1000*run_time_total/(current_batch):4.4g} [ms]"
 
                     # Print progress on the same line
                     print(progress_info, end="\r")
