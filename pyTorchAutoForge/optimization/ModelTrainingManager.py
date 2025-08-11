@@ -1,39 +1,39 @@
-    """
-     _summary_
+"""
+    _summary_
 
-    _extended_summary_
+_extended_summary_
 
-    :raises FileNotFoundError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises TypeError: _description_
-    :raises NotImplementedError: _description_
-    :raises TypeError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises NotImplementedError: _description_
-    :raises NotImplementedError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises NotImplementedError: _description_
-    :raises optuna.TrialPruned: _description_
-    :raises optuna.TrialPruned: _description_
-    :raises optuna.TrialPruned: _description_
-    :raises optuna.TrialPruned: _description_
-    :raises ValueError: _description_
-    :raises NotImplementedError: _description_
-    :raises TypeError: _description_
-    :raises ValueError: _description_
-    :raises NotImplementedError: _description_
-    :raises NotImplementedError: _description_
-    :raises ValueError: _description_
-    :return: _description_
-    :rtype: _type_
-    """
+:raises FileNotFoundError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises TypeError: _description_
+:raises NotImplementedError: _description_
+:raises TypeError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises NotImplementedError: _description_
+:raises NotImplementedError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises NotImplementedError: _description_
+:raises optuna.TrialPruned: _description_
+:raises optuna.TrialPruned: _description_
+:raises optuna.TrialPruned: _description_
+:raises optuna.TrialPruned: _description_
+:raises ValueError: _description_
+:raises NotImplementedError: _description_
+:raises TypeError: _description_
+:raises ValueError: _description_
+:raises NotImplementedError: _description_
+:raises NotImplementedError: _description_
+:raises ValueError: _description_
+:return: _description_
+:rtype: _type_
+"""
 
 # TODO Add yaml interface for training, compatible with mlflow and optuna
 # The idea is to let the user specify all the parameters in a yaml file, which is then loaded and used
@@ -1216,8 +1216,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             traceback_limit = 8
             traceback_ = traceback.format_exc(limit=traceback_limit)
 
-            print(
-                f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback includes most recent {traceback_limit} calls. {traceback_}\033[0m")
+            print(f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback includes most recent {traceback_limit} calls. {traceback_}\033[0m")
 
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
@@ -1514,24 +1513,34 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Set model name from mlflow run
             self.modelName = self.currentMlflowRun.info.run_name
 
-            # Log configuration parameters
-            ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()
-            RecursiveLogParamsInDict({key: getattr(self, key)
-                                      for key in ModelTrainerConfigParamsNames}, self.mlflow_unwrap_params_depth)
+            try:
+                # Log configuration parameters
+                ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()
+                RecursiveLogParamsInDict({key: getattr(self, key)
+                                        for key in ModelTrainerConfigParamsNames}, self.mlflow_unwrap_params_depth)
 
-            # Log model info (size, number of parameters)
-            mlflow.log_param('num_trainable_parameters', sum(p.numel()
-                             for p in self.model.parameters() if p.requires_grad))
+                # Log model info (size, number of parameters)
+                mlflow.log_param('num_trainable_parameters', sum(p.numel()
+                                for p in self.model.parameters() if p.requires_grad))
 
-            mlflow.log_param('num_total_parameters', sum(p.numel()
-                             for p in self.model.parameters()))
+                mlflow.log_param('num_total_parameters', sum(p.numel()
+                                for p in self.model.parameters()))
 
-            size_mb = ComputeModelParamsStorageSize(self.model)
-            mlflow.log_param(key='model_storage_MB', value=round(size_mb, 4))
+                size_mb = ComputeModelParamsStorageSize(self.model)
+                mlflow.log_param(key='model_storage_MB', value=round(size_mb, 4))
 
-            # Log additional parameters if provided
-            if self.paramsToLogDict is not None:
-                RecursiveLogParamsInDict(self.paramsToLogDict, self.mlflow_unwrap_params_depth)
+                # Log additional parameters if provided
+                if self.paramsToLogDict is not None:
+                    RecursiveLogParamsInDict(self.paramsToLogDict, self.mlflow_unwrap_params_depth)
+                    
+            except Exception as e:
+
+                traceback_limit = 10
+                traceback_ = traceback.format_exc(limit=traceback_limit)
+
+                print(colorama.Fore.RED + f"Run failed. Error logging parameters: {e}.\nTraceback of calls: {traceback_}" + colorama.Style.RESET_ALL)
+                mlflow.end_run(status='FAILED')
+                sys.exit(1)
 
             if self.OPTUNA_MODE:
                 mlflow.log_param('optuna_trial_ID', self.optuna_trial.number)
