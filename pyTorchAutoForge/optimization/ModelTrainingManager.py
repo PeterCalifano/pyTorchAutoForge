@@ -1531,6 +1531,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # Log additional parameters if provided
                 if self.paramsToLogDict is not None:
+                    # TODO improve logging to prevent duplicated key. Current workaround is to make it fail withing the function
                     RecursiveLogParamsInDict(self.paramsToLogDict, self.mlflow_unwrap_params_depth)
                     
             except Exception as e:

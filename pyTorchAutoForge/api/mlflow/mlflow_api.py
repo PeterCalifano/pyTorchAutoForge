@@ -82,11 +82,14 @@ def RecursiveLogParamsInDict(log_dict: dict | object,
             RecursiveLogParamsInDict(value, unwrap_depth - 1)
 
         else:
-            # Log parameter if scalar
-            if not isinstance(value, dict):
-                mlflow.log_param(key, value)
-            else:
-                mlflow.log_params(value, synchronous=True)
+            try:
+                # Log parameter if scalar
+                if not isinstance(value, dict):
+                    mlflow.log_param(key, value)
+                else:
+                    mlflow.log_params(value, synchronous=True)
+            except Exception as e:
+                print("\033[31m" + f"Error logging parameter '{key}'. Handled by skipping entry." + "\033[0m")
 
 
 def SetupMlflowTrackingSession(experiment_name: str,
@@ -97,9 +100,7 @@ def SetupMlflowTrackingSession(experiment_name: str,
                                database_filename: str = "mlflow_database"):
 
     if not isinstance(database_root_dir, (str, Path)) and not database_root_dir is None:
-        print( "\033[31m" + f"TypeError: database_root_dir must be a string, Path, or None. Got {type(database_root_dir)}" + "\033[0m")  #type:ignore
-        raise TypeError(
-            f"database_root_dir must be a string, Path, or None. Got {type(database_root_dir)}")
+        raise TypeError("\033[31m" + f"database_root_dir must be a string, Path, or None. Got {type(database_root_dir)}" + "\033[0m")
 
     # Set up MLflow to use a SQLite backend database (standard general db)
     if database_root_dir is None:
