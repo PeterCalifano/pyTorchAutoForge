@@ -3,4 +3,8 @@ from .ModelTrainingManager import ModelTrainingManager, ModelTrainingManagerConf
 
 # DEVNOTE: torch has __all__ defined for all classes in files. What is its purpose?
 __all__ = ['ModelTrainingManager',
-           'ModelTrainingManagerConfig', 'FreezeModel', 'TaskType', 'enumOptimizerType', 'CustomLossFcn']
+           'ModelTrainingManagerConfig', 
+           'FreezeModel', 
+           'TaskType', 
+           'enumOptimizerType', 
+           'CustomLossFcn']

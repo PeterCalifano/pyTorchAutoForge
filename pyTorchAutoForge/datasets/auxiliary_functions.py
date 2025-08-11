@@ -4,8 +4,7 @@ from pyTorchAutoForge.datasets.DatasetClasses import PTAF_Datakey, FetchDatasetP
 from pyTorchAutoForge.datasets.LabelsClasses import LabelsContainer
 
 from dataclasses import dataclass, field
-import os, sys
-from typing import Literal, TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING, Type
 import torch
 from torchvision.transforms import ToTensor
 import numpy as np
@@ -68,16 +67,15 @@ try:
         imgPaths, lblPaths, total_num_imgs = dataset_paths_container.dump_as_tuple()
 
         # Allocate tensors for images and labels
-        imgData = torch.zeros(total_num_imgs, img_height,
-                            img_width, dtype=torch.uint8)
+        imgData = torch.zeros(total_num_imgs, img_height, img_width, dtype=torch.uint8)
         lblData = None
         if label_vector_size is not None:
             # Initialize label data tensor with specified size
-            lblData = torch.zeros(
-                total_num_imgs, label_vector_size, dtype=torch.float32)
+            lblData = torch.zeros(total_num_imgs, label_vector_size, dtype=torch.float32)
 
         # Start loading process
         toTensor = ToTensor()
+        
         current_dtype = ""
 
         for id, (imgPath, labelPath) in enumerate(zip(imgPaths, lblPaths)):
@@ -123,6 +121,7 @@ try:
 
             # Set all entries <= 7 to 0.0
             tmpImage[tmpImage <= 7] = 0.0
+            print(f"\rLoading image {id+1}/{total_num_imgs}", end='')
 
             # Check if image median intensity is > 30
             nonzero_pixels = tmpImage[tmpImage > 0]
@@ -135,9 +134,7 @@ try:
                 rejected_data_index.append(id)
                 continue
 
-            print(f"\rLoading image {id+1}/{total_num_imgs}", end='', flush=True)
-            imgData[id, :, :] = toTensor(
-                np.round(image_scaling_coeff * tmpImage).astype(np.float32))
+            imgData[id, :, :] = toTensor(np.round(image_scaling_coeff * tmpImage).astype(np.uint8))
 
             # Load label
             # DEPRECATED CODE to remove
@@ -165,8 +162,7 @@ try:
 
                 if lblData is None:
                     # Initialize label data tensor
-                    lblData = torch.zeros(
-                        total_num_imgs, label_vector_size, dtype=torch.float32)
+                    lblData = torch.zeros(total_num_imgs, label_vector_size, dtype=torch.float32)
 
                 # Get labels corresponding to datakeys
                 label_values = labelFile.get_labels(data_keys=lbl_vector_data_keys)
