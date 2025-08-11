@@ -83,7 +83,7 @@ if not on_rtd:
         # GetDevice for Jetson devices
         @functools.lru_cache(maxsize=1)
         def GetDeviceMulti(selection_override: torch.device | str | None = None,
-                           expected_max_vram: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
+                           expected_max_vram_gb: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
             selection_override = _handle_selection_override(selection_override)
             if selection_override is not None:
                 return selection_override
@@ -128,7 +128,7 @@ if not on_rtd:
                     except:
                         # If specified device does not contain index (e.g. "cuda"), query function to get availability
                         is_available, gpu_index = GetCudaAvailability()
-                        gpu_index = int(x=gpu_index.split(":")[-1])
+                        gpu_index = gpu_index.index
 
                 elif isinstance(gpu_index, str):
                     if "cuda" in gpu_index:
@@ -136,7 +136,7 @@ if not on_rtd:
                         if not gpu_index.isdigit():
                             # If specified device does not contain index (e.g. "cuda"), query function to get availability
                             is_available, gpu_index = GetCudaAvailability()
-                            gpu_index = int(gpu_index.split(":")[-1])
+                            gpu_index = gpu_index.index
 
                     else:
                         raise ValueError(
@@ -172,7 +172,7 @@ if not on_rtd:
                 #                    gpu_index=gpu_index, check_interval_in_seconds=check_interval_in_seconds, wait_for_seconds_after_ok=0)
 
 
-            def GetCudaAvailability(expected_max_vram : float | None = None,
+            def GetCudaAvailability(expected_max_vram_gb : float | None = None,
                                     min_mem_free_ratio: float | None = None) -> tuple[Literal[False], torch.device] | tuple[Literal[True], torch.device]:
                 """
                 GetCudaAvailability prints GPU info, selects the GPU with the most free memory,
@@ -220,8 +220,8 @@ if not on_rtd:
                     if min_mem_free_ratio is not None:
                         min_mem_condition = free_memory_ratio >= min_mem_free_ratio 
 
-                    if expected_max_vram is not None:
-                        min_mem_condition = min_mem_condition and free_gb > expected_max_vram
+                    if expected_max_vram_gb is not None:
+                        min_mem_condition = min_mem_condition and free_gb > expected_max_vram_gb
 
                     if (min_mem_condition) and free_gb > max_free:
                         max_free = free_gb
@@ -239,7 +239,7 @@ if not on_rtd:
             
             @functools.lru_cache(maxsize=1)
             def GetDeviceMulti(selection_override : torch.device | str | None = None, 
-                               expected_max_vram: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
+                               expected_max_vram_gb: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
                 """
                 GetDeviceMulti Determines the optimal device for computation based on available memory and compatibility.
 
@@ -259,18 +259,18 @@ if not on_rtd:
                 if selection_override is not None:
                     return selection_override
 
-                if expected_max_vram is not None and not (isinstance(expected_max_vram, (float, int))):
+                if expected_max_vram_gb is not None and not (isinstance(expected_max_vram_gb, (float, int))):
                     raise TypeError(
-                        f"Expected expected_max_vram to be float or int, got {type(expected_max_vram)} instead.")
+                        f"Expected expected_max_vram to be float or int, got {type(expected_max_vram_gb)} instead.")
 
                 MIN_FREE_MEM_RATIO = 0.3
                 # Minimum free memory in GB
-                MIN_FREE_MEM_SIZE = 3 if expected_max_vram is None else expected_max_vram
+                MIN_FREE_MEM_SIZE = 3 if expected_max_vram_gb is None else expected_max_vram_gb
 
                 if torch.cuda.is_available():
                     # Query function to evaluate cuda availability
-                    is_available, selected_gpu = GetCudaAvailability(MIN_FREE_MEM_SIZE, 
-                                                       MIN_FREE_MEM_RATIO)
+                    is_available, selected_gpu = GetCudaAvailability(expected_max_vram_gb=MIN_FREE_MEM_SIZE, 
+                                                       min_mem_free_ratio=MIN_FREE_MEM_RATIO)
 
                     if selected_gpu is not None and is_available:
                         return selected_gpu  # type:ignore
@@ -347,7 +347,7 @@ if not on_rtd:
                     return "cuda"
                 return "cpu"
             
-            def GetCudaAvailability(expected_max_vram: float | None = None,
+            def GetCudaAvailability(expected_max_vram_gb: float | None = None,
                                     min_mem_free_ratio: float | None = None) -> tuple[Literal[False], torch.device] | tuple[Literal[True], torch.device]:
                 return False, torch.device("cuda:0")
 
@@ -355,10 +355,11 @@ else:
     # Define dummy version of GetDeviceMulti for ReadTheDocs
     @functools.lru_cache(maxsize=1)
     def GetDeviceMulti(selection_override: torch.device | str | None = None,
-                       expected_max_vram: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
+                       expected_max_vram_gb: float | None = None) -> torch.device | Literal['cuda'] | Literal['cpu'] | Literal['mps'] | Literal['xpu']:
         return "cpu"    
 
-    def GetCudaAvailability() -> tuple[Literal[False], torch.device] | tuple[Literal[True], torch.device]:
+    def GetCudaAvailability(expected_max_vram_gb: float | None = None,
+                            min_mem_free_ratio: float | None = None) -> tuple[Literal[False], torch.device] | tuple[Literal[True], torch.device]:
         return False, torch.device("cpu")
 
     
