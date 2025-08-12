@@ -133,6 +133,7 @@ def SetupMlflowTrackingSession(experiment_name: str,
 
     # Set tracking URI
     mlflow.set_tracking_uri(tracking_uri)
+    print(f"--- MLflow tracking URI set to: {tracking_uri}")
 
     # Create or select experiment
     exp_name = experiment_name
