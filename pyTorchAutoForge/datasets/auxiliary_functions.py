@@ -123,10 +123,12 @@ try:
                     "Image data type is neither uint8 nor uint16. This dataset loader only supports these two data types.")
 
             # Set all entries <= 7 to 0.0
-            tmpImage[tmpImage <= 7] = 0.0
+            scaled_img = image_scaling_coeff * tmpImage.astype(np.float32)
+            pix_zero_mask = scaled_img <= 7
+            scaled_img[pix_zero_mask] = 0.0
 
             # Check if image median intensity is > 30
-            nonzero_pixels = tmpImage[tmpImage > 0]
+            nonzero_pixels = scaled_img[scaled_img > 0]
             perc75_intensity = np.percentile(
                 nonzero_pixels, 75) if nonzero_pixels.size > 0 else 0
 
@@ -137,8 +139,11 @@ try:
                 continue
 
             print(f"\rLoading image {id+1}/{total_num_imgs}", end='', flush=True)
+            tmpImage[pix_zero_mask] = 0.0
+
             imgData[id, :, :] = toTensor(
-                np.round(image_scaling_coeff * tmpImage).astype(np.float32))
+                np.round(image_scaling_coeff * tmpImage.astype(np.float32))
+                )
 
             # Load label
             # DEPRECATED CODE to remove
