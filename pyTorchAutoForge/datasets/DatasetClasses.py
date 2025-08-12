@@ -1,3 +1,4 @@
+from ast import Import
 import enum
 from torch.utils.data import Dataset
 import numpy as np
@@ -25,10 +26,18 @@ import json
 import yaml
 from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey, LabelsContainer
 
+try:
+    import cv2 as ocv
+    hasOpenCV: bool = True
+
+except ImportError:
+    hasOpenCV: bool = False
 
 # DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
 
 # %% Types and aliases
+
+
 class ImagesDatasetType(enum.Enum):
     """
     Enumeration class for dataset types.
@@ -145,6 +154,7 @@ class DatasetLoaderConfig():
         # Reassign lbl_vector_data_keys to ensure they are PTAF_Datakey instances
         self.lbl_vector_data_keys = tuple(lbl_vector_data_keys_checked)
 
+
 @dataclass
 class ImagesDatasetConfig(DatasetLoaderConfig):
     # Default options
@@ -159,8 +169,9 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
 
     # Additional options
     intensity_scaling_mode: Literal['none', 'dtype', 'custom'] = 'dtype'
-    intensity_scale_value: float | None = None  # Used only if intensity_scaling is 'custom'
-    output_size_limit: int = -1 
+    # Used only if intensity_scaling is 'custom'
+    intensity_scale_value: float | None = None
+    output_size_limit: int = -1
 
     def __post_init__(self):
         super().__post_init__()
@@ -169,31 +180,30 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
             raise ValueError(
                 f"Unsupported intensity scaling mode: {self.intensity_scaling_mode}. Supported modes are 'none', 'dtype', and 'custom'.")
         else:
-            print('Selected intensity scaling mode:', self.intensity_scaling_mode)
-            
-       
+            print('Selected intensity scaling mode:',
+                  self.intensity_scaling_mode)
+
         if self.intensity_scale_value is not None and self.intensity_scaling_mode != 'custom':
             raise ValueError(
                 f"intensity_scale_value must be None unless intensity_scaling_mode is 'custom'.")
 
-        
 
 ######################## DEVNOTE Relatively stable code BELOW ########################
 @dataclass
 class DatasetPathsContainer():
     """
     Container for storing and accessing image and label file paths.
-    
+
     This class manages collections of paired image and label file paths for one or more
     datasets. It ensures the paths are properly matched and provides indexed access to
     retrieve image-label path pairs.
-    
+
     Attributes:
         img_filepaths: List of file paths to images.
         lbl_filepaths: List of file paths to corresponding labels.
         total_num_entries: Total number of image-label pairs across all datasets.
         num_of_entries_in_set: Number of entries in each dataset, as list or single int.
-        
+
     Raises:
         ValueError: If image and label file paths are None or don't have matching lengths.
         IndexError: If an index is out of bounds when accessing items.
@@ -240,9 +250,52 @@ class DatasetPathsContainer():
         return self.img_filepaths, self.lbl_filepaths, self.total_num_entries
 
 
+@dataclass
+class SamplesSelectionCriteria():
+    max_apparent_size: float | int | None = None
+    min_bbox_width_height: tuple[float,
+                                 float] | tuple[int, int] | float | int | None = None
+    min_Q75_intensity: int | float | None = None
+
+    def __post_init__(self):
+        # Handle scalars to tuple
+        if isinstance(self.min_bbox_width_height, (float, int)):
+            self.min_bbox_width_height = (
+                self.min_bbox_width_height, self.min_bbox_width_height)
+
+        # Check type and values validity
+        if not isinstance(self.min_bbox_width_height, (tuple, list)) and \
+                not self.min_bbox_width_height is None:
+            raise TypeError(
+                "min_bbox_width_height must be a tuple, list, float, or int.")
+        elif self.min_bbox_width_height is not None:
+            # Check size
+            if len(self.min_bbox_width_height) != 2:
+                raise ValueError(
+                    "min_bbox_width_height must be a tuple or list of two elements.")
+
+            if not self.min_bbox_width_height[0] >= 0.0 and self.min_bbox_width_height[1] >= 0.0:
+                raise ValueError(
+                    "min_bbox_width_height values must be non-negative.")
+
+        if self.min_Q75_intensity is not None and self.min_Q75_intensity < 0:
+            raise ValueError(
+                "min_Q75_intensity must be a non-negative value.")
+
+        if self.max_apparent_size is not None and self.max_apparent_size < 0:
+            raise ValueError("max_apparent_size must be a non-negative value.")
+
+    def is_valid_img_lbl(self, img_path, lbl_path) -> bool:
+        # Function to check whether (img, lbl) pair is a valid one based on selection criteria
+        # TODO copy and adapt code from FetchDatasetPaths
+        raise NotImplementedError('TODO')
+        return False
+
+
 def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | Path, ...],
                       datasets_root_folder: Path | str | tuple[str | Path, ...],
-                      samples_limit_per_dataset: int | tuple[int, ...] = 0) -> DatasetPathsContainer:
+                      samples_limit_per_dataset: int | tuple[int, ...] = 0,
+                      selection_criteria: SamplesSelectionCriteria | None = None) -> DatasetPathsContainer:
     """Fetches file paths for images and labels from specified datasets.
 
     Locates and builds paths to image and label files from one or more datasets,
@@ -265,7 +318,7 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
 
     Returns:
         DatasetPathsContainer: Container with paths to images and labels, along with dataset size info.
-    """    
+    """
 
     # Select loading mode (single or multiple datasets)
     if isinstance(dataset_name, (str, Path)):
@@ -329,27 +382,155 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         # Append number of images in the set
         num_of_imags_in_set.append(len(os.listdir(image_folder[dset_count])))
 
-        # Build paths index
+        # Build filepath template
         if name_size == 6:
-            img_filepaths.extend([os.path.join(
-                image_folder[dset_count], f"{id+1:06d}.png") for id in range(num_of_imags_in_set[dset_count])])
+            filepath_template = lambda id: f"{id+1:06d}"
 
         elif name_size == 8:
-            img_filepaths.extend([os.path.join(
-                image_folder[dset_count], f"{id*150:08d}.png") for id in range(num_of_imags_in_set[dset_count])])
+            filepath_template = lambda id: f"{id*150:08d}"
 
         else:
             raise ValueError(
                 "Image/labels names are assumed to have 6 or 8 numbers. Please check the dataset format.")
 
-        # Check labels folder extensions
-        file_ext = os.path.splitext(os.listdir(label_folder[dset_count])[0])[1]
-        lbl_filepaths.extend([os.path.join(
-            label_folder[dset_count], f"{id+1:06d}{file_ext}") for id in range(num_of_imags_in_set[dset_count])])
+        # Get labels folder extensions
+        file_ext = os.path.splitext(
+            os.listdir(label_folder[dset_count])[0])[1]
+
+        # Fetch sample paths and select if required
+        if selection_criteria is not None:
+            # Build temporary path index and select samples
+            tmp_img_count = num_of_imags_in_set[dset_count]
+
+            # Build temporary numpy array of chars of size equal to num_of_imags_in_set[dset_count]
+            filenames = [filepath_template(id) + ".png" for id in range(tmp_img_count)]
+            tmp_img_filepaths = [os.path.join(image_folder[dset_count], path) for path in filenames]
+
+            # Pick a safe fixed-width dtype to avoid object arrays
+            max_path_len = max(len(p) for p in tmp_img_filepaths)
+            tmp_img_filepaths = np.array(tmp_img_filepaths, dtype=f"U{max_path_len}")
+
+            # Define lbl filepaths and mask arrays
+            tmp_lbl_filepaths = np.empty(tmp_img_count, dtype=f"U{max_path_len}") 
+            tmp_valid_mask = np.zeros(tmp_img_count, dtype=bool)
+
+            # DEVNOTE: can be parallelized!
+            for id in range(num_of_imags_in_set[dset_count]):
+                # Build image path
+                tmp_img_path = os.path.join(
+                    image_folder[dset_count], filepath_template(id) + '.png')
+
+                # If any selection is requested based on image intensity, load the image
+                if selection_criteria.min_Q75_intensity is not None and hasOpenCV:
+                    # Load image
+                    img = ocv.imread(tmp_img_path, ocv.IMREAD_UNCHANGED)
+                    image_scaling_coeff = 1.0
+
+                    if img.dtype == 'uint8':
+                        image_scaling_coeff = 1.0
+
+                        # Set all 1.0 to 0.0 to fix Blender images issue
+                        img[img == 1.0] = 0.0
+
+                    elif img.dtype == 'uint16':
+                        image_scaling_coeff = 1.0/(257.01)
+
+                        # Set all 1.0 to 0.0 to fix Blender images issue
+                        img[img == 1.0] = 0.0
+
+                    elif img.dtype == 'uint8':
+                        # Images from ABRAM have 12-bit depth?
+                        image_scaling_coeff = 1.0
+
+                    elif img.dtype != 'uint8' and img.dtype != 'uint16':
+                        raise TypeError(
+                            "Image data type is neither uint8 nor uint16. This dataset loader only supports these two data types.")
+
+                    # Compute percentile of intensity considering non-zero pixels
+                    scaled_img = image_scaling_coeff * img.astype(np.float32)
+                    nonzero_pixels = scaled_img[scaled_img > 0]
+
+                    perc75_intensity = np.percentile(
+                        nonzero_pixels, 75) if nonzero_pixels.size > 0 else 0
+                    if perc75_intensity < 5 or \
+                        (perc75_intensity < selection_criteria.min_Q75_intensity and
+                         sum(nonzero_pixels) < 2E3) or \
+                            (perc75_intensity < 1.2 * selection_criteria.min_Q75_intensity and \
+                             sum(nonzero_pixels) < 5E3):
+                        
+                        print(f" - Warning: Image {id+1} has 75th percentile intensity of illuminated pixels equal to {perc75_intensity} < {selection_criteria.min_Q75_intensity} in too many pixels, discarded as too dark.")
+                        continue
+                elif selection_criteria.min_Q75_intensity is not None and not hasOpenCV:
+                    print(f"\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m", end='\r')
+
+
+                # Build lbl path
+                tmp_lbl_path = os.path.join(
+                    label_folder[dset_count], filepath_template(id) + file_ext)
+
+                if os.path.exists(tmp_lbl_path):
+                    if tmp_lbl_path.endswith('.yml') or tmp_lbl_path.endswith('.yaml'):
+                        labelFile = LabelsContainer.load_from_yaml(tmp_lbl_path)
+                    else:
+                        raise ValueError(
+                            f"Unsupported label file format: {tmp_lbl_path}. Only .yml and .yaml are supported byt this implementation.")
+                else:
+                    raise FileNotFoundError(f"Label file not found: {tmp_lbl_path}")
+                
+                # Add in array
+                if selection_criteria.max_apparent_size is not None:
+                    lbl_check_val = labelFile.get_labels(
+                        data_keys=PTAF_Datakey.APPARENT_SIZE)
+
+                    if lbl_check_val is not None and lbl_check_val[0] > selection_criteria.max_apparent_size:
+                        print(f" - Warning: Image {id+1} has apparent size {lbl_check_val[0]} > {selection_criteria.max_apparent_size}, discarded as too large.")
+                        continue
+
+                # If discard based on bounding box size is requested check it
+                if selection_criteria.min_bbox_width_height is not None:
+                    min_bbox_width_height = selection_criteria.min_bbox_width_height
+                    if isinstance(min_bbox_width_height, (float, int)):
+                        min_bbox_width_height = (min_bbox_width_height, min_bbox_width_height)
+
+                    lbl_check_val = labelFile.get_labels(
+                        data_keys=PTAF_Datakey.BBOX_XYWH)
+
+                    if lbl_check_val is not None and lbl_check_val[2] < min_bbox_width_height[0] and \
+                        lbl_check_val[3] < min_bbox_width_height[1]:
+                        print(f" - Warning: Image {id+1} has bounding box width, height = {lbl_check_val[2:4]} < {min_bbox_width_height}, discarded as too small.")
+                        continue
+
+                # Mark sample as valid if all checks are GO
+                tmp_valid_mask[id] = True
+                tmp_lbl_filepaths[id] = tmp_lbl_path
+                tmp_img_filepaths[id] = tmp_img_path
+
+            # Extract valid samples
+            tmp_img_filepaths = tmp_img_filepaths[tmp_valid_mask].tolist()
+            tmp_lbl_filepaths = tmp_lbl_filepaths[tmp_valid_mask].tolist()
+
+            # Update count of images
+            prev_size = num_of_imags_in_set[dset_count]
+            num_of_imags_in_set[dset_count] = len(tmp_img_filepaths)
+
+        else:
+            # Build paths WITHOUT selection based on samples content
+                      
+            # Get all paths as before
+            tmp_img_filepaths = [os.path.join(image_folder[dset_count], filepath_template(
+                id) + ".png") for id in range(num_of_imags_in_set[dset_count])]
+
+            tmp_lbl_filepaths = [os.path.join(label_folder[dset_count], filepath_template(
+                id) + file_ext) for id in range(num_of_imags_in_set[dset_count])]
+
+            prev_size = num_of_imags_in_set[dset_count]
+
+        # Append paths to filepaths lists
+        img_filepaths.extend(tmp_img_filepaths)
+        lbl_filepaths.extend(tmp_lbl_filepaths)
 
         current_total_of_imgs = sum(num_of_imags_in_set)  # Get current total
-        print(
-            f"Dataset '{_dataset_name}' contains {num_of_imags_in_set[dset_count]} images and labels in {file_ext} format.")
+        print(f"Dataset '{_dataset_name}' contains {num_of_imags_in_set[dset_count]} valid images and labels in {file_ext} format. Removed by selection criteria: {prev_size - num_of_imags_in_set[dset_count]}.")
 
         # Check if samples limit is set and apply it if it does
         if isinstance(samples_limit_per_dataset, (list, tuple)):
@@ -366,7 +547,7 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                                           current_total_of_imgs + samples_limit_per_dataset_]
 
             print(
-                f"\tLimiter: number of samples was limited to {samples_limit_per_dataset_}/{num_of_imags_in_set[dset_count]}")
+                f"\tLIMITER: number of samples was limited to {samples_limit_per_dataset_}/{num_of_imags_in_set[dset_count]}")
 
             # Set total number of images to the limit
             num_of_imags_in_set[dset_count] = samples_limit_per_dataset_
@@ -380,6 +561,8 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                                  total_num_entries=total_num_imgs)
 
 # %% Data containers
+
+
 @dataclass
 class ImagesLabelsContainer:
     """
@@ -441,23 +624,24 @@ class TupledImagesLabelsContainer:
 
 # %% Dataset base classes
 class ImagesLabelsDatasetBase(Dataset):
-    def __init__(self, 
-                 dset_cfg: ImagesDatasetConfig, 
-                 transform: torch.nn.Module | None = None, 
+    def __init__(self,
+                 dset_cfg: ImagesDatasetConfig,
+                 transform: torch.nn.Module | None = None,
                  lbl_transform: torch.nn.Module | None = None,
-                 skip_output_slicing: bool = False):
+                 skip_output_slicing: bool = False,
+                 selection_criteria: SamplesSelectionCriteria | None = None):
         """
         Initialize a base dataset for images and labels.
-        
+
         Sets up the dataset configuration, image loading backend, and transforms for 
         both images and labels. Fetches dataset paths and prepares for data loading.
-        
+
         Args:
             dset_cfg: Configuration object containing dataset paths, file formats, 
                 and loading parameters.
             transform: Optional transformation module to apply to loaded images.
             lbl_transform: Optional transformation module to apply to loaded labels.
-            
+
         Raises:
             ImportError: If the requested image backend (cv2 or PIL) is not installed.
             ValueError: If an unsupported image backend is specified.
@@ -466,7 +650,12 @@ class ImagesLabelsDatasetBase(Dataset):
         # Store configuration
         self.dset_cfg = dset_cfg
         self.skip_output_slicing = skip_output_slicing
- 
+
+        if selection_criteria is not None and not isinstance(selection_criteria, SamplesSelectionCriteria):
+            raise TypeError(f'selection_criteria must be either None or a SamplesSelectionCriteria instance. Got {type(selection_criteria)}.')
+        
+        self.selection_criteria = selection_criteria
+
         # Setup backend loader
         if self.dset_cfg.image_backend == 'cv2':
             try:
@@ -476,7 +665,7 @@ class ImagesLabelsDatasetBase(Dataset):
                     "OpenCV (cv2) backend requested, but not installed")
 
             self._load_img_from_file: Callable = partial(cv2.imread,
-                                                            flags=cv2.IMREAD_UNCHANGED)
+                                                         flags=cv2.IMREAD_UNCHANGED)
 
         elif self.dset_cfg.image_backend == 'pil':
             try:
@@ -506,17 +695,15 @@ class ImagesLabelsDatasetBase(Dataset):
         self._label_cache: dict[str, Any] = {}
 
         # Build paths index
-        self.dataset_paths_container = FetchDatasetPaths(
-            dataset_name=self.dset_cfg.dataset_names_list,
-            datasets_root_folder=self.dset_cfg.datasets_root_folder,
-            samples_limit_per_dataset=self.dset_cfg.samples_limit_per_dataset
-        )
+        self.dataset_paths_container = FetchDatasetPaths(dataset_name=self.dset_cfg.dataset_names_list,
+                                                         datasets_root_folder=self.dset_cfg.datasets_root_folder,
+                                                         samples_limit_per_dataset=self.dset_cfg.samples_limit_per_dataset,
+                                                         selection_criteria=self.selection_criteria)
 
         self.dataset_size = len(self.dataset_paths_container)
 
         # TODO add code to determine input scale factor based on dtype
-        #self.input_scale_factor
-
+        # self.input_scale_factor
 
     def _load_yaml(self, path: str) -> dict[str, Any]:
         """
@@ -527,7 +714,6 @@ class ImagesLabelsDatasetBase(Dataset):
                 return yaml.safe_load(f) or {}
             except yaml.YAMLError as e:
                 raise ValueError(f"Failed to load YAML file {path}: {e}")
-
 
     def __len__(self) -> int:
         return self.dataset_size
@@ -547,9 +733,9 @@ class ImagesLabelsDatasetBase(Dataset):
 
         if self.dset_cfg.load_as_tensor:
             img = numpy_to_torch(img)
-            
+
             if len(img.shape) == 2:
-                img = img.unsqueeze(0) # Unsqueeze from (H,W) to (C,H,W))
+                img = img.unsqueeze(0)  # Unsqueeze from (H,W) to (C,H,W))
 
             elif img.shape[-1] <= 3:
                 # Convert to (C,H,W) format
@@ -564,7 +750,7 @@ class ImagesLabelsDatasetBase(Dataset):
 
         if not isinstance(img, (np.ndarray, torch.Tensor)):
             raise TypeError("Image must be a numpy array or a torch tensor.")
-        
+
         if self.dset_cfg.intensity_scaling_mode not in ['none', 'dtype', 'custom']:
             raise ValueError(
                 f"Unsupported intensity scaling mode: {self.dset_cfg.intensity_scaling_mode}")
@@ -582,7 +768,7 @@ class ImagesLabelsDatasetBase(Dataset):
                 else:
                     raise TypeError(
                         "Unsupported image data type for scaling. Only uint8 and uint16 are supported.")
-                
+
             elif isinstance(img, torch.Tensor):
                 if img.dtype == torch.uint8:
                     return img.float() / 255.0
@@ -592,16 +778,18 @@ class ImagesLabelsDatasetBase(Dataset):
                     raise TypeError(
                         "Unsupported image tensor data type for scaling. Only uint8 and uint16 are supported.")
             else:
-                raise TypeError("Image must be a numpy array or a torch tensor.")
+                raise TypeError(
+                    "Image must be a numpy array or a torch tensor.")
 
         elif self.dset_cfg.intensity_scaling_mode == 'custom':
             if self.dset_cfg.intensity_scale_value is None:
-                raise ValueError("intensity_scale_value must be set when intensity_scaling_mode is 'custom'.")
-            
+                raise ValueError(
+                    "intensity_scale_value must be set when intensity_scaling_mode is 'custom'.")
+
             return img * self.dset_cfg.intensity_scale_value
 
-
     # TODO review/rework
+
     def load_labels(self, image_path: str) -> Any:
         """
         Load and process labels with caching. Override _process_labels in subclasses.
@@ -632,7 +820,7 @@ class ImagesLabelsDatasetBase(Dataset):
         image_path, label_path = self.dataset_paths_container[idx]
 
         # Load image
-        img = numpy_to_torch(self._load_image(image_path)) # type:ignore
+        img = numpy_to_torch(self._load_image(image_path))  # type:ignore
 
         # Load labels from YAML file
         lbl = LabelsContainer.load_from_yaml(label_path)
@@ -650,7 +838,7 @@ class ImagesLabelsDatasetBase(Dataset):
             lbl = self.lbl_transform(lbl)
 
         # Slice lbl if output_size_limit is set
-        if self.dset_cfg.output_size_limit > 0 and not(self.skip_output_slicing):
+        if self.dset_cfg.output_size_limit > 0 and not (self.skip_output_slicing):
             if lbl.shape[0] > self.dset_cfg.output_size_limit:
                 lbl = lbl[:self.dset_cfg.output_size_limit]
 
@@ -687,7 +875,7 @@ class ImagesLabelsDatasetBase(Dataset):
     def get_all_labels_container(self):
         """
         Get the labels container for this dataset.
-        
+
         Returns:
             LabelsContainer: The labels container with the specified data keys.
         """
@@ -696,10 +884,12 @@ class ImagesLabelsDatasetBase(Dataset):
         lbl_vector_size, lbl_size_dict = LabelsContainer.get_lbl_1d_vector_size(
             data_keys=self.dset_cfg.lbl_vector_data_keys)
 
-        lbl_array = np.zeros((len(self.dataset_paths_container.lbl_filepaths), lbl_vector_size))
+        lbl_array = np.zeros(
+            (len(self.dataset_paths_container.lbl_filepaths), lbl_vector_size))
 
         for id_lbl, lbl_path in enumerate(self.dataset_paths_container.lbl_filepaths):
-            print(f"Fetching labels from disk: {id_lbl + 1}/{len(self.dataset_paths_container.lbl_filepaths)}", end='\r')
+            print(
+                f"Fetching labels from disk: {id_lbl + 1}/{len(self.dataset_paths_container.lbl_filepaths)}", end='\r')
             # Load labels from YAML file
             lbl = LabelsContainer.load_from_yaml(lbl_path)
 
@@ -707,11 +897,12 @@ class ImagesLabelsDatasetBase(Dataset):
             lbl = lbl.get_labels(data_keys=self.dset_cfg.lbl_vector_data_keys)
             lbl_array[id_lbl] = np.array(lbl)
 
-        container = ImagesLabelsContainer(images=np.empty_like((0,0)),
-                                           labels=lbl_array, 
+        container = ImagesLabelsContainer(images=np.empty_like((0, 0)),
+                                          labels=lbl_array,
                                           labels_datakeys=self.dset_cfg.lbl_dtype,
                                           labels_sizes=lbl_size_dict)
         return container
+
 
 class ImagesLabelsCachedDataset(TensorDataset, ImagesLabelsDatasetBase):
     """
