@@ -5,7 +5,7 @@ import subprocess
 import time
 import sys
 import mlflow
-from dataclasses import is_dataclass, asdict, field, dataclass, fields
+from dataclasses import is_dataclass, MISSING, field, dataclass, fields
 from pathlib import Path
 from typing import TypeVar, Type
 from mlflow.tracking import MlflowClient
@@ -13,10 +13,23 @@ from mlflow.entities import ViewType
 
 
 def _serialize_dataclass(dataclass_obj: object) -> dict:
-    if not is_dataclass(dataclass_obj):
+    if not (is_dataclass(dataclass_obj) and not isinstance(dataclass_obj, type)):
         raise TypeError(
             f"Expected a dataclass instance, got {type(dataclass_obj)}")
-    return {f.name: getattr(dataclass_obj, f.name) for f in fields(dataclass_obj)}
+    
+    # If a custom serializer exists, use it
+    to_dict = getattr(dataclass_obj, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
+
+    # Else return raw fields
+    data_dict = {}
+    for f in fields(dataclass_obj):
+        # for init=False fields that might not exist, skip if truly missing
+        val = getattr(dataclass_obj, f.name, MISSING)
+        if val is not MISSING:
+            data_dict[f.name] = val
+    return data_dict
 
 # %% Auxiliary functions for mlflow tracking API
 
