@@ -8,6 +8,7 @@ from typing import Literal, TYPE_CHECKING, Type
 import torch
 from torchvision.transforms import ToTensor
 import numpy as np
+import gc
 
 from pyTorchAutoForge.datasets.DatasetClasses import PTAF_Datakey, ImagesLabelsContainer
 
@@ -226,4 +227,4 @@ try:
 except ImportError:
     print("\033[91mOpenCV is not installed. LoadDatasetToMem function will not work.\033[0m")
     def LoadDatasetToMem(*args, **kwargs):
-        raise ImportError("OpenCV is required for LoadDatasetToMem function.")
+        raise ImportError("OpenCV is required for LoadDatasetToMem function.") #type:ignore

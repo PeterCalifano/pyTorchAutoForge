@@ -440,9 +440,6 @@ class AugmentationConfig:
     brightness_aug_prob: float = 0.0
     contrast_aug_prob: float = 0.0
 
-    # Batch‐mode number
-    batch_size: int | None = None  # Inferred at runtime if None
-
     # Scaling factors for labels
     label_scaling_factors: ndArrayOrTensor | None = None
     datakey_to_scale: DataKey | None = None

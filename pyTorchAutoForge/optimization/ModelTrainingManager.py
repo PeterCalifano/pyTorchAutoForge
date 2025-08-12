@@ -1,65 +1,38 @@
 """
-    ##############################################
-    ModelTrainingManager Model Training and Validation Manager Module
-    ##############################################
-    This module provides a comprehensive framework for managing the training and validation of PyTorch models. 
-    It includes functionality for configuring training parameters, managing datasets, optimizing models, 
-    logging metrics, and handling advanced features like early stopping, learning rate scheduling, 
-    and Optuna-based hyperparameter optimization.
-    Classes:
-        TaskType(Enum): Enum class to define task types for training and validation (e.g., classification, regression, custom).
-        ModelTrainingManagerConfig: Configuration dataclass for the ModelTrainingManager class. Contains all parameters 
-            accepted as configuration for training and validation.
-        enumOptimizerType(Enum): Enum class to define optimizer types (e.g., SGD, Adam, AdamW).
-        ModelTrainingManager: Main class for managing the training and validation of PyTorch models. 
-            Supports advanced features like multi-threading, logging, and Optuna integration.
-    Functions:
-        FreezeModel(model): Freezes the parameters of a PyTorch model to avoid backpropagation.
-        TrainModel(dataloader, model, lossFcn, optimizer, epochID, device, taskType, lr_scheduler, swa_scheduler, swa_model, swa_start_epoch): 
-            Performs one step of training for a model using the specified dataset and loss function.
-        ValidateModel(dataloader, model, lossFcn, device, taskType): Validates a model using the specified dataset and loss function.
-        TrainAndValidateModel(dataloaderIndex, model, lossFcn, optimizer, config): 
-            Legacy function to train and validate a model using specified dataloaders and loss function.
-        EvaluateModel(dataloader, model, lossFcn, device, numOfSamples, inputSample, labelsSample): 
-            Evaluates a model on a random number of samples from the dataset.
-    Usage:
-        This module is designed to be used in machine learning workflows where PyTorch models are trained and validated. 
-        It provides a high-level interface for managing the entire training process, including configuration, 
-        logging, and advanced features like early stopping and Optuna-based hyperparameter tuning.
-    Example:
-        ```python
-        # Define model
-        model = models.resnet18(pretrained=False)
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        validation_loader = DataLoader(validation_dataset, batch_size=32, shuffle=False)
-        # Define configuration
-        config = ModelTrainingManagerConfig(
-            tasktype=TaskType.CLASSIFICATION,
-            batch_size=32,
-            num_of_epochs=10,
-            initial_lr=0.001,
-            optimizer=torch.optim.Adam
-        # Initialize training manager
-        trainer = ModelTrainingManager(model=model, lossFcn=torch.nn.CrossEntropyLoss(), config=config)
-        # Set dataloaders
-        trainer.setDataloaders(DataloaderIndex(train_loader, validation_loader))
-        # Train and validate model
-        ```
-        FileNotFoundError: If a specified file is not found.
-        optuna.TrialPruned: If the Optuna trial is pruned due to early stopping or divergence.
-    Dependencies:
-        - PyTorch
-        - Optuna
-        - MLFlow
-        - Kornia
-        - YAML
-        - NumPy
-        - Colorama
-        - Dataclasses
-        - Enum
-        - Torchvision (for testing and examples)
-    Note:
-        This module is a work-in-progress (WIP) and may include experimental features.
+    _summary_
+
+_extended_summary_
+
+:raises FileNotFoundError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises TypeError: _description_
+:raises NotImplementedError: _description_
+:raises TypeError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises NotImplementedError: _description_
+:raises NotImplementedError: _description_
+:raises ValueError: _description_
+:raises ValueError: _description_
+:raises NotImplementedError: _description_
+:raises optuna.TrialPruned: _description_
+:raises optuna.TrialPruned: _description_
+:raises optuna.TrialPruned: _description_
+:raises optuna.TrialPruned: _description_
+:raises ValueError: _description_
+:raises NotImplementedError: _description_
+:raises TypeError: _description_
+:raises ValueError: _description_
+:raises NotImplementedError: _description_
+:raises NotImplementedError: _description_
+:raises ValueError: _description_
+:return: _description_
+:rtype: _type_
 """
 
 # TODO Add yaml interface for training, compatible with mlflow and optuna
@@ -88,6 +61,7 @@ from dataclasses import dataclass, asdict, fields, field, MISSING
 from pyTorchAutoForge.datasets import DataloaderIndex, ImageAugmentationsHelper
 from pyTorchAutoForge.utils import GetDeviceMulti, AddZerosPadding, GetSamplesFromDataset, ComputeModelParamsStorageSize
 from pyTorchAutoForge.api.torch import SaveModel, LoadModel, AutoForgeModuleSaveMode
+from pyTorchAutoForge.api.mlflow import RecursiveLogParamsInDict
 from pyTorchAutoForge.optimization import CustomLossFcn
 
 from inputimeout import inputimeout, TimeoutOccurred
@@ -184,6 +158,7 @@ class ModelTrainingManagerConfig():  # TODO update to use BaseConfigClass
     modelName: str = "trained_model"        # Name of the model to be saved
     # Option to enable automatic export to ONNx (attempt)
     export_best_to_onnx: bool = False
+    mlflow_unwrap_params_depth: int = 1
 
     # Optimization parameters
     lr_scheduler: Any | None = None
@@ -498,7 +473,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             device=self.device, enabled=self.use_torch_amp)
 
     # Instance methods below
-
     def _define_optimizer(self, optimizer: optim.Optimizer | enumOptimizerType) -> None:
         """
         Define and set the optimizer for the model training.
@@ -925,7 +899,6 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     X, Y = X.to(self.device), Y.to(self.device)
 
                     # Perform data augmentation on batch
-                    # BUG when augmentation module is not run validation loss is not computed correctly!
                     if self.data_augmentation_module is not None and self.augment_validation_data:
                         X, Y = self.augment_data_batch(X, Y)
                     else:
@@ -1243,8 +1216,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             traceback_limit = 8
             traceback_ = traceback.format_exc(limit=traceback_limit)
 
-            print(
-                f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback includes most recent {traceback_limit} calls. {traceback_}\033[0m")
+            print(f"\033[31m\nError during training and validation cycle: {error_message}...\nTraceback includes most recent {traceback_limit} calls. {traceback_}\033[0m")
 
             if self.mlflow_logging:
                 mlflow.end_run(status='FAILED')
@@ -1541,30 +1513,40 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Set model name from mlflow run
             self.modelName = self.currentMlflowRun.info.run_name
 
-            # Log configuration parameters
-            ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()
-            mlflow.log_params({key: getattr(self, key)
-                              for key in ModelTrainerConfigParamsNames})
+            try:
+                # Log configuration parameters
+                ModelTrainerConfigParamsNames = ModelTrainingManagerConfig.getConfigParamsNames()
+                RecursiveLogParamsInDict({key: getattr(self, key)
+                                        for key in ModelTrainerConfigParamsNames}, self.mlflow_unwrap_params_depth)
 
-            # Log model info (size, number of parameters)
-            mlflow.log_param('num_trainable_parameters', sum(p.numel()
-                             for p in self.model.parameters() if p.requires_grad))
+                # Log model info (size, number of parameters)
+                mlflow.log_param('num_trainable_parameters', sum(p.numel()
+                                for p in self.model.parameters() if p.requires_grad))
 
-            mlflow.log_param('num_total_parameters', sum(p.numel()
-                             for p in self.model.parameters()))
+                mlflow.log_param('num_total_parameters', sum(p.numel()
+                                for p in self.model.parameters()))
 
-            size_mb = ComputeModelParamsStorageSize(self.model)
-            mlflow.log_param(key='model_storage_MB', value=round(size_mb, 4))
+                size_mb = ComputeModelParamsStorageSize(self.model)
+                mlflow.log_param(key='model_storage_MB', value=round(size_mb, 4))
 
-            # Log additional parameters if provided
-            if self.paramsToLogDict is not None:
-                mlflow.log_params(self.paramsToLogDict, synchronous=True)
+                # Log additional parameters if provided
+                if self.paramsToLogDict is not None:
+                    # TODO improve logging to prevent duplicated key. Current workaround is to make it fail withing the function
+                    RecursiveLogParamsInDict(self.paramsToLogDict, self.mlflow_unwrap_params_depth)
+                    
+            except Exception as e:
+
+                traceback_limit = 10
+                traceback_ = traceback.format_exc(limit=traceback_limit)
+
+                print(colorama.Fore.RED + f"Run failed. Error logging parameters: {e}.\nTraceback of calls: {traceback_}" + colorama.Style.RESET_ALL)
+                mlflow.end_run(status='FAILED')
+                sys.exit(1)
 
             if self.OPTUNA_MODE:
                 mlflow.log_param('optuna_trial_ID', self.optuna_trial.number)
                 self.optuna_trial.set_user_attr('mlflow_name', self.modelName)
-                self.optuna_trial.set_user_attr(
-                    'mlflow_ID', self.currentMlflowRun.info.run_id)
+                self.optuna_trial.set_user_attr('mlflow_ID', self.currentMlflowRun.info.run_id)
 
     def exportModel(self):
         pass
