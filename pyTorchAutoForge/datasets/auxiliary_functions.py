@@ -101,7 +101,7 @@ try:
                 tmpImage[tmpImage == 1.0] = 0.0
 
             elif tmpImage.dtype == 'uint16' and not scale_bit_depth:
-                image_scaling_coeff = 1.0/(257.01)
+                image_scaling_coeff = 255.0 / 65535.0
                 if current_dtype != tmpImage.dtype:
                     print("\nLoading uint16 (16-bit) images...")
                     current_dtype = tmpImage.dtype
