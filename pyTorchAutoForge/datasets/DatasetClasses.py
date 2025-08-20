@@ -541,10 +541,10 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         if samples_limit_per_dataset_ > 0:
 
             # Prune paths of the current dataset only
-            img_filepaths = img_filepaths[current_total_of_imgs:
-                                          current_total_of_imgs + samples_limit_per_dataset_]
-            lbl_filepaths = lbl_filepaths[current_total_of_imgs:
-                                          current_total_of_imgs + samples_limit_per_dataset_]
+            img_filepaths = img_filepaths[current_total_of_imgs - num_of_imags_in_set[dset_count]:
+                                          current_total_of_imgs - num_of_imags_in_set[dset_count] + samples_limit_per_dataset_]
+            lbl_filepaths = lbl_filepaths[current_total_of_imgs - num_of_imags_in_set[dset_count]:
+                                          current_total_of_imgs - num_of_imags_in_set[dset_count] + samples_limit_per_dataset_]
 
             print(
                 f"\tLIMITER: number of samples was limited to {samples_limit_per_dataset_}/{num_of_imags_in_set[dset_count]}")

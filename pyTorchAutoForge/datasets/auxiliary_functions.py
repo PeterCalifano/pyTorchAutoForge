@@ -67,6 +67,9 @@ try:
 
         imgPaths, lblPaths, total_num_imgs = dataset_paths_container.dump_as_tuple()
 
+        if total_num_imgs == 0:
+            raise ValueError("No valid images found in dataset paths container. Something may have gone wrong.")
+
         # Allocate tensors for images and labels
         imgData = torch.zeros(total_num_imgs, img_height, img_width, dtype=torch.uint8)
         lblData = None
