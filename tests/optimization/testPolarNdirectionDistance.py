@@ -2,23 +2,17 @@
 Script to test the Polar-n-direction distance function for the evaluation of the distance of a point from a conic in the image place represented by its [3x3] matrix.
 Created by PeterC, 26-06-2024. Reference: “[14] Y. Wu, H. Wang, F. Tang, and Z. Wang, “Efficient conic fitting with an analytical polar-n-direction geometric distance,
 ” Pattern Recognition, vol. 90, pp. 415-423, 2019.” 
+DEVNOTE: old implementation, not actively maintained.
 '''
 
 # Import the required modules
+import matplotlib.pyplot as plt
 import torch
-import pyTorchAutoForge
+from pyTorchAutoForge.utils.DeviceManager import GetDeviceMulti
 import numpy as np
 
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-
-from typing import Union
-
-
-
-def ComputePolarNdirectionDistance(CconicMatrix:Union[np.array , torch.tensor , list], 
-                                   pointCoords: Union[np.array , torch.tensor]):
+def ComputePolarNdirectionDistance(conicMatrix: np.ndarray | torch.Tensor | list, 
+                                   pointCoords: np.ndarray | torch.Tensor | list):
     '''
     Function to compute the Polar-n-direction distance of a point from a conic in the image plane represented by its [3x3] matrix.
     '''    
@@ -27,13 +21,13 @@ def ComputePolarNdirectionDistance(CconicMatrix:Union[np.array , torch.tensor , 
 
     # Compute auxiliary variables
     CbarMatrix = torch.zeros((3,3))
-    CbarMatrix[0:2,0:3] = CconicMatrix.reshape(3,3)[0:2,0:3]
+    CbarMatrix[0:2,0:3] = conicMatrix.reshape(3,3)[0:2,0:3]
 
-    Gmatrix = torch.matmul(CconicMatrix, CbarMatrix)
-    Wmatrix = torch.matmul(torch.matmul(CbarMatrix.T, CconicMatrix), CbarMatrix)
+    Gmatrix = torch.matmul(conicMatrix, CbarMatrix)
+    Wmatrix = torch.matmul(torch.matmul(CbarMatrix.T, conicMatrix), CbarMatrix)
 
     # Compute Gdist2, CWdist and Cdist
-    Cdist = torch.matmul(pointHomoCoords.T, torch.matmul(CconicMatrix, pointHomoCoords))
+    Cdist = torch.matmul(pointHomoCoords.T, torch.matmul(conicMatrix, pointHomoCoords))
     
     Gdist = ( torch.matmul(pointHomoCoords.T, torch.matmul(Gmatrix, pointHomoCoords)) )
     Gdist2 = Gdist * Gdist
@@ -58,8 +52,8 @@ def ComputePolarNdirectionDistance(CconicMatrix:Union[np.array , torch.tensor , 
 
     return sqrDist
 
-def ComputePolarNdirectionDistance_asTensor(CconicMatrix:Union[np.array , torch.tensor , list], 
-                                   pointCoords: Union[np.array , torch.tensor]):
+def ComputePolarNdirectionDistance_asTensor(conicMatrix: np.ndarray | torch.Tensor | list, 
+                                   pointCoords: np.ndarray | torch.Tensor | list):
     '''
     Function to compute the Polar-n-direction distance of a point from a conic in the image plane represented by its [3x3] matrix using torch tensors operations.
     '''
@@ -73,16 +67,16 @@ def ComputePolarNdirectionDistance_asTensor(CconicMatrix:Union[np.array , torch.
     pointHomoCoords_tensor[:, 2, 0] = 1
 
     # Reshape Conic matrix to tensor
-    CconicMatrix = CconicMatrix.view(batchSize, 3, 3).to(device)
+    conicMatrix = conicMatrix.view(batchSize, 3, 3).to(device)
 
     CbarMatrix_tensor = torch.zeros((batchSize, 3, 3), dtype=torch.float32, device=device)
-    CbarMatrix_tensor[:, 0:2,0:3] = CconicMatrix[:, 0:2,0:3]
+    CbarMatrix_tensor[:, 0:2,0:3] = conicMatrix[:, 0:2,0:3]
 
-    Gmatrix_tensor = torch.bmm(CconicMatrix, CbarMatrix_tensor)
-    Wmatrix_tensor = torch.bmm(torch.bmm(CbarMatrix_tensor.transpose(1,2), CconicMatrix), CbarMatrix_tensor)
+    Gmatrix_tensor = torch.bmm(conicMatrix, CbarMatrix_tensor)
+    Wmatrix_tensor = torch.bmm(torch.bmm(CbarMatrix_tensor.transpose(1,2), conicMatrix), CbarMatrix_tensor)
 
     # Compute Gdist2, CWdist and Cdist
-    Cdist_tensor = torch.bmm( pointHomoCoords_tensor.transpose(1, 2), torch.bmm(CconicMatrix, pointHomoCoords_tensor) ) 
+    Cdist_tensor = torch.bmm( pointHomoCoords_tensor.transpose(1, 2), torch.bmm(conicMatrix, pointHomoCoords_tensor) ) 
     
     Gdist_tensor = torch.bmm( pointHomoCoords_tensor.transpose(1, 2), torch.bmm(Gmatrix_tensor, pointHomoCoords_tensor) )
     Gdist2_tensor = torch.bmm(Gdist_tensor, Gdist_tensor)
@@ -108,6 +102,15 @@ def ComputePolarNdirectionDistance_asTensor(CconicMatrix:Union[np.array , torch.
 
 
 def main():
+
+    import matplotlib
+
+    # Determine default backend (select based on session)
+    if matplotlib.is_interactive():
+        matplotlib.use(backend='TkAgg')
+    else:
+        matplotlib.use(backend='Agg')
+
     print("Test the Polar-n-direction distance function for the evaluation of the distance of a point from a conic in the image place represented by its [3x3] matrix.")
 
     # %% TEST: check which point matplotlib and openCV uses as origin of the image
@@ -141,12 +144,10 @@ def main():
 
     # TEST: Tensor evaluation version
 
-    X = torch.tensor(X, dtype=torch.float32, device=pyTorchAutoForge.GetDevice())
-    Y = torch.tensor(Y, dtype=torch.float32, device=pyTorchAutoForge.GetDevice())
+    X = torch.tensor(X, dtype=torch.float32, device=GetDeviceMulti())
+    Y = torch.tensor(Y, dtype=torch.float32, device=GetDeviceMulti())
 
     pixelCoords = torch.stack((X.flatten(), Y.flatten()), dim=1)
-
-
 
     # Evaluate the loss function over the meshgrid
     sqrDist_tensor = ComputePolarNdirectionDistance_asTensor(conicMatrix, pixelCoords)
@@ -175,7 +176,6 @@ def main():
     plt.show(block=True)
 
     diff = np.array(sqrDist_loop) - np.array(sqrDist_np)
-    
 
 
 if __name__ == "__main__":
