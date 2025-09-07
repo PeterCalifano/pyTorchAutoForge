@@ -2,6 +2,19 @@ from .BaseConfigClass import BaseConfigClass
 import torch 
 from dataclasses import dataclass
 # import logging
+import os, sys, matplotlib
+
+def is_headless() -> bool:
+    # No DISPLAY (Linux/Unix) and not running in Windows with GUI
+    if os.name != "nt" and "DISPLAY" not in os.environ:
+        return True
+    # macOS headless (no Aqua session)
+    if sys.platform == "darwin" and not os.environ.get("TERM_PROGRAM") == "Apple_Terminal":
+        return True
+    # Matplotlib check
+    if matplotlib.get_backend().lower() == "agg":
+        return True
+    return False
 
 # TODO: Implement setup class, which options?
 @dataclass
