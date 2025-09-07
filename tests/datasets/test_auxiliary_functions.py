@@ -4,20 +4,17 @@ from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey
 import os
 import numpy as np
 
+from pyTorchAutoForge.setup.AutoForgeInit import is_headless
+
 def test_LoadDatasetToMem():
 
     import matplotlib
     import matplotlib.pyplot as plt
 
-    hostname = os.uname()[1]
-    if hostname == "lagrange" or os.getenv("TMUX") is not None or not plt.isinteractive():
-        matplotlib.use('agg')  # or 'Qt5Agg'
+    if is_headless():
+        matplotlib.use(backend='Agg')
     else:
-        if matplotlib.is_interactive():
-            matplotlib.use('TkAgg')  # or 'TkAgg'
-            plt.ion()
-        else:
-            matplotlib.use(backend='Agg')
+        matplotlib.use(backend='TkAgg')
 
     env_variable = os.getenv("DATASETS")
 
