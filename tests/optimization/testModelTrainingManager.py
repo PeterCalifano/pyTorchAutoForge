@@ -1,7 +1,6 @@
 # Import modules
 import torch
 from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManagerConfig, ModelTrainingManager, TaskType
-from pyTorchAutoForge.utils import GetDeviceMulti
 from pyTorchAutoForge.datasets import DataloaderIndex
 
 from torchvision import models
@@ -73,7 +72,7 @@ def test_ModelTrainingManager():
     # Get model backbone from torchvision
     # All models in torchvision.models for classification are trained on ImageNet, thus have 1000 classes as output
     model = _DefineModel()
-    device = GetDeviceMulti()
+    device = 'cpu'
     model.to(device)
     print(model)  # Check last layer
 
@@ -118,7 +117,7 @@ def test_ModelTrainingManager():
 
     print("\nModelTrainingManagerConfig instance:\n", trainerConfig)
     print("\nDict of ModelTrainingManagerConfig instance:\n",
-          trainerConfig.getConfigDict())
+          trainerConfig.get_config_dict())
 
     # Test overriding of optimizer
     optimizer = torch.optim.SGD(
