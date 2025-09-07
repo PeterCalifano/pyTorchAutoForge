@@ -2,14 +2,17 @@ import os
 from pyTorchAutoForge.datasets import AugmentationConfig, ImageAugmentationsHelper
 import numpy as np
 import cv2
+from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey
+from kornia.constants import DataKey
 import torch
 from pyTorchAutoForge.model_building.backbones.image_processing_operators import Compute_threshold_mask, Apply_sobel_gradient, Apply_laplacian_of_gaussian, Compute_distance_transform_map, Compute_local_variance_map
 from pyTorchAutoForge.utils import torch_to_numpy, numpy_to_torch
-
 from PIL import Image
 import matplotlib.pyplot as plt
 
-def _run_image_operators(image: np.ndarray | torch.Tensor):# -> tuple[Tensor | ndarray[Any, Any], Any | NDArray[numpy_typ...:
+
+# -> tuple[Tensor | ndarray[Any, Any], Any | NDArray[numpy_typ...:
+def _run_image_operators(image: np.ndarray | torch.Tensor):
     """
     Test image processing operators on input image.
     """
@@ -44,7 +47,7 @@ def run_all_single_image_(image_names, apply_augs, augmentation_module: ImageAug
 
         # Optional augmentations
         Y = torch.Tensor([image.shape[0], image.shape[1]]).reshape(1, 2) / 2
-        
+
         if apply_augs and augmentation_module is not None:
             # Convert to torch tensor
             image_norm_torch = numpy_to_torch(image_norm)
@@ -96,7 +99,7 @@ def run_all_single_image_(image_names, apply_augs, augmentation_module: ImageAug
 
 
 def _run_all_batched_images_(image_names, apply_augs, augmentation_module: ImageAugmentationsHelper | None = None):
-    
+
     this_file_path = os.path.dirname(os.path.abspath(__file__))
 
     # ---- Load and normalize all images ----
@@ -119,8 +122,8 @@ def _run_all_batched_images_(image_names, apply_augs, augmentation_module: Image
     H, W = shapes.pop()
 
     batch_np = np.stack(imgs, axis=0)  # (N, H, W)
-    #scale = 255.0 if batch_np.dtype == np.uint8 else 2**16
-    #batch_np /= scale
+    # scale = 255.0 if batch_np.dtype == np.uint8 else 2**16
+    # batch_np /= scale
 
     # print per-image stats
     for name, im in zip(image_names, batch_np):
@@ -188,40 +191,40 @@ def _run_all_batched_images_(image_names, apply_augs, augmentation_module: Image
     plt.show()
     plt.close()
 
+
 def test_all_operators():
     # ---- Configuration ----
     this_file_path = os.path.dirname(os.path.abspath(__file__))
     image_names = ['000002', '000003']  # extend this list for N images
     apply_augs = True
 
+    # DEVNOTE test does not work for bbox/masks (not passed)
+    input_data_keys = [DataKey.IMAGE, DataKey.KEYPOINTS]
+
     # common augmentation setup
-    cfg = AugmentationConfig(
-        max_shift_img_fraction=(150, 150),
-        is_normalized=True,
-        shift_aug_prob=0.75,
-        rotation_angle=(-179, 179),
-        rotation_aug_prob=1.0,
-        rotation_expand=False,
-        sigma_gaussian_noise_dn=10.0,
-        gaussian_noise_aug_prob=1.0,
-        gaussian_blur_aug_prob=0.1,
-        is_torch_layout=True,
-        min_max_brightness_factor=(0.8, 1.2),
-        min_max_contrast_factor=(0.8, 1.2),
-        brightness_aug_prob=1.0,
-        contrast_aug_prob=1.0,
-        input_normalization_factor=255.0
-    )
+    cfg = AugmentationConfig(input_data_keys=input_data_keys,
+                             max_shift_img_fraction=(0.1, 0.1),
+                             is_normalized=True,
+                             shift_aug_prob=0.75,
+                             rotation_angle=(-179, 179),
+                             rotation_aug_prob=1.0,
+                             sigma_gaussian_noise_dn=10.0,
+                             gaussian_noise_aug_prob=1.0,
+                             gaussian_blur_aug_prob=0.1,
+                             is_torch_layout=True,
+                             min_max_brightness_factor=(0.8, 1.2),
+                             min_max_contrast_factor=(0.8, 1.2),
+                             brightness_aug_prob=1.0,
+                             contrast_aug_prob=1.0,
+                             input_normalization_factor=255.0
+                             )
     augmentation_module = ImageAugmentationsHelper(cfg)
-    
+
     # Tests
-    #run_all_single_image_(image_names, apply_augs, augmentation_module)
+    # run_all_single_image_(image_names, apply_augs, augmentation_module)
     _run_all_batched_images_(image_names, apply_augs, augmentation_module)
 
 
 # Manual test execution
 if __name__ == '__main__':
     test_all_operators()
-    
-
-

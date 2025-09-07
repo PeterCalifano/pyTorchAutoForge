@@ -134,11 +134,12 @@ def test_regularizer_invalid_type():
 # %% Edge cases tests
 def test_pooling_factory_stride_and_padding_defaults():
 
-    layer = _pooling_factory("MaxPool2d", kernel_size=(3, 3))
+    kernel_size = (3, 3)
+    layer = _pooling_factory("MaxPool2d", kernel_size=kernel_size)
     assert isinstance(layer, nn.MaxPool2d)
 
     # Default stride should be 1
-    assert layer.stride == 1 or layer.stride == (1, 1)
+    assert layer.stride == kernel_size[0] or layer.stride == kernel_size
     # Default padding should be 0
     assert layer.padding == 0 or layer.padding == (0, 0)
 

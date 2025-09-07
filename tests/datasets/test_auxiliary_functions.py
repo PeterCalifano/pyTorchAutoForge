@@ -5,11 +5,7 @@ import os
 import numpy as np
 
 def test_LoadDatasetToMem():
-    """
-    test_LoadDatasetToMem _summary_
 
-    _extended_summary_
-    """
     import matplotlib
     import matplotlib.pyplot as plt
 
@@ -17,8 +13,11 @@ def test_LoadDatasetToMem():
     if hostname == "lagrange" or os.getenv("TMUX") is not None or not plt.isinteractive():
         matplotlib.use('agg')  # or 'Qt5Agg'
     else:
-        matplotlib.use('TkAgg')  # or 'TkAgg'
-        plt.ion()
+        if matplotlib.is_interactive():
+            matplotlib.use('TkAgg')  # or 'TkAgg'
+            plt.ion()
+        else:
+            matplotlib.use(backend='Agg')
 
     env_variable = os.getenv("DATASETS")
 

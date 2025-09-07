@@ -61,8 +61,7 @@ def test_ImagesDatasetConfig():
     dataset_env_root = _get_dataset_env_root()
 
     # Define dataset paths
-    dataset_root = (os.path.join(dataset_env_root, 'OPERATIVE-archive'),
-                    os.path.join(dataset_env_root, 'UniformlyScatteredPointCloudsDatasets/Moon'),
+    dataset_root = (os.path.join(dataset_env_root, 'UniformlyScatteredPointCloudsDatasets/Moon'),
                     os.path.join(dataset_env_root, 'UniformlyScatteredPointCloudsDatasets/Ceres'))
 
     dataset_names = "Dataset_UniformAzElPointCloud_ABRAM_Moon_2500_ID0"
@@ -78,6 +77,22 @@ def test_ImagesDatasetConfig():
     assert dset_config.lbl_vector_data_keys == lbl_vector_data_keys
 
     return dset_config
+
+def test_ImagesDatasetConfig_path_not_existing():
+    dataset_env_root = _get_dataset_env_root()
+
+    # Define dataset paths
+    dataset_root = (os.path.join(dataset_env_root, 'UniformlyScatteredPointCloudsDatasets/Moon'),
+                    os.path.join(dataset_env_root, 'NonExistentPath/Ceres'))  # Non-existent path
+
+    dataset_names = "Dataset_UniformAzElPointCloud_ABRAM_Moon_2500_ID0"
+    lbl_vector_data_keys = (PTAF_Datakey.CENTRE_OF_FIGURE,
+                            PTAF_Datakey.RANGE_TO_COM)
+    
+    with pytest.raises(FileNotFoundError, match="Dataset root folder.*does not exist"):
+        dset_config = ImagesDatasetConfig(dataset_names_list=dataset_names,
+                                      datasets_root_folder=dataset_root,
+                                lbl_vector_data_keys=lbl_vector_data_keys,)
 
 
 def test_DatasetLoaderConfig_init_with_strings():
