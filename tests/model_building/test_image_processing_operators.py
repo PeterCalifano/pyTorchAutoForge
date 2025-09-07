@@ -61,9 +61,9 @@ def run_all_single_image_(image_names, apply_augs, augmentation_module: ImageAug
         print(
             f"Testing image {image_name}: min {image_norm.min()}, max {image_norm.max()}, mean {image_norm.mean()}")
 
-        # run operators
+        # Run operators
         numpy_maps = _run_image_operators(img_aug[0, 0].cpu().numpy())
-        torch_maps = _run_image_operators(numpy_to_torch(img_aug).to('cuda'))
+        torch_maps = _run_image_operators(numpy_to_torch(img_aug).to('cpu'))
 
         # Compare numpy vs torch maps for unit test
         for i, (nm, tm) in enumerate(zip(numpy_maps, torch_maps)):
@@ -131,7 +131,7 @@ def _run_all_batched_images_(image_names, apply_augs, augmentation_module: Image
             f"Testing image {name}: min {im.min():.4f}, max {im.max():.4f}, mean {im.mean():.4f}")
 
     # ---- Build torch batch ----
-    batch_torch = numpy_to_torch(batch_np).unsqueeze(1).to('cuda')  # (N,1,H,W)
+    batch_torch = numpy_to_torch(batch_np).unsqueeze(1).to('cpu')  # (N,1,H,W)
 
     # Optional augmentations (all at once)
     if apply_augs and augmentation_module is not None:
