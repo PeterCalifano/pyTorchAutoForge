@@ -184,7 +184,7 @@ class ModelTrainingManagerConfig():  # TODO update to use BaseConfigClass
     def __post_init__(self):
 
         if self.device is None:
-            self.device = GetDeviceMulti(expected_max_vram=1024.0)
+            self.device = GetDeviceMulti(expected_max_vram_gb=2.0)
 
         if not(torch.is_tensor(self.label_scaling_factors)) and self.label_scaling_factors is not None:
             # Print warning
@@ -714,7 +714,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 Y = Y * self.label_scaling_factors.to(Y.device)
 
             # Perform FORWARD PASS to get predictions (autocast is no-ops if use_torch_amp == false)
-            with torch.autocast(device_type=self.device, dtype=torch.float16, enabled=self.use_torch_amp):
+            device_ = self.device
+            if device_ is None:
+                raise ValueError('Device is not defined. Cannot proceed with training.')
+            elif isinstance(device_, torch.device):
+                device_ = device_.type
+
+            with torch.autocast(device_type=device_, dtype=torch.float16, enabled=self.use_torch_amp):
                 # Evaluate model at input, calls forward() method
                 predicted_values = self.model(X)
 
