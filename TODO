@@ -6,9 +6,8 @@
 
 - [ ] v0.2.0
   - [x] Add prototype implementation of heads and backbones builders using registries
-  - [ ] Add abstract meta class for loss functions to enforce interface
+  - [ ] Fix unit tests
   - [x] Add prototype implementation of dataset classes from paths
-  - [ ] Fix all unit tests
   - [x] Complete 1st version of model profiler
   - [x] Add prototype of model explainer for vector-to-vector regression using SHAP (basic explainer)
   - [x] Add refactored version of augmentation pipeline (ImagesAugmentationHelper)
@@ -28,15 +27,17 @@
   - [x] Improve PTAF trainer: reduce on plateau scheduler, better stats for evalExample
   - [x] Implement prototype of labels containers from DatasetGeneratorLib and for general usage, with load/dump methods to/form yml and dict
   - [x] Improve ModelTrainingManager printing and save method
-  - [ ] Implement export method (traced, onnx, model pth) in ModelTrainingManager
   - [x] Add automatic check of equivalence in model export helpers (onnx mainly)
   - [x] Modify mlflow logging to unpack dict and dataclasses and save each key separately (better grouping)
   - [x] Add automatic mixed precision support from torch
   - [x] Add optional validation check in Augmentation helper to ensure all inputs are valid ones with remedy action
-  - [ ] Review checkpoint resuming code (ensure the checkpoint is loaded correctly) and add evaluation before training (baseline score)
-  - [ ] Improve handling of training errors (stop and kill run if nan or Inf)
+  - [x] Improve handling of training errors (stop and kill run if nan or Inf)
 
 - [ ] v0.2.1
+  - [ ] Fix unit tests
+  - [ ] Implement export method (traced, onnx, model pth) in ModelTrainingManager
+  - [ ] Add abstract meta class for loss functions to enforce interface
+  - [ ] Review checkpoint resuming code (ensure the checkpoint is loaded correctly) and add evaluation before training (baseline score)
   - [ ] Upgrade PTAF trainer and loss function interfaces to support image segmentation tasks
   - [ ] Add batched bbox label generator using binary thresholded mask/image
   - [ ] Modify DataLoaderIndex to accept datasets directly and a combination of datasets and dataloaders. If dataset is input, use default specifications for dataloader
