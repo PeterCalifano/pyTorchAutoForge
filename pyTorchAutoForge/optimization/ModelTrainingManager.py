@@ -41,6 +41,7 @@ _extended_summary_
 # Loading methods only modify the parameters the user has specified
 
 # from warnings import deprecated
+from math import isnan
 from typing import Literal
 import pprint
 from typing import Any, IO
@@ -57,6 +58,7 @@ from torch import nn
 import numpy as np
 from torch.utils.data import DataLoader
 from dataclasses import dataclass, asdict, fields, field, MISSING
+import math
 
 from pyTorchAutoForge.datasets import DataloaderIndex, ImageAugmentationsHelper
 from pyTorchAutoForge.utils import GetDeviceMulti, AddZerosPadding, GetSamplesFromDataset, ComputeModelParamsStorageSize
@@ -976,13 +978,27 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             else:
                 trial_printout = ""
 
+            ### Pre-training operations
+            if self.checkpoint_to_load is not None:
+                # If restart from check point, perform validation first to set current best
+                validation_loss_value = self.validateModel_(self.model)
+
+                if isinstance(validation_loss_value, tuple):
+                    validation_loss_value = validation_loss_value[0]
+
+                self.currentValidationLoss: float = validation_loss_value
+                self.bestValidationLoss: float = validation_loss_value
+                self.bestModel: torch.nn.Module | None = copy.deepcopy(self.model).to('cpu')
+
+            ########################################
+            ### Loop over epochs
             for epoch_num in range(self.num_of_epochs):
 
                 print(f"\n{colorama.Style.BRIGHT}{colorama.Fore.GREEN}Training epoch" + trial_printout,
                       f"{colorama.Style.BRIGHT}{colorama.Fore.GREEN}: {epoch_num+1}/{self.num_of_epochs}")
                 cycle_start_time = time.time()
 
-                # Update current learning rate
+                # Get current learning rate
                 self.current_lr = self.optimizer.param_groups[0]['lr']
 
                 # Log basic data
@@ -990,8 +1006,17 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     mlflow.log_metric('lr', self.current_lr,
                                       step=self.current_epoch)
 
-                # Perform training for one epoch
+                #####################################
+                ### Perform training for one epoch
                 tmp_train_loss = self._train_model_one_epoch()
+
+                if isinstance(tmp_train_loss, torch.Tensor):
+                    tmp_train_loss = tmp_train_loss.item()
+                    
+                # Check if train loss is NaN or Inf
+                if isnan(tmp_train_loss) or math.isinf(tmp_train_loss):
+                    raise ValueError(
+                        f"Detected training failure. Training loss is {'NaN' if isnan(tmp_train_loss) else 'Inf'}. Run stop.")
 
                 # Perform validation at current epoch
                 tmp_valid_loss = self.validateInternalModel_()
@@ -1000,10 +1025,21 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if isinstance(tmp_valid_loss, tuple):
                     tmp_valid_loss = tmp_valid_loss[0]
 
+                if isinstance(tmp_valid_loss, torch.Tensor):
+                    tmp_valid_loss = tmp_valid_loss.item()
+                
+                # Check if validation loss is NaN or Inf
+                if isnan(tmp_valid_loss) or math.isinf(tmp_valid_loss):
+                    raise ValueError(
+                        f"Detected training failure. Validation loss is {'NaN' if isnan(tmp_valid_loss) else 'Inf'}. Run stop.")
+                    
                 # At epoch 0, set initial validation loss
                 if self.currentValidationLoss is None:
                     self.currentValidationLoss: float = tmp_valid_loss
                     self.bestValidationLoss: float = tmp_valid_loss
+
+                ######################################
+                ### Post training-validation operations
 
                 # Optuna functionalities
                 # Report validation loss to Optuna pruner
@@ -1197,9 +1233,32 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Exit from program gracefully
             if self.EXIT_ON_PRUNING:
                 sys.exit(0)
+            else:
+                # Ask user what to do
+                while True:
+                    try:
+                        user_input = inputimeout(
+                            '\n\n\033[38;5;208mKeyboard interrupt pruning. Stop execution of program (Y) or continue (N)?\033[0m',
+                            timeout=60
+                        ).strip().lower()
+
+                        if user_input in ('n', 'no'):
+                            print('\033[33mContinuing execution...\033[0m')
+                            break  # Exit the loop and continue execution
+
+                        elif user_input in ('y', 'yes'):
+                            sys.exit(0)  # Exit the program gracefully
+                        else:
+                            print("Invalid choice — please type Y or N (timeout set to 60 s).")
+
+                    except TimeoutOccurred:
+                        print("\033[31mTimeout error triggered, program stop.\033[0m")
+                        sys.exit(0)
+
+                    except EOFError:
+                        sys.exit("No input available, program stop.")
 
         except optuna.TrialPruned:
-
             # Optuna trial kill raised
             print(
                 '\033[33m\nModelTrainingManager stopped execution due to Optuna Pruning signal. Run marked as KILLED.\033[0m')
