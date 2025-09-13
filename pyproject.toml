@@ -34,14 +34,15 @@ dependencies = [
     "colorama",
     "msgpack",
     "torchinfo",
-    "torch<=2.8.0; platform_machine == 'x86_64'", # Only for x86_64. Jetson requires nvidia version
+    "torch; platform_machine == 'x86_64'", # Only for x86_64. Jetson requires nvidia version
     "torchvision; platform_machine == 'x86_64'", # Only for x86_64. Jetson requires nvidia version
-    "lietorch; platform_machine == 'x86_64'",
     "norse; platform_machine == 'x86_64'",
     "tonic; platform_machine == 'x86_64'",
     "expelliarmus; platform_machine == 'x86_64'",
     "statsmodels"
 ]
+
+#    "lietorch; platform_machine == 'x86_64'"
 
 classifiers=[
     'Programming Language :: Python :: 3.12',
