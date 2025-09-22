@@ -24,7 +24,7 @@ dependencies = [
     "onnxruntime",
     "inputimeout",
     "optuna",
-    "mlflow<=3.2",
+    "mlflow<=3.4",
     "kornia",
     "albumentations",
     "pytest<=8.3.5",
