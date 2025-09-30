@@ -11,16 +11,16 @@ def ComputeConv2dOutputSize(input_size: conv_size_autocomp_input_types,
                             stride_size: int = 1, 
                             padding_size: int = 0) -> tuple[int, int]:
     """
-    Compute the output size and number of feature maps (channels) of a 2D convolutional layer.
+    Compute output height and width of a 2D convolutional layer.
 
-    Parameters:
-        inputSize (Union[list, np.array, torch.Tensor]): The input size, which must be a list, numpy array, or torch tensor with 2 elements: [height, width].
-        kernelSize (int, optional): The size of the convolutional kernel. Default is 3.
-        strideSize (int, optional): The stride of the convolution. Default is 1.
-        paddingSize (int, optional): The amount of zero-padding added to both sides of the input. Default is 0.
+    Args:
+        input_size: Sequence (height, width) of the input tensor.
+        kernel_size: Size of the convolution kernel. Defaults to 3.
+        stride_size: Stride of the convolution. Defaults to 1.
+        padding_size: Zero-padding added to both sides. Defaults to 0.
 
     Returns:
-        tuple: A tuple containing the height and width of the output feature map.
+        A tuple (out_height, out_width) with the computed spatial dimensions.
     """
     return int(((input_size[0] + 2*padding_size - (kernel_size-1)-1) / stride_size) + 1), int(((input_size[1] + 2*padding_size - (kernel_size-1)-1) / stride_size) + 1)
 
@@ -29,16 +29,16 @@ def ComputePooling2dOutputSize(inputSize: conv_size_autocomp_input_types,
                                strideSize: int = 2, 
                                paddingSize: int = 0) -> tuple[int, int]:
     """
-    Compute the output size and number of feature maps (channels, i.e., volume) of a 2D max/avg pooling layer.
+    Compute output height and width of a 2D pooling layer (max/avg).
 
-    Parameters:
-    inputSize (Union[list, np.array, tensor]): Input size with 2 elements [height, width].
-    kernelSize (int, optional): Size of the pooling kernel. Default is 2.
-    strideSize (int, optional): Stride size of the pooling operation. Default is 2.
-    paddingSize (int, optional): Padding size added to the input. Default is 0.
+    Args:
+        inputSize: Sequence (height, width) of the input tensor.
+        kernelSize: Size of the pooling kernel. Defaults to 2.
+        strideSize: Stride of the pooling. Defaults to 2.
+        paddingSize: Padding added to the input. Defaults to 0.
 
     Returns:
-    tuple: A tuple containing the height and width of the output size.
+        A tuple (out_height, out_width) with the computed spatial dimensions.
     """
     return int(((inputSize[0] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1), int(((inputSize[1] + 2*paddingSize - (kernelSize-1)-1) / strideSize) + 1)
 
@@ -51,26 +51,27 @@ def ComputeConvBlock2dOutputSize(input_size: conv_size_autocomp_input_types,
                                pooling_stride_size: int | None = None,
                                conv2d_padding_size: int = 0, 
                                pooling_padding_size: int = 0) -> tuple[tuple[int, int], int]:
-
     """
-    Computes the output size and number of feature maps (channels, i.e., volume) of a ConvBlock layer.
+    Compute the spatial output size and flattened feature count for a single ConvBlock (Conv2d -> Pool).
 
     Args:
-        input_size (Union[list, tuple, np.ndarray, torch.Tensor]): Input size with 2 elements [height, width].
-        out_channels_size (int): Number of output channels for the Conv2d layer.
-        conv2d_kernel_size (int, optional): Size of the Conv2d kernel. Default is 3.
-        pooling_kernel_size (int, optional): Size of the pooling kernel. Default is 2.
-        conv_stride_size (int, optional): Stride size for the Conv2d layer. Default is 1.
-        pooling_stride_size (int or None, optional): Stride size for the pooling layer. If None, defaults to pooling_kernel_size.
-        conv2d_padding_size (int, optional): Padding size for the Conv2d layer. Default is 0.
-        pooling_padding_size (int, optional): Padding size for the pooling layer. Default is 0.
+        input_size: Sequence (height, width) of the input to the ConvBlock.
+        out_channels_size: Number of output channels produced by the Conv2d layer.
+        conv2d_kernel_size: Conv2d kernel size. Defaults to 3.
+        pooling_kernel_size: Pooling kernel size. Defaults to 2.
+        conv_stride_size: Conv2d stride. Defaults to 1.
+        pooling_stride_size: Pooling stride. If None, defaults to pooling_kernel_size.
+        conv2d_padding_size: Conv2d padding. Defaults to 0.
+        pooling_padding_size: Pooling padding. Defaults to 0.
 
     Returns:
-        tuple:
-            - tuple[int, int]: Output size [height, width] after ConvBlock.
-            - int: Flattened output size (height * width * out_channels_size).
-    """
+        A tuple:
+            - (out_height, out_width): Spatial size after ConvBlock.
+            - flattened_size: Number of features after flattening (height * width * out_channels_size).
 
+    Raises:
+        ValueError: If pooling kernel is larger than the Conv2d output spatial dimensions.
+    """
     if pooling_stride_size is None:
         pooling_stride_size = pooling_kernel_size
 
@@ -104,23 +105,23 @@ def AutoComputeConvBlocksOutput(first_input_size: int | list[int] | tuple[int, i
                                 conv2d_padding_sizes: conv_size_autocomp_input_types | None = None,
                                 pooling_padding_sizes: conv_size_autocomp_input_types | None = None) -> tuple[tuple[int, int], list[int], list[tuple[int,int]]]:
     """
-    Computes the output size and flattened feature sizes for a sequence of ConvBlock layers.
+    Compute outputs for a sequence of ConvBlock layers.
 
     Args:
-        first_input_size (int | list[int] | tuple[int, int]): Initial input size, either as an integer (assumed square), a list [height, width], or a tuple (height, width).
-        out_channels_sizes (tuple[int, ...] | list[int] | np.ndarray): Number of output channels for each ConvBlock.
-        kernel_sizes (tuple[int, ...] | list[int] | np.ndarray): Kernel sizes for each ConvBlock.
-        pooling_kernel_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Pooling kernel sizes for each ConvBlock. Defaults to 1 if None.
-        conv_stride_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Stride sizes for each ConvBlock. Defaults to 1 if None.
-        pooling_stride_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Stride sizes for pooling layers. Defaults to pooling_kernel_sizes if None.
-        conv2d_padding_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Padding sizes for Conv2d layers. Defaults to 0 if None.
-        pooling_padding_sizes (tuple[int, ...] | list[int] | np.ndarray | None): Padding sizes for pooling layers. Defaults to 0 if None.
+        first_input_size: Initial input size. If int, treated as square (height==width). If tuple/list, expects (height, width).
+        out_channels_sizes: Sequence of output channel counts for each ConvBlock.
+        kernel_sizes: Sequence of conv kernel sizes for each ConvBlock.
+        pooling_kernel_sizes: Sequence of pooling kernel sizes. If None, defaults to 1 for each block.
+        conv_stride_sizes: Sequence of conv strides. If None, defaults to 1 for each block.
+        pooling_stride_sizes: Sequence of pooling strides. If None, defaults to pooling_kernel_sizes.
+        conv2d_padding_sizes: Sequence of conv paddings. If None, defaults to 0 for each block.
+        pooling_padding_sizes: Sequence of pooling paddings. If None, defaults to 0 for each block.
 
     Returns:
-        tuple[tuple[int, int], list[int], list[tuple[int, int]]]:
-            - tuple[int, int]: Output size [height, width] of the last ConvBlock.
-            - list[int]: Flattened output sizes for each ConvBlock.
-            - list[tuple[int, int]]: Intermediate output sizes [height, width] for each ConvBlock.
+        A tuple:
+            - last_map_size: (height, width) after the final ConvBlock.
+            - flattened_sizes: List of flattened feature sizes for each ConvBlock.
+            - intermediated_maps_sizes: List of (height, width) for each ConvBlock.
     """
     if isinstance(first_input_size, int):
         first_input_size = [first_input_size, first_input_size]
@@ -148,6 +149,7 @@ def AutoComputeConvBlocksOutput(first_input_size: int | list[int] | tuple[int, i
     # Loop over input lists 
     flattened_sizes = []
     intermediated_maps_sizes = []
+    conv_block_map_output_size = (0, 0) # Initialize as zero
 
     for idL in range(len(kernel_sizes)):
 
@@ -181,16 +183,42 @@ class EnumMultiHeadOutMode(Enum):
     Average = 3  # TODO not implemented yet
 
 # TODO (PC) move to modelBuildingBlocks module (or maybe a new one, it is already quite large)
-class MultiHeadRegressor(nn.Module):
-    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module,
-                 output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate,
-                 *args,
-                 **kwargs):
+class HeadRegressor(nn.Module):
+    """
+    Base class for regression heads that manages a collection of sub-head modules and output packing.
 
-        # Initialize nn.Module base class
-        super(MultiHeadRegressor, self).__init__()
-        self.heads = nn.ModuleList()
+    Args:
+        model_heads: One of nn.Module, nn.ModuleList or nn.ModuleDict containing head modules.
+        output_mode: EnumMultiHeadOutMode value controlling how multiple heads' outputs are combined.
+
+    Attributes:
+        output_mode: Selected output packing mode.
+        heads: nn.ModuleList containing the provided head modules.
+        pack_output: Callable used to pack outputs according to output_mode.
+
+    Raises:
+        TypeError: If model_heads is not nn.Module, nn.ModuleList, or nn.ModuleDict.
+        NotImplementedError: If an unsupported output_mode is provided.
+    """
+
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module,
+                 output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate):
+        
+        super(HeadRegressor, self).__init__()
+
         self.output_mode = output_mode
+        self.heads = nn.ModuleList()
+
+        # Define function to pack output depending on the output_mode
+        if self.output_mode == EnumMultiHeadOutMode.Concatenate:
+            self.pack_output = self._pack_output_concat
+
+        elif self.output_mode == EnumMultiHeadOutMode.Append:
+            self.pack_output = self._pack_output_append
+
+        else:
+            raise NotImplementedError(
+                f"Output mode {self.output_mode} not implemented yet >.<")
 
         if isinstance(model_heads, nn.ModuleList):
             # Unpack list and append to heads module List
@@ -206,31 +234,69 @@ class MultiHeadRegressor(nn.Module):
         elif isinstance(model_heads, nn.Module):
             self.heads.append(model_heads)
 
-        # Define function to pack output depending on the output_mode
-        if self.output_mode == EnumMultiHeadOutMode.Concatenate:
-            self.pack_output = self._pack_output_concat
-
-        elif self.output_mode == EnumMultiHeadOutMode.Append:
-            self.pack_output = self._pack_output_append
-
         else:
-            raise NotImplementedError(
-                f"Output mode {self.output_mode} not implemented yet >.<")
+            raise TypeError("model_heads must be nn.ModuleList, nn.ModuleDict or nn.Module")
 
-
+    # Methods
     def _pack_output_append(self, predictions: list):
         """
-        Packs the predictions into a list. Used when the output mode is set to Append.
+        Return list of predictions (append mode).
+
+        Args:
+            predictions: List of tensors produced by each head.
+
+        Returns:
+            The input list of predictions.
         """
         return predictions
-   
+
     def _pack_output_concat(self, predictions: list):
         """
-        Packs the predictions into a single tensor by concatenating them along the second dimension.
-        Used when the output mode is set to Concatenate.
+        Concatenate predictions along channel dimension (concat mode).
+
+        Args:
+            predictions: List of tensors produced by each head.
+
+        Returns:
+            A single tensor obtained by concatenating predictions along dim=1.
         """
         # Concatenate along 2nd dimension
         return cat(tensors=predictions, dim=1)
+    
+
+class CascadedHeadRegressor(HeadRegressor):
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module,
+                 output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate,
+                 concat_dim: int = 1,
+                 *args,
+                 **kwargs):
+        
+        # Initialize nn.Module base class
+        super().__init__(model_heads=model_heads, output_mode=output_mode)
+        self.concat_dim = concat_dim
+
+    def forward(self, X):
+
+        # Perform forward pass for each head and append to list
+        predictions = []  # TODO this should be initializer statically based on output specifications
+
+        for head in self.heads:
+            predictions.append(head(X))
+
+            # Concatenate input with prediction for next head
+            X = cat(tensors=(X, predictions[-1]), dim=self.concat_dim)
+
+        return self.pack_output(predictions)
+    
+    
+class MultiHeadRegressor(HeadRegressor):
+    def __init__(self, model_heads: nn.ModuleList | nn.ModuleDict | nn.Module,
+                 output_mode: EnumMultiHeadOutMode = EnumMultiHeadOutMode.Concatenate,
+                 *args,
+                 **kwargs):
+
+        # Initialize nn.Module base class
+        super().__init__(model_heads=model_heads, output_mode=output_mode)
 
     def forward(self, X):
 
