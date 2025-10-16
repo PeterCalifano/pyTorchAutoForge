@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field, fields
-from typing import Any, Type, TypeVar
+from typing import Any, Type, TypeVar, Sequence
 import yaml
 import pathlib
 from typing import get_origin, get_args
@@ -54,6 +54,30 @@ class PTAF_Datakey(enum.Enum):
 
         return sizes.get(self, None)
     
+def Parse_ptaf_datakeys(labels: Sequence[str]) -> tuple[PTAF_Datakey, ...]:
+    """
+    Parse_ptaf_datakeys Function to convert a sequence of strings to PTAF datakeys
+
+    This function takes a sequence of label names as strings and converts them into
+    the corresponding PTAF_Datakey enum values. Error is raised if an unknown label is encountered.
+
+    :param labels: Sequence of label names as strings
+    :type labels: Sequence[str]
+    :raises ValueError: If an unknown label is encountered
+    :return: A tuple of corresponding PTAF_Datakey enum values
+    :rtype: tuple[PTAF_Datakey, ...]
+    """
+    parsed: list[PTAF_Datakey] = []
+
+    for label in labels:
+        try:
+            parsed.append(PTAF_Datakey[label.upper()])
+
+        except KeyError as exc:
+            raise ValueError(f"Unknown PTAF_Datakey: {label}") from exc
+    
+    return tuple(parsed)
+
 @dataclass
 class BaseLabelsContainer:
     """

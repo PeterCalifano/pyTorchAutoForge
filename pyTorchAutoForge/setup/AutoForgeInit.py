@@ -4,7 +4,7 @@ from dataclasses import dataclass
 # import logging
 import os, sys, matplotlib
 
-def is_headless() -> bool:
+def Is_session_headless() -> bool:
     # No DISPLAY (Linux/Unix) and not running in Windows with GUI
     if os.name != "nt" and "DISPLAY" not in os.environ:
         return True
@@ -15,6 +15,26 @@ def is_headless() -> bool:
     if matplotlib.get_backend().lower() == "agg":
         return True
     return False
+
+def Setup_matplotlib_backend() -> None:
+    """Choose a sensible backend for headless execution."""
+    
+    if os.getenv("TMUX") is not None:
+        matplotlib.use("agg")
+        return
+
+    try:
+        import matplotlib.pyplot as _plt  # noqa: WPS433 (only for backend detection)
+
+        if not _plt.isinteractive():
+            matplotlib.use("agg")
+        else:
+            matplotlib.use("TkAgg")
+            _plt.ion()
+
+    except Exception:  # pragma: no cover - fallback in rare cases
+        matplotlib.use("agg")
+
 
 # TODO: Implement setup class, which options?
 @dataclass

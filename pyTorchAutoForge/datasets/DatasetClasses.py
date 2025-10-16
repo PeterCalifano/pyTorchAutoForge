@@ -872,7 +872,7 @@ class ImagesLabelsDatasetBase(Dataset):
 
         return cls(image_paths, camera_path, transform, image_backend)
 
-    def get_all_labels_container(self):
+    def get_all_labels_container(self) -> ImagesLabelsContainer:
         """
         Get the labels container for this dataset.
 
