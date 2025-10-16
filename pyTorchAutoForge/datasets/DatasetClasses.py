@@ -899,7 +899,7 @@ class ImagesLabelsDatasetBase(Dataset):
 
         container = ImagesLabelsContainer(images=np.empty_like((0, 0)),
                                           labels=lbl_array,
-                                          labels_datakeys=self.dset_cfg.lbl_dtype,
+                                          labels_datakeys=self.dset_cfg.lbl_vector_data_keys,
                                           labels_sizes=lbl_size_dict)
         return container
 
