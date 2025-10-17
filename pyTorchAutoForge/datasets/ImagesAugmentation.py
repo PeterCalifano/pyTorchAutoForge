@@ -1,6 +1,7 @@
 from logging import warning
 from warnings import warn
 from typing import Any
+from collections.abc import Sequence
 
 try:
     import kornia
@@ -45,15 +46,13 @@ class PlaceholderAugmentation(IntensityAugmentationBase2D):
 
     def apply_transform(self,
                         input: torch.Tensor,
-                        params: dict,
-                        flags: dict,
-                        transform: torch.Tensor) -> torch.Tensor:
+                        params: dict[str, torch.Tensor],
+                        flags: dict[str, Any],
+                        transform: torch.Tensor | None = None) -> torch.Tensor:
 
         return input
 
 # %% Intensity augmentations
-
-
 class PoissonShotNoise(IntensityAugmentationBase2D):
     """
     Applies Poisson shot noise to a batch of images.
@@ -83,9 +82,9 @@ class PoissonShotNoise(IntensityAugmentationBase2D):
 
     def apply_transform(self,
                         input: torch.Tensor,
-                        params: dict,
-                        flags: dict,
-                        transform: torch.Tensor) -> torch.Tensor:
+                        params: dict[str, torch.Tensor],
+                        flags: dict[str, Any],
+                        transform: torch.Tensor | None = None) -> torch.Tensor:
         """
         Applies Poisson shot noise to the input batch of images.
 
@@ -106,14 +105,15 @@ class PoissonShotNoise(IntensityAugmentationBase2D):
 
         # Pixel value is the variance of the Photon Shot Noise (higher where brighter).
         # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel.
-        photon_shot_noise = torch.poisson(x)
+        photon_shot_noise = torch.poisson(input)
 
         # Sum noise to the original images according to mask
-        x += photon_shot_noise
+        input += photon_shot_noise
 
-        return x
+        return input
 
-    def generate_parameters(self, shape: torch.Size) -> dict:
+    def generate_parameters(self, 
+                            shape: tuple[int, ...]) -> dict:
         return {}  # Not needed for this kind of noise
 
     def compute_transformation(self, input: torch.Tensor, params: dict, flags: dict) -> torch.Tensor:
@@ -141,33 +141,105 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
 
     def __init__(self,
                  sigma_noise: float | tuple[float, float],
-                 gaussian_noise_aug_prob: float = 0.5):
+                 gaussian_noise_aug_prob: float = 0.5,
+                 keep_scalar_sigma_fixed: bool = False,
+                 enable_img_validation_mode: bool = True,
+                 validation_min_num_bright_pixels: int = 50):
+        
+        # Init superclass
         super().__init__(p=gaussian_noise_aug_prob)
 
+        # Store parameters
         self.sigma_gaussian_noise_dn = sigma_noise
+        self.keep_scalar_sigma_fixed: bool = keep_scalar_sigma_fixed
+        
+        self.enable_img_validation_mode: bool = enable_img_validation_mode
+        self.validation_min_num_bright_pixels: int = validation_min_num_bright_pixels
 
-    # def forward(self, x: torch.Tensor | tuple[torch.Tensor],
-    #            labels: torch.Tensor | tuple[torch.Tensor] | None = None) -> torch.Tensor | tuple[torch.Tensor, ...]:
+        self.validation_pixel_threshold: float = 5.0  # Pixel intensity threshold to consider a pixel "bright"
+
+        # Initialization checks on sigma values
+        if isinstance(self.sigma_gaussian_noise_dn, tuple):
+            if len(self.sigma_gaussian_noise_dn) != 2:
+                raise ValueError(
+                    f'Invalid sigma_noise tuple length. Expected 2 got {len(self.sigma_gaussian_noise_dn)}')
+            if self.sigma_gaussian_noise_dn[0] < 0 or self.sigma_gaussian_noise_dn[1] < 0:
+                raise ValueError(
+                    'Sigma noise values must be non-negative.')
+            if self.sigma_gaussian_noise_dn[0] >= self.sigma_gaussian_noise_dn[1]:
+                raise ValueError(
+                    'Invalid sigma noise range. Minimum must be less than maximum.')
+        elif isinstance(self.sigma_gaussian_noise_dn, float):
+            if self.sigma_gaussian_noise_dn < 0:
+                raise ValueError('Sigma noise value must be non-negative.')
+        else:
+            raise TypeError(
+                f'Invalid sigma_noise value. Expected float or tuple[float, float] got {type(self.sigma_gaussian_noise_dn)}')
 
     def apply_transform(self,
                         input: torch.Tensor,
                         params: dict[str, torch.Tensor],
                         flags: dict[str, Any],
-                        transform: torch.Tensor | None) -> torch.Tensor:
+                        transform: torch.Tensor | None = None) -> torch.Tensor:
+
+        # Expect BCHW
+        if input.ndim != 4:
+            raise ValueError(f"Expected 4D BCHW, got shape {tuple(input.shape)}")
 
         B, C, H, W = input.shape
         device = input.device
 
         # Determine sigma per sample
-        sigma = self.sigma_gaussian_noise_dn
+        sigma_val = self.sigma_gaussian_noise_dn
+    
+        if isinstance(sigma_val, tuple):
+            # Get min-max values
+            min_s, max_s = sigma_val
 
-        if isinstance(sigma, tuple):
-            min_s, max_s = sigma
+            # Do uniform sampling per sample
             sigma_array = (max_s - min_s) * \
                 torch.rand(B, device=device) + min_s
-        else:
-            sigma_array = torch.full((B,), float(sigma), device=device)
+            
+        elif isinstance(sigma_val, float):
 
+            if self.keep_scalar_sigma_fixed:
+                # Use same assigned sigma as fixed value
+                sigma_array = torch.full((B,), float(sigma_val), device=device)
+
+            else:
+                # Randomize using interval [0, sigma_val]
+                sigma_array = (sigma_val * torch.rand(B, device=device))
+        else:
+            raise TypeError(f'Invalid sigma_noise value. Expected float or tuple[float, float] got {type(sigma_val)}')
+
+
+        # If validation mode, check image content first. Set sigma to zero for those entries before applying
+        if self.enable_img_validation_mode:
+
+            # Check threshold validity (auto-correct based on maximum value in images)
+            max_img_value = input.abs().max()
+            
+            if self.validation_pixel_threshold >= max_img_value:
+
+                # Get max per sample
+                max_per_sample = input.abs().view(B, -1).max(dim=1).values
+
+                # Compute as 0.05 of median of max image values
+                self.validation_pixel_threshold = 0.05 * max_per_sample.median().item()
+
+                print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: validation_pixel_threshold ({self.validation_pixel_threshold}) is greater than or equal to the maximum image pixel value ({max_img_value}). Adjusting threshold it automatically to 0.05 * median of max per sample: {self.validation_pixel_threshold}.{colorama.Style.RESET_ALL}")
+
+            # Count number of bright pixels per image in batch
+            is_pixel_bright_count_mask = input.abs().reshape(
+                B, -1).gt(self.validation_pixel_threshold).sum(dim=1) # Get count of bright pixels per image
+            
+            # Determine valid images mask
+            is_valid_mask = is_pixel_bright_count_mask.ge(self.validation_min_num_bright_pixels) # Get bool mask where >= min_bright pixels shapes as (B,)
+
+            # Set sigma to zero for invalid images by multiplying with bool mask
+            sigma_array = sigma_array * is_valid_mask.to(sigma_array.dtype)
+
+        # Sample image noise and apply to input batch
         sigma_array = sigma_array.view(B, 1, 1, 1)
         noise = torch.randn_like(input) * sigma_array
 
@@ -196,7 +268,7 @@ class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
                         input: torch.Tensor,
                         params: dict[str, torch.Tensor],
                         flags: dict[str, Any],
-                        transform: torch.Tensor | None) -> torch.Tensor:
+                        transform: torch.Tensor | None = None) -> torch.Tensor:
         
         img_batch = input[0]
         B = input.shape[0]
@@ -234,12 +306,16 @@ class RandomImageLabelsRotoTranslation(GeometricAugmentationBase2D):
         self.angles = angles
         self.distribution_type = distribution_type
 
-    def forward(self, x: torch.Tensor | tuple[torch.Tensor],
-                labels: torch.Tensor | tuple[torch.Tensor] | None = None) -> torch.Tensor | tuple[torch.Tensor, ...]:
+    def forward(self, 
+                input: torch.Tensor,
+                params: dict[str, torch.Tensor] | None = None,
+                **kwargs: Any) -> torch.Tensor:
 
-        # TODO implement rotation
-        raise NotImplementedError("Implementation todo")
-        return x, labels
+        # TODO implement forward
+        if 1:
+            raise NotImplementedError("Implementation todo")
+    
+        return x
 
 
 def Flip_coords_X(coords: torch.Tensor,
@@ -332,9 +408,9 @@ if has_kornia:
             super().__init__(apply_prob)
 
         def forward(self,
-                    image: torch.Tensor,
-                    coords: torch.Tensor
-                    ) -> tuple[torch.Tensor, torch.Tensor]:
+                    input: torch.Tensor,
+                    params: dict[str, torch.Tensor] | None = None,
+                    **kwargs: Any) -> torch.Tensor:
             """
             Uses Kornia to horizontally flip a batch of images (B,C,H,W), and adjusts coords.
 
@@ -345,6 +421,9 @@ if has_kornia:
                 flipped_image: (B, C, H, W)
                 flipped_coords: (B, N, 2)
             """
+            
+            raise NotImplementedError("Error: not updated and compatible with supertype")
+        
             # Flip the batch of images
             flipped_image = kornia.geometry.transform.hflip(image)
 
@@ -358,9 +437,9 @@ if has_kornia:
             super().__init__(apply_prob)
 
         def forward(self,
-                    image: torch.Tensor,
-                    coords: torch.Tensor
-                    ) -> tuple[torch.Tensor, torch.Tensor]:
+                    input: torch.Tensor,
+                    params: dict[str, torch.Tensor] | None = None,
+                    **kwargs: Any) -> torch.Tensor:
             """
             Uses Kornia to vertically flip a batch of images (B,C,H,W), and adjusts coords.
 
@@ -371,6 +450,7 @@ if has_kornia:
                 flipped_image: (B, C, H, W)
                 flipped_coords: (B, N, 2)
             """
+            raise NotImplementedError("Error: not updated and compatible with supertype")
             flipped_image = kornia.geometry.transform.vflip(image)
             _, _, H, W = image.shape
             flipped_coords = Flip_coords_Y(coords, image_height=H)
@@ -729,9 +809,12 @@ class ImageAugmentationsHelper(nn.Module):
 
 
             if self.augs_cfg.label_scaling_factors is not None and self.augs_cfg.datakey_to_scale is not None:
+                
                 lbl_index = self.augs_cfg.input_data_keys.index(
                     self.augs_cfg.datakey_to_scale)
+                
                 lbl_tensor = aug_inputs[lbl_index]
+                
                 # Apply inverse scaling to labels
                 aug_inputs[lbl_index] = lbl_tensor / \
                     self.augs_cfg.label_scaling_factors.to(lbl_tensor.device)
@@ -877,7 +960,9 @@ class ImageAugmentationsHelper(nn.Module):
 
         return scale_factor
 
-    def validate_fix_input_img_(self, *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...], original_inputs : ndArrayOrTensor | tuple[ndArrayOrTensor, ...]) -> None:
+    def validate_fix_input_img_(self, 
+                                *inputs: ndArrayOrTensor | Sequence[ndArrayOrTensor],
+                                original_inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...]) -> Sequence[ndArrayOrTensor]:
         """
         Validate input images after augmentation. Attempt fix according to selected remedy action.
         """
@@ -885,7 +970,8 @@ class ImageAugmentationsHelper(nn.Module):
         # TODO: allow _is_valid_image to be custom by overloading with user-specified function returning a mask of size (B, N). Use a functor to enforce constraints on the method signature
         # TODO: requires extensive testing!
 
-        inputs = list(inputs)
+        inputs = list(inputs) # FIXME improve this assignment, typing is wrong
+
         img_index = self.augs_cfg.input_data_keys.index(DataKey.IMAGE)
         lbl_index = self.augs_cfg.input_data_keys.index(DataKey.KEYPOINTS) # TODO (PC) absolutely requires extension!
 
@@ -979,6 +1065,8 @@ class ImageAugmentationsHelper(nn.Module):
         inputs = tuple(input.to(self.augs_cfg.device) for input in inputs)
 
         # A threshold to detect near-black images (tune if needed)
+        # TODO remove hardcoded threshold. It also assumes that the value of intensity is NOT [0,1]!
+
         is_pixel_bright_count_mask = (torch.abs(inputs[img_index]) > 1).view(B, -1).sum(dim=1)
         is_valid_mask = is_pixel_bright_count_mask >= self.augs_cfg.min_num_bright_pixels
 
