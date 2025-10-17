@@ -669,7 +669,7 @@ class ImageAugmentationsHelper(nn.Module):
             augs_ops.append(RandomGaussianNoiseVariableSigma(sigma_noise=augs_cfg.sigma_gaussian_noise_dn, 
                 gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob,
                 keep_scalar_sigma_fixed=False,
-                enable_img_validation_mode=self.enable_batch_validation_check,
+                enable_img_validation_mode=augs_cfg.enable_batch_validation_check,
                 validation_min_num_bright_pixels=50,
                 validation_pixel_threshold=5.0
                 ))
