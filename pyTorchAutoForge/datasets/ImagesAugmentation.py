@@ -144,7 +144,8 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
                  gaussian_noise_aug_prob: float = 0.5,
                  keep_scalar_sigma_fixed: bool = False,
                  enable_img_validation_mode: bool = True,
-                 validation_min_num_bright_pixels: int = 50):
+                 validation_min_num_bright_pixels: int = 50,
+                 validation_pixel_threshold: float = 5.0):
         
         # Init superclass
         super().__init__(p=gaussian_noise_aug_prob)
@@ -156,7 +157,8 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
         self.enable_img_validation_mode: bool = enable_img_validation_mode
         self.validation_min_num_bright_pixels: int = validation_min_num_bright_pixels
 
-        self.validation_pixel_threshold: float = 5.0  # Pixel intensity threshold to consider a pixel "bright"
+        # Pixel intensity threshold to consider a pixel "bright"
+        self.validation_pixel_threshold: float = validation_pixel_threshold
 
         # Initialization checks on sigma values
         if isinstance(self.sigma_gaussian_noise_dn, tuple):
@@ -595,49 +597,16 @@ class ImageAugmentationsHelper(nn.Module):
                        IntensityAugmentationBase2D] = []
         torch_vision_ops = nn.ModuleList()
 
-        # TODO: add rotation augmentation, for simple cases, it is sufficient to rotate the image and pad with zero. Do it before translation.
-        # Geometric augmentations
-        # if augs_cfg.rotation_aug_prob > 0:
-        #    rotation_aug = transforms.RandomRotation(degrees=augs_cfg.rotation_angle,
-        #                                             center=augs_cfg.rotation_centre,
-        #                                             interpolation=augs_cfg.rotation_interp_mode,
-        #                                             expand=augs_cfg.rotation_expand,
-        #                                             fill=augs_cfg.rotation_fill_value)
-        #    torch_vision_ops.append(transforms.RandomApply([rotation_aug],
-        #                                                   p=augs_cfg.rotation_aug_prob))
 
-        # Intensity augmentations
-        if augs_cfg.brightness_aug_prob > 0:
-            # Random brightness scaling
-            augs_ops.append(K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,
-                                               p=augs_cfg.brightness_aug_prob,
-                                               keepdim=True,
-                                               clip_output=False))
+        ## GEOMETRIC AUGMENTATIONS
+        # Image flip augmentation
+        if augs_cfg.hflip_prob > 0:
+            augs_ops.append(K.RandomHorizontalFlip(p=augs_cfg.hflip_prob))
 
-        if augs_cfg.contrast_aug_prob > 0:
-            # Random contrast scaling
-            augs_ops.append(K.RandomContrast(contrast=augs_cfg.min_max_contrast_factor,
-                                             p=augs_cfg.contrast_aug_prob,
-                                             keepdim=True,
-                                             clip_output=False))
+        if augs_cfg.vflip_prob > 0:
+            augs_ops.append(K.RandomVerticalFlip(p=augs_cfg.vflip_prob))
 
-        if augs_cfg.gaussian_blur_aug_prob > 0:
-            # Random Gaussian blur
-            augs_ops.append(K.RandomGaussianBlur(kernel_size=augs_cfg.kernel_size,
-                                                 sigma=augs_cfg.sigma_gaussian_blur,
-                                                 p=augs_cfg.gaussian_blur_aug_prob,
-                                                 keepdim=True))
-
-        if augs_cfg.poisson_shot_noise_aug_prob > 0:
-            # FIXME it seems that possion shot noise cannot be constructed, investigate
-            augs_ops.append(PoissonShotNoise(
-                probability=augs_cfg.poisson_shot_noise_aug_prob))
-
-        if augs_cfg.gaussian_noise_aug_prob > 0:
-            # Random Gaussian noise
-            augs_ops.append(RandomGaussianNoiseVariableSigma(
-                sigma_noise=augs_cfg.sigma_gaussian_noise_dn, gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob))
-
+        # Random affine (roto-translation-scaling)
         if augs_cfg.shift_aug_prob > 0 or augs_cfg.rotation_aug_prob:
 
             # Define rotation angles
@@ -661,13 +630,52 @@ class ImageAugmentationsHelper(nn.Module):
                                            align_corners=augs_cfg.affine_align_corners,
                                            same_on_batch=False))
 
-        # Flip augmentation
-        if augs_cfg.hflip_prob > 0:
-            augs_ops.append(K.RandomHorizontalFlip(p=augs_cfg.hflip_prob))
+        ## INTENSITY AUGMENTATIONS
+        # Random brightness
+        if augs_cfg.brightness_aug_prob > 0:
+            # Random brightness scaling
+            augs_ops.append(K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,
+                                               p=augs_cfg.brightness_aug_prob,
+                                               keepdim=True,
+                                               clip_output=False))
 
-        if augs_cfg.vflip_prob > 0:
-            augs_ops.append(K.RandomVerticalFlip(p=augs_cfg.vflip_prob))
+        # Random contrast
+        if augs_cfg.contrast_aug_prob > 0:
+            # Random contrast scaling
+            augs_ops.append(K.RandomContrast(contrast=augs_cfg.min_max_contrast_factor,
+                                             p=augs_cfg.contrast_aug_prob,
+                                             keepdim=True,
+                                             clip_output=False))
 
+        ## OPTICS AUGMENTATIONS
+        # Random Gaussian blur
+        if augs_cfg.gaussian_blur_aug_prob > 0:
+            # Random Gaussian blur
+            augs_ops.append(K.RandomGaussianBlur(kernel_size=augs_cfg.kernel_size,
+                                                 sigma=augs_cfg.sigma_gaussian_blur,
+                                                 p=augs_cfg.gaussian_blur_aug_prob,
+                                                 keepdim=True))
+
+        ## NOISE AUGMENTATIONS
+        # Image dependent poisson shot noise
+        if augs_cfg.poisson_shot_noise_aug_prob > 0:
+            # FIXME it seems that possion shot noise cannot be constructed, investigate
+            augs_ops.append(PoissonShotNoise(
+                probability=augs_cfg.poisson_shot_noise_aug_prob))
+
+        # Random Gaussian white noise (variable sigma)
+        if augs_cfg.gaussian_noise_aug_prob > 0:
+            # Random Gaussian noise
+            augs_ops.append(RandomGaussianNoiseVariableSigma(sigma_noise=augs_cfg.sigma_gaussian_noise_dn, 
+                gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob,
+                keep_scalar_sigma_fixed=False,
+                enable_img_validation_mode=self.enable_batch_validation_check,
+                validation_min_num_bright_pixels=50,
+                validation_pixel_threshold=5.0
+                ))
+
+        ####################################################################
+        # Add placeholder if needed to prevent errors due to scalar augmentation count
         if len(augs_ops) == 0:
             print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops! Forward pass will not do anything if called.{colorama.Style.RESET_ALL}")
         elif len(augs_ops) == 1:
