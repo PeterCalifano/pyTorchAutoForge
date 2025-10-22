@@ -3,7 +3,7 @@ from torchvision import models
 from pyTorchAutoForge.model_building.backbones.efficient_net import EfficientNetConfig, FeatureExtractorFactory, EfficientNetBackbone
 
 
-def test_efficientnet_backbone():
+def test_efficientnet_backbone_basic():
     # Create a dummy configuration
     cfg = EfficientNetConfig(
         model_name='b0',
@@ -32,6 +32,7 @@ def test_efficientnet_backbone():
     # Adjust based on your model's output size
     assert output.shape == (2, 10)
 
+def test_efficientnet_backbone_intermediatefeats():
     # Create configuration for spill_features
     cfg = EfficientNetConfig(
         model_name='b0',
@@ -48,6 +49,10 @@ def test_efficientnet_backbone():
     backbone_features = FeatureExtractorFactory(cfg)
     print(backbone_features)
 
+    # Try inference with a dummy input
+    # Batch size of 2, 3 channels, 224x224 image
+    dummy_input = torch.randn(2, 3, 224, 224)
+
     # Forward pass
     output_list = backbone_features(dummy_input)
     print("Output type:", type(output_list))
@@ -58,11 +63,11 @@ def test_efficientnet_backbone():
     # Add asserts of expected output shapes
     assert isinstance(output_list, list)
     assert len(output_list) == 11  # Number of layers in EfficientNetB0
-    assert output_list[-1].shape == (2, 10)  # Adjust based on your model's output size
-
-    
+    # Adjust based on your model's output size
+    assert output_list[-1].shape == (2, 10)
 
 
 # Manual run
 if __name__ == "__main__":
-    test_efficientnet_backbone()
+    test_efficientnet_backbone_basic()
+    test_efficientnet_backbone_intermediatefeats()
