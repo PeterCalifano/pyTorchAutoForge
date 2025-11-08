@@ -1,5 +1,5 @@
 # pyTorchAutoForge
-_Warning: Work in progress :)_
+**_WARNING: work in progress. Do not hesitate to open issues for improvements or problems!_**
 
 A library based on PyTorch (<https://pytorch.org/>) and designed to automate ML models development, tracking and deployment, integrated with MLflow and Optuna (<https://mlflow.org/>, <https://optuna.org/>). It also supports spiking networks libraries (WIP). Model optimization and deployment can be performed using ONNx, pyTorch facilities or TensorRT (WIP). The library aims to be compatible with Jetson Orin Nano Jetpack rev6.1. Several other functionalities and utilities for sklearn and pySR (<https://github.com/MilesCranmer/PySR>) are included (see README and documentation).
 
