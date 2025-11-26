@@ -94,5 +94,6 @@ class CustomAdaptiveMaxPool2d(nn.Module):
                 f"ONNX-safe adaptive max pool needs input divisible by output; "
                 f"got H={H}, W={W}, target={self.output_size}"
             )
-        x = x.reshape(B, C, H_out, H // H_out, W_out, W // W_out)
+        x = x.contiguous().reshape(B, C, H_out, H // H_out, W_out, W // W_out)
+        
         return x.amax(dim=(3, 5))
