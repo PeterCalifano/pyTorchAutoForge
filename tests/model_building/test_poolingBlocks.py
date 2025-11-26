@@ -65,22 +65,21 @@ def test_custom_adaptive_max_raises_on_non_divisible_window():
     with pytest.raises(ValueError):
         layer(x)
 
-
-class DummyPoolingModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # Use global pooling to hit the ONNX-safe code paths.
-        self.avg = CustomAdaptiveAvgPool2d((1, 1))
-        self.max = CustomAdaptiveMaxPool2d((1, 1))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        avg_out = self.avg(x)
-        max_out = self.max(x)
-        return avg_out + max_out
-
-
 def test_custom_pooling_gap_onnx_export(tmp_path):
     onnx = pytest.importorskip("onnx")
+
+    # Define test class
+    class DummyPoolingModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            # Use global pooling to hit the ONNX-safe code paths.
+            self.avg = CustomAdaptiveAvgPool2d((1, 1))
+            self.max = CustomAdaptiveMaxPool2d((1, 1))
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            avg_out = self.avg(x)
+            max_out = self.max(x)
+            return avg_out + max_out
 
     model = DummyPoolingModel().eval()
     dummy_input = torch.randn(1, 2, 3, 3)
@@ -99,3 +98,33 @@ def test_custom_pooling_gap_onnx_export(tmp_path):
     onnx.checker.check_model(onnx_model)
     assert export_path.is_file()
 
+
+def test_custom_pooling_generic_onnx_export(tmp_path):
+    onnx = pytest.importorskip("onnx")
+
+    # Define test class
+    class DummyPoolingModelGeneric(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.avg = CustomAdaptiveAvgPool2d((2, 2))
+            self.max = CustomAdaptiveMaxPool2d((2, 2))
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return self.avg(x) + self.max(x)
+        
+    model = DummyPoolingModelGeneric().eval()
+    dummy_input = torch.randn(1, 2, 4, 4)
+    export_path = tmp_path / "generic_pooling_model.onnx"
+
+    torch.onnx.export(
+        model,
+        dummy_input,
+        export_path,
+        opset_version=12,
+        input_names=["input"],
+        output_names=["output"],
+    )
+
+    onnx_model = onnx.load(export_path)
+    onnx.checker.check_model(onnx_model)
+    assert export_path.is_file()
