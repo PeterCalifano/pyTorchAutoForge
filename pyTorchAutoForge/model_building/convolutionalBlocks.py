@@ -9,31 +9,6 @@ import numpy as np
 
 from pyTorchAutoForge.model_building.factories.block_factories import _activation_factory, _initialize_convblock_weights, _pooling_factory, _regularizer_factory, activ_types, pooling_types, regularizer_types, init_methods, pooling_types_1d, pooling_types_2d, pooling_types_3d
 
-# TODO review and test, should be an ONNx compatible AdaptiveAvgPool2d
-class AdaptiveAvgPool2dCustom(nn.Module):
-    def __init__(self, output_size):
-        super(AdaptiveAvgPool2dCustom, self).__init__()
-        self.output_size = np.array(output_size)
-
-    def forward(self, x: torch.Tensor):
-        '''
-        Args:
-            x: shape (batch size, channel, height, width)
-        Returns:
-            x: shape (batch size, channel, 1, output_size)
-        '''
-        shape_x = x.shape
-        if(shape_x[-1] < self.output_size[-1]):
-            paddzero = torch.zeros((shape_x[0], shape_x[1], shape_x[2], self.output_size[-1] - shape_x[-1]))
-            paddzero = paddzero.to('cuda:0')
-            x = torch.cat((x, paddzero), axis=-1)
-
-        stride_size = np.floor(np.array(x.shape[-2:]) / self.output_size).astype(np.int32)
-        kernel_size = np.array(x.shape[-2:]) - (self.output_size - 1) * stride_size
-        avg = nn.AvgPool2d(kernel_size=list(kernel_size), stride=list(stride_size))
-        x = avg(x)
-        return x
-    
 class ConvolutionalBlock1d(nn.Module):
     """
     ConvolutionalBlock1d is a configurable 1D convolutional block for PyTorch.
