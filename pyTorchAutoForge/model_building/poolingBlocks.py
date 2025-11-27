@@ -81,7 +81,7 @@ class CustomAdaptiveMaxPool2d(nn.Module):
         :rtype: torch.Tensor
         """
         # For output size 1x1, i.e. Global Max Pooling
-        return x.max(dim=(2, 3), keepdim=True)[0]
+        return x.amax(dim=(2, 3), keepdim=True)
 
     def forward_impl_adaptive2d(self, x: torch.Tensor) -> torch.Tensor:
         
@@ -96,4 +96,4 @@ class CustomAdaptiveMaxPool2d(nn.Module):
             )
         x = x.contiguous().reshape(B, C, H_out, H // H_out, W_out, W // W_out)
         
-        return x.amax(dim=(3, 5))
+        return x.amax(dim=(3, 5), keepdim=False)
