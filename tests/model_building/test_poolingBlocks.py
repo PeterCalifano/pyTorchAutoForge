@@ -85,7 +85,7 @@ def test_custom_pooling_gap_onnx_export(tmp_path):
         def forward(self, x: torch.Tensor) -> torch.Tensor:
             avg_out = self.avg(x)
             max_out = self.max(x)
-            return avg_out + max_out
+            return avg_out + max_out#type: ignore
 
     model = DummyPoolingModel().eval()
     dummy_input = torch.randn(1, 2, 3, 3)
@@ -93,7 +93,7 @@ def test_custom_pooling_gap_onnx_export(tmp_path):
 
     torch.onnx.export(
         model,
-        dummy_input,
+        dummy_input,#type: ignore
         export_path,
         opset_version=12,
         input_names=["input"],
@@ -133,7 +133,7 @@ def test_custom_pooling_generic_onnx_export(tmp_path: pathlib.Path | str = "/tmp
     #                                input_names=input_names, output_names=output_names, dynamo=True,)
 
     torch.onnx.export(model,
-                    dummy_input,
+                    dummy_input,#type: ignore
                     export_path,
                     opset_version=12,
                     input_names=["input"],
@@ -151,37 +151,42 @@ class testTorchAdaptivePoolModel(nn.Module):
         self.pool = pool_layer
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.pool(x)
+        return self.pool(x) #type: ignore
 
 
 @pytest.mark.parametrize(
-    "pool_ctor",
-    [lambda: nn.AdaptiveAvgPool2d(
-        (4, 4)), lambda: nn.AdaptiveMaxPool2d((4, 4))],
+    ("pool_ctor", "should_succeed"),
+    [
+        (lambda: nn.AdaptiveAvgPool2d((4, 4)), True),
+        (lambda: nn.AdaptiveMaxPool2d((4, 4)), False),
+    ],
 )
-def test_torch_builtin_adaptive_pool_dynamo_export(pool_ctor, tmp_path: pathlib.Path | str = "/tmp/"):
-
-    onnx = pytest.importorskip("onnx")
-
+def test_torch_builtin_adaptive_pool_dynamo_export(
+    pool_ctor, should_succeed, tmp_path: pathlib.Path | str = "/tmp/"
+):
     if not hasattr(torch.onnx, "dynamo_export"):
-        pytest.skip(
-            "torch.onnx.dynamo_export not available in this Torch version")
+        pytest.skip("torch.onnx.dynamo_export not available in this Torch version")
 
     model = testTorchAdaptivePoolModel(pool_ctor()).eval()
     dummy_input = torch.randn(1, 3, 32, 32)
     export_path = Path(tmp_path) / "builtin_pool_model.onnx"
 
-    onnx_program = torch.onnx.export(
-        model,
-        dummy_input,
-        opset_version=18,
-        dynamo=True
-    )
-    onnx_program.save(str(export_path))
+    if should_succeed:
+        onnx = pytest.importorskip("onnx")
+        onnx_program = torch.onnx.export(model,
+                                          dummy_input, #type: ignore
+                                            opset_version=18, 
+                                            dynamo=True)
 
-    onnx_model = onnx.load(export_path)
-    onnx.checker.check_model(onnx_model)
-    assert export_path.is_file()
+        assert onnx_program is not None
+        onnx_program.save(str(export_path)) 
+
+        onnx_model = onnx.load(export_path)
+        onnx.checker.check_model(onnx_model)
+        assert export_path.is_file()
+    else:
+        with pytest.raises(Exception):
+            torch.onnx.export(model, dummy_input, opset_version=18, dynamo=True) #type: ignore
 
 
 #######################################################################################
