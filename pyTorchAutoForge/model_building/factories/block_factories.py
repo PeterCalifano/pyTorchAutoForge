@@ -55,7 +55,7 @@ def _initialize_convblock_weights(block,
         case "xavier_normal": nn.init.xavier_normal_(block.conv.weight)
         case "kaiming_normal": nn.init.kaiming_normal_(block.conv.weight)
         case "orthogonal": nn.init.orthogonal_(block.conv.weight)
-        case "identity": nn.init.eye_(block.conv.weight)
+        case "identity": nn.init.dirac_(block.conv.weight)
         case "zero": nn.init.zeros_(block.conv.weight)
         case "default": pass  # Do not change weights
         case _: raise ValueError(f"Unsupported initialization method: {init_method_type}")
