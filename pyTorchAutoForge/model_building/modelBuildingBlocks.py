@@ -130,7 +130,7 @@ class TemplateConvNet2dConfig(TemplateConvNetConfig):
         super().__post_init__()
 
         # Check pooling type is correct (2d)
-        if not self.pool_type.endswith("2d"):
+        if not self.pool_type.endswith("2d") and self.pool_type != "none":
             raise TypeError(
                 f"TemplateConvNet2dConfig: pool_type must be of type 'MaxPool2d', 'AvgPool2d', 'Adapt_MaxPool2d' or 'Adapt_AvgPool2d'. Found {self.pool_type}.")
 
@@ -138,7 +138,7 @@ class TemplateConvNet2dConfig(TemplateConvNetConfig):
         if self.kernel_sizes is None:
             raise ValueError(
                 "TemplateConvNet2dConfig: 'kernel_sizes' cannot be None")
-        if self.pool_kernel_sizes is None:
+        if self.pool_kernel_sizes is None and self.pool_type != "none":
             raise ValueError(
                 "TemplateConvNet2dConfig: 'pool_kernel_sizes' cannot be None")
         if self.out_channels_sizes is None:
