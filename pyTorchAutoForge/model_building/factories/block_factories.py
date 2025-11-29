@@ -37,7 +37,7 @@ pooling_types_3d = Literal[
 init_methods = Literal[
     "xavier_uniform", "kaiming_uniform",
     "xavier_normal", "kaiming_normal",
-    "orthogonal"
+    "orthogonal", "identity", "zero", "default"
 ]
 
 # %% Layer initialization methods
@@ -54,6 +54,9 @@ def _initialize_convblock_weights(block,
         case "xavier_normal": nn.init.xavier_normal_(block.conv.weight)
         case "kaiming_normal": nn.init.kaiming_normal_(block.conv.weight)
         case "orthogonal": nn.init.orthogonal_(block.conv.weight)
+        case "identity": nn.init.eye_(block.conv.weight)
+        case "zero": nn.init.zeros_(block.conv.weight)
+        case "default": pass  # Do not change weights
         case _: raise ValueError(f"Unsupported initialization method: {init_method_type}")
 
     # Initialize biases to zero
@@ -78,6 +81,9 @@ def _initialize_fcnblock_weights(block,
         case "xavier_normal": nn.init.xavier_normal_(block.linear.weight)
         case "kaiming_normal": nn.init.kaiming_normal_(block.linear.weight)
         case "orthogonal": nn.init.orthogonal_(block.linear.weight)
+        case "identity": nn.init.eye_(block.linear.weight)
+        case "zero": nn.init.zeros_(block.linear.weight)
+        case "default": pass  # Do not change weights
         case _: raise ValueError(f"Unsupported initialization method: {init_method_type}")
 
     # Initialize biases to zero

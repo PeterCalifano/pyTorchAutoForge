@@ -79,7 +79,7 @@ class TemplateNetBaseConfig(BaseConfigClass):
     out_channels_sizes: list[int] | None = None
 
     # Weights initialization method
-    init_method_type: init_methods = "xavier_normal"
+    init_method_type: init_methods = "default"
 
     # Additional features
     dropout_ensemble_size: int = 1  # Set >1 if building using ensemble wrapper
@@ -107,7 +107,7 @@ class TemplateConvNetConfig(TemplateNetBaseConfig):
 
     def __post_init__(self):
         # If activation type is relu one and init method not changed set it to kaiming
-        if "elu" in self.activ_type and self.init_method_type == "xavier_normal":
+        if "elu" in self.activ_type and self.init_method_type == "default":
             self.init_method_type = "kaiming_normal"
 
 
@@ -260,7 +260,7 @@ class TemplateFullyConnectedNetConfig(TemplateNetBaseConfig):
                 raise ValueError("TemplateFullyConnectedNetConfig: 'input_skip_index' cannot be longer than 'output_layer_size'. Please check your configuration.")
 
         # If activation type is a relu one and init method not changed set it to kaiming
-        if "elu" in self.activ_type and self.init_method_type == "xavier_normal":
+        if "elu" in self.activ_type and self.init_method_type == "default":
             self.init_method_type = "kaiming_normal"
 
 # %% Special wrapper classes

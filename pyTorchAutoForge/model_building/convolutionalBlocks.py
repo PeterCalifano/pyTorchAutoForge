@@ -268,11 +268,7 @@ class ConvolutionalBlock3d(nn.Module):
         self.__initialize_weights__(init_method_type)
 
     def __initialize_weights__(self,
-                               init_method_type: Literal["xavier_uniform",
-                                                         "kaiming_uniform",
-                                                         "xavier_normal",
-                                                         "kaiming_normal",
-                                                         "orthogonal"] = "xavier_uniform"):
+                               init_method_type: init_methods = "xavier_uniform"):
         """
         Initialize weights using specified method.
         """
