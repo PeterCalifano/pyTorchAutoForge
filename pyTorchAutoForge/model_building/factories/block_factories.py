@@ -37,7 +37,8 @@ pooling_types_3d = Literal[
 init_methods = Literal[
     "xavier_uniform", "kaiming_uniform",
     "xavier_normal", "kaiming_normal",
-    "orthogonal", "identity", "zero", "default"
+    "orthogonal", "identity", 
+    "zero", "default"
 ]
 
 # %% Layer initialization methods

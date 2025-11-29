@@ -768,11 +768,7 @@ class TemplateFullyConnectedNet(AutoForgeModule):
         # Initialize weights of layers
         self.__initialize_weights__(init_method_type=cfg.init_method_type)
 
-    def __initialize_weights__(self, init_method_type: Literal["xavier_uniform",
-                                                               "kaiming_uniform",
-                                                               "xavier_normal",
-                                                               "kaiming_normal",
-                                                               "orthogonal"] = "xavier_normal"):
+    def __initialize_weights__(self, init_method_type: init_methods = "xavier_normal"):
         """
         Initializes the weights of the model layers using the specified initialization method.
 
