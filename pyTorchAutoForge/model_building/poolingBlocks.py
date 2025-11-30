@@ -4,14 +4,7 @@ from torch import nn
 from typing import Literal
 import torch.nn.functional as F
 import numpy as np
-
-
-from dataclasses import dataclass
-import torch
-from torch import nn
-from typing import Literal
-import torch.nn.functional as F
-import numpy as np
+import kornia
 
 # TODO implement an optional "residual connection" feature
 
@@ -49,7 +42,10 @@ class CustomAdaptiveAvgPool2d(nn.Module):
 
     def forward_impl_adaptive2d(self, x: torch.Tensor) -> torch.Tensor:
         # shape: (N, C, H_in, W_in) -> (N, C, H_out, W_out)
-        return F.interpolate(x, size=self.output_size, mode="area")
+        return_tensor = F.interpolate(x, size=self.output_size, mode="area")
+        assert torch.is_tensor(return_tensor)
+
+        return return_tensor
 
     #def forward(self, x: torch.Tensor) -> torch.Tensor:
 
@@ -63,6 +59,11 @@ class CustomAdaptiveMaxPool2d(nn.Module):
 
         self.output_size = tuple(output_size)
 
+        # Add resizer using kornia to ensure compatibility with output size
+        self.resizer = kornia.geometry.transform.Resize(
+            self.output_size, interpolation="bilinear")#type: ignore
+        
+        # Select implementation based on output size
         if self.output_size[0] == 1 and self.output_size[1] == 1:
             self.forward = self.forward_impl_GMP2d
         else:
@@ -88,12 +89,18 @@ class CustomAdaptiveMaxPool2d(nn.Module):
         # Shape: (N, C, H_in, W_in) -> (N, C, H_out, W_out)
         H_out, W_out = self.output_size
 
+        # Apply resizing first
+        self.resizer = self.resizer.to(x.device)
+        x = self.resizer(x)
+
+        # Check divisibility ("compile time")
         B, C, H, W = x.shape
         if H % H_out != 0 or W % W_out != 0:
             raise ValueError(
                 f"ONNX-safe adaptive max pool needs input divisible by output; "
                 f"got H={H}, W={W}, target={self.output_size}"
             )
+
+        # Reshape and apply max pooling
         x = x.contiguous().reshape(B, C, H_out, H // H_out, W_out, W // W_out)
-        
         return x.amax(dim=(3, 5), keepdim=False)
