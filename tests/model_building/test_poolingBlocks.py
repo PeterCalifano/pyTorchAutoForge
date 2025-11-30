@@ -49,7 +49,6 @@ def test_custom_adaptive_max_matches_torch_adaptive_pool():
 
     assert torch.equal(out_custom, out_reference)
 
-
 def test_custom_adaptive_max_global_matches_torch_max():
     x = torch.randn(1, 2, 5, 5)
     custom = CustomAdaptiveMaxPool2d((1, 1))
@@ -62,13 +61,14 @@ def test_custom_adaptive_max_global_matches_torch_max():
     assert out_custom.shape == (1, 2, 1, 1)
 
 
-def test_custom_adaptive_max_raises_on_non_divisible_window():
+def test_custom_adaptive_max_on_non_divisible_window():
     x = torch.randn(1, 1, 5, 4)
     layer = CustomAdaptiveMaxPool2d((3, 2))
+    out = layer(x)
 
-    with pytest.raises(ValueError):
-        layer(x)
-
+    assert out.shape == (1, 1, 3, 2)
+    expected = layer.resizer(x)
+    assert torch.allclose(out, expected, atol=1e-6)
 
 def test_custom_pooling_gap_onnx_export(tmp_path):
     onnx = pytest.importorskip("onnx")

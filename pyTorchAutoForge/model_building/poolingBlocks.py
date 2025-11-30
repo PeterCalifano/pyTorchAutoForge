@@ -89,9 +89,11 @@ class CustomAdaptiveMaxPool2d(nn.Module):
         # Shape: (N, C, H_in, W_in) -> (N, C, H_out, W_out)
         H_out, W_out = self.output_size
 
-        # Apply resizing first
-        self.resizer = self.resizer.to(x.device)
-        x = self.resizer(x)
+        # Apply resizing first if needed
+        B, C, H, W = x.shape
+        if H % H_out != 0 or W % W_out != 0:
+            self.resizer = self.resizer.to(x.device)
+            x = self.resizer(x)
 
         # Check divisibility ("compile time")
         B, C, H, W = x.shape
