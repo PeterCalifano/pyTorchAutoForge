@@ -23,7 +23,6 @@ def test_custom_adaptive_avg_matches_torch_adaptive_pool():
 
     assert torch.allclose(out_custom, out_reference, atol=1e-6)
 
-
 def test_custom_adaptive_avg_global_matches_torch_mean():
     x = torch.randn(1, 2, 5, 5)
     custom = CustomAdaptiveAvgPool2d((1, 1))
@@ -35,7 +34,6 @@ def test_custom_adaptive_avg_global_matches_torch_mean():
     assert torch.allclose(out_custom, out_reference, atol=1e-6)
     assert out_custom.shape == (1, 2, 1, 1)
 
-
 def test_custom_adaptive_max_matches_torch_adaptive_pool():
     x = torch.randn(2, 3, 4, 4)
     target_size = (2, 2)
@@ -45,6 +43,9 @@ def test_custom_adaptive_max_matches_torch_adaptive_pool():
 
     out_custom = custom(x)
     out_reference = reference(x)
+
+    print("Custom output:", out_custom)
+    print("Reference output:", out_reference)
 
     assert torch.equal(out_custom, out_reference)
 
