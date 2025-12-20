@@ -17,5 +17,5 @@ python -m build
 
 if [ -d "dist" ]; then
     twine check dist/*
-    twine upload --repository pypi dist/* -u __token__ -p $PYPI_TOKEN --verbose
+    twine upload --repository pypi dist/* #-u __token__ -p $PYPI_TOKEN --verbose
 fi
