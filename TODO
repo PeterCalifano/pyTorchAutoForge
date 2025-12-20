@@ -37,7 +37,8 @@
   - [x] Major fixes in v0.2.1 (bugs introduced in v0.2.0)
 
 - [ ] v0.3.X
-  - [ ] Implement tests for *onnxability* of models provided by model_building module of PTAF
+  - [x] Implement custom adaptive pooling layers for ONNx static export
+  - [x] Implement tests for *onnxability* of models provided by model_building module of PTAF
   - [ ] Modify implementation of trainer to use static or cls methods instead of instance methods for increased flexibility
   - [ ] Add capability to trainer/new class helper: transfer learning from checkpoint instead of replacing model!
   - [ ] Fix unit tests

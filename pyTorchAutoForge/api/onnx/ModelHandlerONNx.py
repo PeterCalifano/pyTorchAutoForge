@@ -5,9 +5,7 @@ from pyTorchAutoForge.utils import AddZerosPadding, torch_to_numpy, timeit_avera
 from numpy.testing import assert_allclose
 from pyTorchAutoForge.utils import numpy_to_torch
 
-# TODO: add support to use onnx simplify 
-#simplified_model, check_status = onnxsim.simplify(onnx_model)
-
+# TODO update torch exporter API
 class ModelHandlerONNx:
     """
      _summary_
@@ -113,6 +111,7 @@ class ModelHandlerONNx:
 
         # Assign input tensor from init if not provided
         if input_tensor is None and self.dummy_input_sample is not None:
+            assert torch.is_tensor(self.dummy_input_sample), "Dummy input sample must be a torch tensor."
             input_tensor = self.dummy_input_sample
         else:
             raise ValueError("Input tensor must be provided or dummy input sample must be provided when constructing this class.")
@@ -151,7 +150,7 @@ class ModelHandlerONNx:
             # Reload the model from disk
             self.onnx_model = self.onnx_load(onnx_filepath=self.onnx_filepath)
             
-            self.onnx_validate(self.onnx_model,
+            self.onnx_validate(onnx_model=self.onnx_model,
                                test_sample=numpy_to_torch(self.dummy_input_sample))
 
         if self.run_onnx_simplify:
@@ -166,7 +165,7 @@ class ModelHandlerONNx:
                             onnx_model_name: str = 'onnx_dynamo_export', 
                             dynamic_axes: dict | None = None,
                             IO_names: dict | None = None,
-                            enable_verbose: bool = False) -> None:
+                            enable_verbose: bool = False) -> str:
         """Export the model to ONNx format using TorchDynamo."""
 
         # Prepare export folder and compose name
@@ -175,6 +174,7 @@ class ModelHandlerONNx:
 
         # Assign input tensor from init if not provided
         if input_tensor is None and self.dummy_input_sample is not None:
+            assert torch.is_tensor(self.dummy_input_sample), "Dummy input sample must be a torch tensor."
             input_tensor = self.dummy_input_sample
         else:
             raise ValueError("Input tensor must be provided or dummy input sample must be provided when constructing this class.")
@@ -207,6 +207,9 @@ class ModelHandlerONNx:
                                         dynamo=True, report=self.generate_report,
                                          verbose=enable_verbose)
 
+        if onnx_program is None:
+            raise RuntimeError("TorchDynamo ONNX export failed, no model generated.")
+        
         # Call model optimization
         onnx_program.optimize()
 
@@ -255,8 +258,8 @@ class ModelHandlerONNx:
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def onnx_validate(self, 
                       onnx_model: onnx.ModelProto | str, 
-                      test_sample : torch.Tensor | numpy.ndarray = None, 
-                      output_sample : torch.Tensor | numpy.ndarray = None) -> None:
+                      test_sample : torch.Tensor | numpy.ndarray | None = None, 
+                      output_sample : torch.Tensor | numpy.ndarray | None = None) -> None:
         """Validate the ONNx model using onnx.checker.check_model."""
 
         # If onnx_model is a string, load the model from the file

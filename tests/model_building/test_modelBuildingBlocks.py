@@ -234,6 +234,40 @@ def test_template_convnet2d_forward_with_intermediate_features():
         assert feat.shape == (1, ch, h, w)
         assert feat.numel() == flattened_out_sizes[i]
 
+def test_template_convnet2d_zero_init_outputs_zero():
+    cfg = TemplateConvNet2dConfig(
+        kernel_sizes=[1],
+        pool_type="none",
+        pool_kernel_sizes=[1],
+        out_channels_sizes=[3],
+        num_input_channels=3,
+        activ_type="none",
+        regularizer_type="none",
+        init_method_type="zero",
+    )
+    model = TemplateConvNet2d(cfg)
+    x = torch.randn(2, 3, 5, 5)
+    out, skips = model(x)
+    assert skips == []
+    assert torch.allclose(out, torch.zeros_like(out))
+
+def test_template_convnet2d_identity_init_passthrough():
+    cfg = TemplateConvNet2dConfig(
+        kernel_sizes=[1],
+        pool_type="none",
+        pool_kernel_sizes=[1],
+        out_channels_sizes=[3],
+        num_input_channels=3,
+        activ_type="none",
+        regularizer_type="none",
+        init_method_type="identity",
+    )
+    model = TemplateConvNet2d(cfg)
+    x = torch.randn(1, 3, 4, 4)
+    out, skips = model(x)
+    assert skips == []
+    assert torch.allclose(out, x)
+
 
 @pytest.mark.parametrize("kernels,pools,msg", [
     (None, [2], r".*not.*None.*"),
@@ -482,6 +516,34 @@ def test_net_forward_shape_and_layers():
     out = model(x)
     assert isinstance(out, torch.Tensor)
     assert out.shape == (2, 5)
+
+def test_template_fcnet_zero_init_outputs_zero():
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[5],
+        input_layer_size=5,
+        output_layer_size=5,
+        activ_type="none",
+        regularization_layer_type="none",
+        init_method_type="zero",
+    )
+    model = TemplateFullyConnectedNet(cfg)
+    x = torch.randn(3, 5)
+    out = model(x)
+    assert torch.allclose(out, torch.zeros_like(out))
+
+def test_template_fcnet_identity_init_passthrough():
+    cfg = TemplateFullyConnectedNetConfig(
+        out_channels_sizes=[],
+        input_layer_size=4,
+        output_layer_size=4,
+        activ_type="none",
+        regularization_layer_type="none",
+        init_method_type="identity",
+    )
+    model = TemplateFullyConnectedNet(cfg)
+    x = torch.randn(2, 4)
+    out = model(x)
+    assert torch.allclose(out, x)
 
 # %% DropoutEnsemblingNetworkWrapper tests with TemplateFullyConnectedNet
 def test_wrapper_requires_nn_module():
