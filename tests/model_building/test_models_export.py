@@ -18,6 +18,7 @@ def test_efficientnet_basic_backbone_export():
 
     backbone_last = FeatureExtractorFactory(cfg)
     print(backbone_last)
+    backbone_last.eval()
 
     # Batch size of 1, 3 channels, 224x224 image
     dummy_input = torch.randn(1, 3, 224, 224)
@@ -28,7 +29,7 @@ def test_efficientnet_basic_backbone_export():
 
     onnx_handler = ModelHandlerONNx(model=backbone_last,
                                     dummy_input_sample=dummy_input,
-                                    opset_version=11,
+                                    opset_version=18,
                                     onnx_export_path="test_output")
     
     # Test export with torch legacy pipeline
@@ -36,7 +37,7 @@ def test_efficientnet_basic_backbone_export():
     
     onnx_handler.torch_export(onnx_model_name=model_export_name, enable_verbose=True)
 
-    # Test export with torch dynamo pipeline
+    # Test export with torch dynamo pipeline # BUG torch_dynamo_export currently fails
     model_export_name_dynamo = "efficientnet_lastfeats_b0_dynamo.onnx"
     onnx_handler.torch_dynamo_export(onnx_model_name=model_export_name_dynamo, enable_verbose=True)
 

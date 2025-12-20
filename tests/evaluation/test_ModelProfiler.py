@@ -14,7 +14,7 @@ def dummy_model():
 
 def test_profiler_with_shape(dummy_model, capsys):
     # Test using an input shape provided as a list.
-    profiler = ModelProfilerHelper(dummy_model, [2, 3])
+    profiler = ModelProfilerHelper(dummy_model, (2, 3))
     prof = profiler.run_prof()
     # Capture printed profiling table output.
     captured = capsys.readouterr().out.lower()
@@ -45,7 +45,7 @@ def test_invalid_input(dummy_model):
 def test_export_trace(tmp_path, dummy_model, monkeypatch):
     # Test that the profiler attempts to export a chrome trace when output filename is provided.
     outfile = str(tmp_path / "trace.json")
-    profiler = ModelProfilerHelper(dummy_model, [2, 3], output_prof_filename=outfile)
+    profiler = ModelProfilerHelper(dummy_model, (2, 3), output_prof_filename=outfile)
     
     # Prepare a flag to check whether export_chrome_trace gets called.
     trace_exported = {"called": False}
