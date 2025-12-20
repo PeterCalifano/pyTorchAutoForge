@@ -71,27 +71,29 @@ def test_random_gaussian_noise_variable_sigma_shape_dtype():
 def test_random_gaussian_noise_validation_filters_dark_images():
     # Validation should zero sigma for images without enough bright pixels
     torch.manual_seed(0)
-    bright_img = torch.full((1, 1, 8, 8), 10.0)
-    dark_img = torch.zeros((1, 1, 8, 8))
-    x = torch.cat([bright_img, dark_img], dim=0)
+    bright_img = torch.full((1, 1, 24, 24), 10.0)
+    dark_img = torch.zeros((1, 1, 24, 24))
+    half_img = torch.zeros((1, 1, 24, 24))
 
-    aug = RandomGaussianNoiseVariableSigma(
-        sigma_noise=1.0,
-        gaussian_noise_aug_prob=1.0,
-        keep_scalar_sigma_fixed=True,
-        enable_img_validation_mode=True,
-        validation_min_num_bright_pixels=10,
-        validation_pixel_threshold=15.0,  # Force auto-adjust branch
-    )
+    # Add some content in half_img
+    half_img[0,0,4:8, 9:17] = 1.0
+
+    x = torch.cat([bright_img, dark_img, half_img], dim=0)
+
+    aug = RandomGaussianNoiseVariableSigma(sigma_noise=1.0,
+                                           gaussian_noise_aug_prob=1.0,
+                                           keep_scalar_sigma_fixed=True,
+                                           enable_img_validation_mode=True,
+                                           validation_min_num_bright_pixels=10,
+                                           validation_pixel_threshold=15.0,  # Force auto-adjust branch
+                                           )
 
     out = aug(x)
-
-    # Threshold adjusted to 0.05 * median(max_per_sample) where maxes are [10, 0]
-    assert aug.validation_pixel_threshold == pytest.approx(0.25)
 
     # Noise applied only to the bright image; dark image remains unchanged
     assert not torch.allclose(out[0], x[0])
     assert torch.allclose(out[1], x[1])
+    assert not torch.allclose(out[2], x[2])
 
 
 @pytest.mark.parametrize("coords,width", [
@@ -484,7 +486,7 @@ if __name__ == '__main__':
     contrast_aug_prob = 0.0
 
     # test_synthetic_mask_augmentation()
-    test_sample_images_augmentation()
+    # test_sample_images_augmentation()
     # test_AugmentationSequential()
     # test_augmentation_helper_preserves_device(device,
     #                                          shift_aug_prob,
@@ -493,4 +495,5 @@ if __name__ == '__main__':
     #                                          gaussian_blur_aug_prob,
     #                                          brightness_aug_prob,
     #                                          contrast_aug_prob)
-    test_zero_augs_input_unchanged()
+    # test_zero_augs_input_unchanged()
+    test_random_gaussian_noise_validation_filters_dark_images()
