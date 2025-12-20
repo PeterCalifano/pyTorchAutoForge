@@ -87,6 +87,22 @@ def test_init_methods(init_method):
     out = block(x)
     assert out.shape == (3, 5)
 
+def test_zero_init_outputs_zero():
+    block = FullyConnectedBlock(
+        4, 4, activ_type="none", regularizer_type="none", init_method_type="zero"
+    )
+    x = torch.randn(2, 4)
+    out = block(x)
+    assert torch.allclose(out, torch.zeros_like(out))
+
+def test_identity_init_passthrough():
+    block = FullyConnectedBlock(
+        5, 5, activ_type="none", regularizer_type="none", init_method_type="identity"
+    )
+    x = torch.randn(3, 5)
+    out = block(x)
+    assert torch.allclose(out, x)
+
 # Test FullyConnectedBlocksStack with multiple blocks
 def test_blocks_stack_add_and_forward():
     cfgs = [FullyConnectedBlockConfig(
@@ -153,4 +169,3 @@ def test_residual_stack_buffers_and_forward_shape():
     x = torch.randn(5, 4)
     out = stack(x)
     assert out.shape == (5, 4)
-

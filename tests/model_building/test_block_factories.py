@@ -23,21 +23,51 @@ class DummyFCBlock:
         nn.init.constant_(self.linear.weight, 1.0)
         nn.init.constant_(self.linear.bias, 1.0)
 
-@pytest.mark.parametrize("method", ["xavier_uniform", "kaiming_uniform", "xavier_normal", "kaiming_normal", "orthogonal"])
-def test_initialize_convblock_weights_methods(method):
+def _is_dirac_weight(weight: torch.Tensor) -> bool:
+    # dirac_ sets a 1 on the central spatial position for matching in/out channels
+    if weight.dim() < 3:
+        return False
+
+    expected = torch.zeros_like(weight)
+    center = tuple(size // 2 for size in weight.shape[2:])
+    for c in range(min(weight.shape[0], weight.shape[1])):
+        expected[(c, c) + center] = 1.0
+
+    return torch.allclose(weight, expected)
+
+@pytest.mark.parametrize("method,check", [
+    ("xavier_uniform", lambda w: torch.any(w != 1)),
+    ("kaiming_uniform", lambda w: torch.any(w != 1)),
+    ("xavier_normal", lambda w: torch.any(w != 1)),
+    ("kaiming_normal", lambda w: torch.any(w != 1)),
+    ("orthogonal", lambda w: torch.any(w != 1)),
+    ("zero", lambda w: torch.allclose(w, torch.zeros_like(w))),
+    ("identity", _is_dirac_weight),
+])
+def test_initialize_convblock_weights_methods(method, check):
     block = DummyConvBlock()
     _initialize_convblock_weights(block, init_method_type=method)
     # bias should be zeroed
     assert torch.all(block.conv.bias == 0)
-    # weights should change from constant(1)
-    assert not torch.all(block.conv.weight == 1)
+    assert check(block.conv.weight)
 
-@pytest.mark.parametrize("method", ["xavier_uniform", "kaiming_uniform", "xavier_normal", "kaiming_normal", "orthogonal"])
-def test_initialize_fcnblock_weights_methods(method):
+@pytest.mark.parametrize("method,check", [
+    ("xavier_uniform", lambda w: torch.any(w != 1)),
+    ("kaiming_uniform", lambda w: torch.any(w != 1)),
+    ("xavier_normal", lambda w: torch.any(w != 1)),
+    ("kaiming_normal", lambda w: torch.any(w != 1)),
+    ("orthogonal", lambda w: torch.any(w != 1)),
+    ("zero", lambda w: torch.allclose(w, torch.zeros_like(w))),
+    ("identity", lambda w: torch.allclose(
+        w,
+        torch.eye(w.size(0), w.size(1), device=w.device, dtype=w.dtype)
+    )),
+])
+def test_initialize_fcnblock_weights_methods(method, check):
     block = DummyFCBlock()
     _initialize_fcnblock_weights(block, init_method_type=method)
     assert torch.all(block.linear.bias == 0)
-    assert not torch.all(block.linear.weight == 1)
+    assert check(block.linear.weight)
 
 @pytest.mark.parametrize("activ,cls", [
     ("prelu", nn.PReLU),
