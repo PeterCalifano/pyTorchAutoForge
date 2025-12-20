@@ -1,5 +1,5 @@
 import torch
-from pyTorchAutoForge.model_building.backbones.efficient_net import EfficientNetConfig, FeatureExtractorFactory, EfficientNetBackbone
+from pyTorchAutoForge.model_building.backbones.efficient_net import EfficientNetConfig, FeatureExtractorFactory
 
 # Export efficient net to ONNX
 def test_efficientnet_basic_backbone_export():
