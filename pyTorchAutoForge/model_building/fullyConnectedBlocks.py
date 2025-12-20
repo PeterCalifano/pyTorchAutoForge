@@ -72,11 +72,7 @@ class FullyConnectedBlock(nn.Module):
         # Call layers weights init
         self.__initialize_weights__(init_method_type)
 
-    def __initialize_weights__(self, init_method_type: Literal["xavier_uniform",
-                                                        "kaiming_uniform",
-                                                        "xavier_normal",
-                                                        "kaiming_normal",
-                                                        "orthogonal"] = "xavier_uniform"):
+    def __initialize_weights__(self, init_method_type: init_methods = "xavier_uniform"):
         """
         Initializes the weights of the linear layer using the specified initialization method.
         """

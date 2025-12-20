@@ -79,7 +79,7 @@ class TemplateNetBaseConfig(BaseConfigClass):
     out_channels_sizes: list[int] | None = None
 
     # Weights initialization method
-    init_method_type: init_methods = "xavier_normal"
+    init_method_type: init_methods = "default"
 
     # Additional features
     dropout_ensemble_size: int = 1  # Set >1 if building using ensemble wrapper
@@ -107,7 +107,7 @@ class TemplateConvNetConfig(TemplateNetBaseConfig):
 
     def __post_init__(self):
         # If activation type is relu one and init method not changed set it to kaiming
-        if "elu" in self.activ_type and self.init_method_type == "xavier_normal":
+        if "elu" in self.activ_type and self.init_method_type == "default":
             self.init_method_type = "kaiming_normal"
 
 
@@ -130,7 +130,7 @@ class TemplateConvNet2dConfig(TemplateConvNetConfig):
         super().__post_init__()
 
         # Check pooling type is correct (2d)
-        if not self.pool_type.endswith("2d"):
+        if not self.pool_type.endswith("2d") and self.pool_type != "none":
             raise TypeError(
                 f"TemplateConvNet2dConfig: pool_type must be of type 'MaxPool2d', 'AvgPool2d', 'Adapt_MaxPool2d' or 'Adapt_AvgPool2d'. Found {self.pool_type}.")
 
@@ -138,7 +138,7 @@ class TemplateConvNet2dConfig(TemplateConvNetConfig):
         if self.kernel_sizes is None:
             raise ValueError(
                 "TemplateConvNet2dConfig: 'kernel_sizes' cannot be None")
-        if self.pool_kernel_sizes is None:
+        if self.pool_kernel_sizes is None and self.pool_type != "none":
             raise ValueError(
                 "TemplateConvNet2dConfig: 'pool_kernel_sizes' cannot be None")
         if self.out_channels_sizes is None:
@@ -260,7 +260,7 @@ class TemplateFullyConnectedNetConfig(TemplateNetBaseConfig):
                 raise ValueError("TemplateFullyConnectedNetConfig: 'input_skip_index' cannot be longer than 'output_layer_size'. Please check your configuration.")
 
         # If activation type is a relu one and init method not changed set it to kaiming
-        if "elu" in self.activ_type and self.init_method_type == "xavier_normal":
+        if "elu" in self.activ_type and self.init_method_type == "default":
             self.init_method_type = "kaiming_normal"
 
 # %% Special wrapper classes
@@ -768,11 +768,7 @@ class TemplateFullyConnectedNet(AutoForgeModule):
         # Initialize weights of layers
         self.__initialize_weights__(init_method_type=cfg.init_method_type)
 
-    def __initialize_weights__(self, init_method_type: Literal["xavier_uniform",
-                                                               "kaiming_uniform",
-                                                               "xavier_normal",
-                                                               "kaiming_normal",
-                                                               "orthogonal"] = "xavier_normal"):
+    def __initialize_weights__(self, init_method_type: init_methods = "xavier_normal"):
         """
         Initializes the weights of the model layers using the specified initialization method.
 
