@@ -207,7 +207,7 @@ class ModelHandlerONNx:
                                          verbose=enable_verbose)
 
         if onnx_program is None:
-            raise RuntimeError("TorchDynamo ONNx export failed, no model generated.")
+            raise RuntimeError("TorchDynamo ONNX export failed, no model generated.")
         
         # Call model optimization
         onnx_program.optimize()
