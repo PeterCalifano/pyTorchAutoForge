@@ -1,3 +1,4 @@
+from librosa import resample
 from torch import nn
 from torchvision import models
 from .base_backbones import EfficientNetConfig, FeatureExtractorFactory
@@ -5,7 +6,7 @@ from .base_backbones import EfficientNetConfig, FeatureExtractorFactory
 import torch
 import torch.nn.functional as F
 from pyTorchAutoForge.model_building.backbones.spatial_features_operators import SpatialKptFeatureSoftmaxLocator
-
+from pyTorchAutoForge.model_building.poolingBlocks import CustomAdaptiveMaxPool2d
 
 class EfficientNetBackbone(nn.Module):
     def __init__(self, cfg: EfficientNetConfig):
@@ -53,9 +54,18 @@ class EfficientNetBackbone(nn.Module):
                         # For spill features, expects three keys
                         target_res_key, target_channels_key, target_linear_output_size = value.keys()
 
+                    else:
+                        raise ValueError(
+                            "Each entry in feature_tapping_output_resolution_channels must have 2 or 3 keys.")
+                    
                     # Get target resolution and channels from configuration
                     target_res = self.cfg.feature_tapping_output_resolution_channels[
                         key][target_res_key]
+                    
+                    # Broadcast target resolution if given as int
+                    if isinstance(target_res, int):
+                        target_res = (target_res, target_res)
+                    
                     target_channels = self.cfg.feature_tapping_output_resolution_channels[
                         key][target_channels_key]
 
@@ -72,8 +82,8 @@ class EfficientNetBackbone(nn.Module):
                                                          padding=1)
 
                     # Max pooling layer
-                    max_pool_extractor_out_layer = nn.AdaptiveMaxPool2d(
-                        output_size=(target_res[0], target_res[1]))
+                    #max_pool_extractor_out_layer = nn.AdaptiveMaxPool2d(output_size=(target_res[0], target_res[1]))
+                    max_pool_extractor_out_layer = CustomAdaptiveMaxPool2d(output_size=(target_res[0], target_res[1]))
 
                     # Activation function for output features maps
                     features_spill_activations = nn.PReLU(
@@ -179,7 +189,6 @@ class EfficientNetBackbone(nn.Module):
             out = features
             return out
     
-
 
 # Define factory method for EfficientNet backbone
 @FeatureExtractorFactory.register

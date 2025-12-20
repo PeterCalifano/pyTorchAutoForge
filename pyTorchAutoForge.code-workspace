@@ -41,6 +41,9 @@
 		},
 		{
 			"path": "../eda_PeterCdev"
+		},
+		{
+			"path": "../ml-based-centroiding"
 		}
 	],
 	"settings": {}

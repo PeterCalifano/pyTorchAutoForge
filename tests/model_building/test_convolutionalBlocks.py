@@ -122,6 +122,34 @@ def test_convolutionalblock2d_adaptive_pooling_no_target():
     with pytest.raises(ValueError):
         ConvolutionalBlock2d(2, 2, 3, pool_type="Adapt_MaxPool2d")
 
+def test_convolutionalblock2d_zero_init_outputs_zero():
+    x = torch.randn(2, 2, 5, 5)
+    block = ConvolutionalBlock2d(
+        in_channels=2,
+        out_channels=2,
+        kernel_size=1,
+        pool_type="none",
+        activ_type="none",
+        regularizer_type="none",
+        init_method_type="zero",
+    )
+    y = block(x)
+    assert torch.allclose(y, torch.zeros_like(y))
+
+def test_convolutionalblock2d_identity_init_passthrough():
+    x = torch.randn(1, 3, 4, 4)
+    block = ConvolutionalBlock2d(
+        in_channels=3,
+        out_channels=3,
+        kernel_size=1,
+        pool_type="none",
+        activ_type="none",
+        regularizer_type="none",
+        init_method_type="identity",
+    )
+    y = block(x)
+    assert torch.allclose(y, x)
+
 # Parametric tests
 @pytest.mark.parametrize("activ_type", ["prelu", "relu", "sigmoid", "tanh", "none"])
 @pytest.mark.parametrize("pool_type", ["MaxPool2d", "AvgPool2d", "none"])

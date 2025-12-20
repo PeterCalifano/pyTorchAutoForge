@@ -4,9 +4,9 @@
 
 - [x] v0.1.3
 
-- [ ] v0.2.0
+- [x] v0.2.X
   - [x] Add prototype implementation of heads and backbones builders using registries
-  - [ ] Fix unit tests
+  - [x] Fix unit tests
   - [x] Add prototype implementation of dataset classes from paths
   - [x] Complete 1st version of model profiler
   - [x] Add prototype of model explainer for vector-to-vector regression using SHAP (basic explainer)
@@ -33,7 +33,14 @@
   - [x] Add optional validation check in Augmentation helper to ensure all inputs are valid ones with remedy action
   - [x] Improve handling of training errors (stop and kill run if nan or Inf)
 
-- [ ] v0.2.1
+- Patches of v0.2.X
+  - [x] Major fixes in v0.2.1 (bugs introduced in v0.2.0)
+
+- [ ] v0.3.X
+  - [x] Implement custom adaptive pooling layers for ONNx static export
+  - [x] Implement tests for *onnxability* of models provided by model_building module of PTAF
+  - [ ] Modify implementation of trainer to use static or cls methods instead of instance methods for increased flexibility
+  - [ ] Add capability to trainer/new class helper: transfer learning from checkpoint instead of replacing model!
   - [ ] Fix unit tests
   - [ ] Implement export method (traced, onnx, model pth) in ModelTrainingManager
   - [ ] Add abstract meta class for loss functions to enforce interface
@@ -50,13 +57,11 @@
   - [ ] Add prototype of SHAP for CNNs
   - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
   - [ ] Upgrade api.torch to save model "packages" with all info to run the model
-
-- [ ] v0.2.2
   - [ ] Improve docstrings in src code
+
+- v0.X.X
   - [ ] Implement prototype of K-fold cross-validation for training runs
   - [ ] Extend ModelEvaluator to evaluate sklearn and xgb models
-
-- [ ] v0.3.0
   - [ ] All those above
   - [ ] Add working argument parser for training scripts
   - [ ] Add configurable dataclasses from template yml files

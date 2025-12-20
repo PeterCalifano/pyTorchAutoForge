@@ -5,6 +5,22 @@ from numpy.typing import NDArray
 
 conv_size_autocomp_input_types = tuple[int,...] | list[int] | NDArray[np.integer]
 
+def Infer_head_first_layer_size(head: nn.Module) -> int:
+    """
+    Infer the input size of the head's first learnable layer by scanning for the first
+    module that exposes `in_features` or `in_channels`.
+    """
+
+    for module in head.modules():
+        if module is head:
+            continue
+        if hasattr(module, "in_features"):
+            return int(getattr(module, "in_features"))  # type: ignore[arg-type]
+        if hasattr(module, "in_channels"):
+            return int(getattr(module, "in_channels"))  # type: ignore[arg-type]
+        
+    raise ValueError("Unable to infer head first layer input size; no layer with in_features/in_channels found.")
+
 # %% Auxiliary functions for output size computation
 def ComputeConv2dOutputSize(input_size: conv_size_autocomp_input_types, 
                             kernel_size: int = 3,  

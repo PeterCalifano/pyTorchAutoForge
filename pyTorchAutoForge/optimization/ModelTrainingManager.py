@@ -394,7 +394,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 "Neither model nor model checkpoint path provided. Cannot continue with optimization process.")
 
         self.model: torch.nn.Module = (model).to(self.device)
-        self.bestModel: torch.nn.Module | None = None
+        
+        self.best_model: torch.nn.Module | None = None
+        self.best_epoch: int = 0
+
         self.loss_fcn: torch.nn.Module = lossFcn
 
         self.trainingDataloader: torch.utils.data.Dataloader | None = None
@@ -405,6 +408,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
         self.trainingDataloaderSize: int = 0
         self.current_epoch: int = 0
         self.num_of_updates: int = 0
+
 
         self.currentTrainingLoss: float | None = None
         self.currentValidationLoss: float | None = None
@@ -581,7 +585,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             device = self.device
 
         # Get internal model (best or model)
-        model = self.bestModel if (self.bestModel is not None) else self.model
+        model = self.best_model if (self.best_model is not None) else self.model
 
         try:
             raise NotImplementedError('Method not implemented yet.')
@@ -992,9 +996,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                 if isinstance(validation_loss_value, tuple):
                     validation_loss_value = validation_loss_value[0]
 
-                self.currentValidationLoss: float = validation_loss_value
-                self.bestValidationLoss: float = validation_loss_value
-                self.bestModel: torch.nn.Module | None = copy.deepcopy(self.model).to('cpu')
+                self.currentValidationLoss = validation_loss_value
+                self.bestValidationLoss = validation_loss_value
+                self.best_model = copy.deepcopy(self.model).to('cpu')
+                self.best_epoch = self.current_epoch
 
             ########################################
             ### Loop over epochs
@@ -1068,7 +1073,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                 # Update stats if new best model found (independently of keep_best flag)
                 if tmp_valid_loss <= self.bestValidationLoss:
-                    self.bestEpoch = epoch_num
+                    self.best_epoch = epoch_num
                     self.bestValidationLoss = tmp_valid_loss
                     no_new_best_counter = 0
                 else:
@@ -1080,7 +1085,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     if tmp_valid_loss <= self.bestValidationLoss:
 
                         # Transfer best model to CPU to avoid additional memory allocation on GPU
-                        self.bestModel: torch.nn.Module | None = copy.deepcopy(
+                        self.best_model: torch.nn.Module | None = copy.deepcopy(
                             self.model).to('cpu')
 
                         # Delete previous best model checkpoint if it exists
@@ -1099,10 +1104,10 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                         # Save temporary best model
                         model_save_name = os.path.join(
-                            self.checkpoint_dir, self.modelName + f"_epoch_{self.bestEpoch}")
+                            self.checkpoint_dir, self.modelName + f"_epoch_{self.best_epoch}")
 
-                        if self.bestModel is not None:
-                            SaveModel(model=self.bestModel, model_filename=model_save_name,
+                        if self.best_model is not None:
+                            SaveModel(model=self.best_model, model_filename=model_save_name,
                                       save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE,
                                       target_device='cpu')
 
@@ -1125,7 +1130,7 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         'num_of_updates', self.num_of_updates, step=self.current_epoch)
 
                 print('\tCurrent best at epoch {best_epoch}, with validation loss: {best_loss:.06g}'.format(
-                    best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
+                    best_epoch=self.best_epoch, best_loss=self.bestValidationLoss))
                 print(
                     f'\tEpoch cycle duration: {((time.time() - cycle_start_time) / 60):.4f} [min]')
 
@@ -1150,31 +1155,31 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
             if self.keep_best:
                 print('Best model saved from epoch: {best_epoch} with validation loss: {best_loss:.4f}'.format(
-                    best_epoch=self.bestEpoch, best_loss=self.bestValidationLoss))
+                    best_epoch=self.best_epoch, best_loss=self.bestValidationLoss))
 
             with torch.no_grad():
                 examplePair = next(iter(self.validationDataloader))
                 model_save_name = os.path.join(
-                    self.checkpoint_dir, self.modelName + f"_epoch_{self.bestEpoch}")
+                    self.checkpoint_dir, self.modelName + f"_epoch_{self.best_epoch}")
 
-                if self.bestModel is not None:
-                    SaveModel(model=self.bestModel, model_filename=model_save_name,
+                if self.best_model is not None:
+                    SaveModel(model=self.best_model, model_filename=model_save_name,
                               save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE,
                               example_input=examplePair[0],
                               target_device=self.device)
                 else:
                     print(
-                        "\033[38;5;208mWARNING: SaveModel skipped due to bestModel being None!\033[0m")
+                        "\033[38;5;208mWARNING: SaveModel skipped due to best_model being None!\033[0m")
 
             if self.mlflow_logging:
-                mlflow.log_param('checkpoint_best_epoch', self.bestEpoch)
+                mlflow.log_param('checkpoint_best_epoch', self.best_epoch)
 
             # Post-training operations
             print('Training and validation cycle completed.')
             if self.mlflow_logging:
                 mlflow.end_run(status='FINISHED')
 
-            return self.bestModel if self.keep_best else self.model
+            return self.best_model if self.keep_best else self.model
 
         except KeyboardInterrupt:
             print(
@@ -1183,13 +1188,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             # Save best model up to current epoch if not None
             try:
                 # TODO replace by a trainer export method
-                if self.bestModel is not None:
+                if self.best_model is not None:
                     examplePair = next(iter(self.validationDataloader))
                     model_save_name = os.path.join(
-                        self.checkpoint_dir, self.modelName + f"_epoch_{self.bestEpoch}")
+                        self.checkpoint_dir, self.modelName + f"_epoch_{self.best_epoch}")
 
-                    if self.bestModel is not None:
-                        SaveModel(model=self.bestModel, model_filename=model_save_name,
+                    if self.best_model is not None:
+                        SaveModel(model=self.best_model, model_filename=model_save_name,
                                   save_mode=AutoForgeModuleSaveMode.MODEL_ARCH_STATE,
                                   example_input=examplePair[0],
                                   target_device=self.device)
@@ -1938,8 +1943,8 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex,
     bestSWAvalidationLoss = 1E10
 
     # Deep copy the initial state of the model and move it to the CPU
-    bestModel = copy.deepcopy(model).to('cpu')
-    bestEpoch = epochStart
+    best_model = copy.deepcopy(model).to('cpu')
+    best_epoch = epochStart
 
     if swa_model != None:
         bestSWAmodel = copy.deepcopy(model).to('cpu')
@@ -1962,15 +1967,15 @@ def TrainAndValidateModel(dataloaderIndex: DataloaderIndex,
         # If validation loss is better than previous best, update best model
         if validationLossHistory[epochID] < bestValidationLoss:
             # Replace best model with current model
-            bestModel = copy.deepcopy(model).to('cpu')
-            bestEpoch = epochID + epochStart
+            best_model = copy.deepcopy(model).to('cpu')
+            best_epoch = epochID + epochStart
             bestValidationLoss = validationLossHistory[epochID]
 
-            bestModelData = {'model': bestModel, 'epoch': bestEpoch,
+            bestModelData = {'model': best_model, 'epoch': best_epoch,
                              'validationLoss': bestValidationLoss}
 
         print(
-            f"Current best model found at epoch: {bestEpoch} with validation loss: {bestValidationLoss}")
+            f"Current best model found at epoch: {best_epoch} with validation loss: {bestValidationLoss}")
 
         # SWA handling: if enabled, evaluate validation loss of SWA model, then decide if to update or reset
         if swa_model != None and epochID >= swa_start_epoch:
