@@ -140,7 +140,7 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
     """
 
     def __init__(self,
-                 sigma_noise: float | tuple[float, float],
+                 sigma_noise: int | float | tuple[float|int, float|int],
                  gaussian_noise_aug_prob: float = 0.5,
                  keep_scalar_sigma_fixed: bool = False,
                  enable_img_validation_mode: bool = True,
@@ -161,7 +161,7 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
         self.validation_pixel_threshold: float = validation_pixel_threshold
 
         # Initialization checks on sigma values
-        if isinstance(self.sigma_gaussian_noise_dn, tuple):
+        if isinstance(self.sigma_gaussian_noise_dn, (tuple, list)):
             if len(self.sigma_gaussian_noise_dn) != 2:
                 raise ValueError(
                     f'Invalid sigma_noise tuple length. Expected 2 got {len(self.sigma_gaussian_noise_dn)}')
@@ -171,12 +171,18 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
             if self.sigma_gaussian_noise_dn[0] >= self.sigma_gaussian_noise_dn[1]:
                 raise ValueError(
                     'Invalid sigma noise range. Minimum must be less than maximum.')
-        elif isinstance(self.sigma_gaussian_noise_dn, float):
+            # Cast to tuple to ensure immutability
+            self.sigma_gaussian_noise_dn = tuple(self.sigma_gaussian_noise_dn)
+
+        elif isinstance(self.sigma_gaussian_noise_dn, (int, float)):
             if self.sigma_gaussian_noise_dn < 0:
                 raise ValueError('Sigma noise value must be non-negative.')
+            # Cast to float
+            self.sigma_gaussian_noise_dn = float(self.sigma_gaussian_noise_dn)
+            
         else:
             raise TypeError(
-                f'Invalid sigma_noise value. Expected float or tuple[float, float] got {type(self.sigma_gaussian_noise_dn)}')
+                f'Invalid sigma_noise value. Expected int, float or tuple[float | int, float | int] got {type(self.sigma_gaussian_noise_dn)}')
 
     def apply_transform(self,
                         input: torch.Tensor,
@@ -194,7 +200,7 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
         # Determine sigma per sample
         sigma_val = self.sigma_gaussian_noise_dn
     
-        if isinstance(sigma_val, tuple):
+        if isinstance(sigma_val, (tuple, list)):
             # Get min-max values
             min_s, max_s = sigma_val
 
@@ -202,7 +208,7 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
             sigma_array = (max_s - min_s) * \
                 torch.rand(B, device=device) + min_s
             
-        elif isinstance(sigma_val, float):
+        elif isinstance(sigma_val, (float, int)):
 
             if self.keep_scalar_sigma_fixed:
                 # Use same assigned sigma as fixed value
@@ -212,7 +218,7 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
                 # Randomize using interval [0, sigma_val]
                 sigma_array = (sigma_val * torch.rand(B, device=device))
         else:
-            raise TypeError(f'Invalid sigma_noise value. Expected float or tuple[float, float] got {type(sigma_val)}')
+            raise TypeError(f'Invalid sigma_noise value. Expected int, float or tuple[float | int, float | int] got {type(sigma_val)}')
 
 
         # If validation mode, check image content first. Set sigma to zero for those entries before applying
@@ -508,7 +514,7 @@ class AugmentationConfig:
     poisson_shot_noise_aug_prob: float = 0.0
 
     # Gaussian noise
-    sigma_gaussian_noise_dn: float | tuple[float, float] = 1.0
+    sigma_gaussian_noise_dn: int | float | tuple[int | float, int | float] = 1.0
     gaussian_noise_aug_prob: float = 0.0
 
     # Gaussian blur

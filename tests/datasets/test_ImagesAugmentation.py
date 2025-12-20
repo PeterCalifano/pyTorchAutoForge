@@ -15,11 +15,12 @@ from kornia.constants import DataKey
 
 
 # Auxiliary functions
-def load_sample_images(max_num : int = 5):# -> list[Any]:
+def load_sample_images(max_num: int = 5):  # -> list[Any]:
     # Load images in samples_imgs folder
     import os
     test_data_path = os.path.dirname(__file__)
-    sample_imgs_path = os.path.join(test_data_path, "..", ".test_samples/test_images")
+    sample_imgs_path = os.path.join(
+        test_data_path, "..", ".test_samples/test_images")
     sample_imgs = os.listdir(sample_imgs_path)
 
     images = []
@@ -31,11 +32,14 @@ def load_sample_images(max_num : int = 5):# -> list[Any]:
             break
 
     assert len(images) > 0, "No images found in the sample_imgs folder."
-    assert all(isinstance(img, np.ndarray) for img in images), "All images should be NumPy arrays."
+    assert all(isinstance(img, np.ndarray)
+               for img in images), "All images should be NumPy arrays."
 
     return images
 
 # %% Augmentation modules-specific tests
+
+
 def test_random_gaussian_noise_variable_sigma_no_noise():
     # gaussian_noise_aug_prob=0 ⇒ output equals input
     x = torch.randn(5, 3, 4, 4)
@@ -43,6 +47,7 @@ def test_random_gaussian_noise_variable_sigma_no_noise():
         sigma_noise=2.0, gaussian_noise_aug_prob=0.0
     )(x)
     assert torch.allclose(out, x)
+
 
 def test_random_gaussian_noise_variable_sigma_zero_sigma():
     # sigma_noise=0 & prob=1 ⇒ output equals input
@@ -52,6 +57,7 @@ def test_random_gaussian_noise_variable_sigma_zero_sigma():
     )(x)
     assert torch.allclose(out, x)
 
+
 def test_random_gaussian_noise_variable_sigma_shape_dtype():
     # shape and dtype preserved
     x = torch.randn(7, 2, 5, 5, dtype=torch.float32)
@@ -60,6 +66,32 @@ def test_random_gaussian_noise_variable_sigma_shape_dtype():
     )(x)
     assert out.shape == x.shape
     assert out.dtype == x.dtype
+
+
+def test_random_gaussian_noise_validation_filters_dark_images():
+    # Validation should zero sigma for images without enough bright pixels
+    torch.manual_seed(0)
+    bright_img = torch.full((1, 1, 8, 8), 10.0)
+    dark_img = torch.zeros((1, 1, 8, 8))
+    x = torch.cat([bright_img, dark_img], dim=0)
+
+    aug = RandomGaussianNoiseVariableSigma(
+        sigma_noise=1.0,
+        gaussian_noise_aug_prob=1.0,
+        keep_scalar_sigma_fixed=True,
+        enable_img_validation_mode=True,
+        validation_min_num_bright_pixels=10,
+        validation_pixel_threshold=15.0,  # Force auto-adjust branch
+    )
+
+    out = aug(x)
+
+    # Threshold adjusted to 0.05 * median(max_per_sample) where maxes are [10, 0]
+    assert aug.validation_pixel_threshold == pytest.approx(0.25)
+
+    # Noise applied only to the bright image; dark image remains unchanged
+    assert not torch.allclose(out[0], x[0])
+    assert torch.allclose(out[1], x[1])
 
 
 @pytest.mark.parametrize("coords,width", [
@@ -91,21 +123,23 @@ def test_flip_coords_y(coords, height):
 
 
 def test_flip_coords_invalid_dim():
-    bad = torch.randn(2, 2,2,2)
+    bad = torch.randn(2, 2, 2, 2)
     with pytest.raises(ValueError):
         Flip_coords_X(bad, image_width=10)
     with pytest.raises(ValueError):
         Flip_coords_Y(bad, image_height=10)
-    
+
 # %% Integrated tests
+
+
 def test_synthetic_mask_augmentation():
 
     augs_datakey = [DataKey.IMAGE, DataKey.KEYPOINTS]
     lbl_datakey = DataKey.KEYPOINTS
 
     cfg = AugmentationConfig(
-        max_shift_img_fraction=(0.5,0.5),
-        input_data_keys = augs_datakey,
+        max_shift_img_fraction=(0.5, 0.5),
+        input_data_keys=augs_datakey,
         shift_aug_prob=0.35,
         is_normalized=False,
         rotation_angle=(-180, 180),
@@ -139,11 +173,13 @@ def test_synthetic_mask_augmentation():
         radius_x = radius
         radius_y = radius // 2
         # Create an axis‐aligned elliptical mask
-        mask = ((x - center[0])**2 / radius_x**2 + (y - center[1])**2 / radius_y**2) <= 1
+        mask = ((x - center[0])**2 / radius_x**2 +
+                (y - center[1])**2 / radius_y**2) <= 1
         imgs[i, mask] = color_gray
 
     lbls = np.tile(np.array([[512, 512]]), (batch_size, 1))
-    out_imgs, out_lbls = augs_helper(numpy_to_torch(imgs), numpy_to_torch(lbls))
+    out_imgs, out_lbls = augs_helper(
+        numpy_to_torch(imgs), numpy_to_torch(lbls))
     out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
 
     # Plot inputs and outputs in a 2×batch_size grid
@@ -169,17 +205,19 @@ def test_synthetic_mask_augmentation():
         axs[1, i].axis('off')
 
     plt.tight_layout()
-    #plt.pause(2)
+    # plt.pause(2)
     plt.show()
     plt.close()
 
-def test_sample_images_augmentation(): 
+
+def test_sample_images_augmentation():
     # Load sample images
-    imgs = load_sample_images()    
+    imgs = load_sample_images()
 
     # Make all images of same type and size
     resolution = (1024, 1024)
-    imgs = [np.array(PIL.Image.fromarray(img).resize(resolution, resample=PIL.Image.LANCZOS)) for img in imgs]
+    imgs = [np.array(PIL.Image.fromarray(img).resize(
+        resolution, resample=PIL.Image.LANCZOS)) for img in imgs]
 
     # Downscale to uint8 if larger
     for i in range(len(imgs)):
@@ -197,35 +235,36 @@ def test_sample_images_augmentation():
     augs_datakey = [DataKey.IMAGE, DataKey.KEYPOINTS]
     lbl_datakey = DataKey.KEYPOINTS
 
-    cfg = AugmentationConfig(
-        max_shift_img_fraction=(0.5,0.5),
-        input_data_keys = augs_datakey,
-        shift_aug_prob=0.35,
-        is_normalized=False,
-        rotation_angle=(-180, 180),
-        rotation_aug_prob=1.0,
-        sigma_gaussian_noise_dn=15,
-        gaussian_noise_aug_prob=1.0,
-        gaussian_blur_aug_prob=1.0,
-        is_torch_layout=False,
-        min_max_brightness_factor=(0.6, 1.2),
-        min_max_contrast_factor=(0.6, 1.2),
-        brightness_aug_prob=1.0,
-        contrast_aug_prob=1.0,
-        input_normalization_factor=255.0,
-        enable_auto_input_normalization=True,
-    )
+    cfg = AugmentationConfig(max_shift_img_fraction=(0.5, 0.5),
+                             input_data_keys=augs_datakey,
+                             shift_aug_prob=0.35,
+                             is_normalized=False,
+                             rotation_angle=(-180, 180),
+                             rotation_aug_prob=1.0,
+                             sigma_gaussian_noise_dn=15,
+                             gaussian_noise_aug_prob=1.0,
+                             gaussian_blur_aug_prob=1.0,
+                             is_torch_layout=False,
+                             min_max_brightness_factor=(0.6, 1.2),
+                             min_max_contrast_factor=(0.6, 1.2),
+                             brightness_aug_prob=1.0,
+                             contrast_aug_prob=1.0,
+                             input_normalization_factor=255.0,
+                             enable_auto_input_normalization=True,
+                             )
 
     augs_helper = ImageAugmentationsHelper(cfg)
 
     # Apply augs and plot
-    lbls = np.tile(np.array([resolution[0] / 2, resolution[1] / 2]), (batch_size, 1))
+    lbls = np.tile(
+        np.array([resolution[0] / 2, resolution[1] / 2]), (batch_size, 1))
 
     num_trials = 10
 
     for idTrial in range(num_trials):
 
-        out_imgs, out_lbls = augs_helper( numpy_to_torch(imgs, dtype=torch.float32), numpy_to_torch(lbls, dtype=torch.float32) )
+        out_imgs, out_lbls = augs_helper(numpy_to_torch(
+            imgs, dtype=torch.float32), numpy_to_torch(lbls, dtype=torch.float32))
         out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
 
         # Plot inputs and outputs in a 2×batch_size grid
@@ -255,16 +294,17 @@ def test_sample_images_augmentation():
         plt.show()
         plt.close()
 
+
 def test_AugmentationSequential():
     from kornia.augmentation import AugmentationSequential, RandomAffine, RandomHorizontalFlip
     from kornia.constants import DataKey
 
     # Get sample image
-    imgs = load_sample_images()   
+    imgs = load_sample_images()
 
     data_augmentation_module = AugmentationSequential(
-        RandomAffine(degrees=0.0, 
-                     translate=(0.4, 0.4), 
+        RandomAffine(degrees=0.0,
+                     translate=(0.4, 0.4),
                      p=1.0,
                      keepdim=True),
         RandomHorizontalFlip(p=1.0),
@@ -279,17 +319,17 @@ def test_AugmentationSequential():
         # NOTE: output is a list not a tuple
 
         # Ensure outputs are in tuple format
-        #if not isinstance(outputs, tuple):
+        # if not isinstance(outputs, tuple):
         #    outputs = (outputs,)
 
         return outputs
-    
+
     img = imgs[1]
     image_tensor = numpy_to_torch(img, dtype=torch.float32)
     bin_mask = image_tensor > 0.5  # Example binary mask
     keypoints = torch.tensor(
         # Example keypoints
-        [[512, 512], [750, 750]], dtype=torch.float32) # Note that kornia uses the points in the (N,2) format (assuming 1 image!)
+        [[512, 512], [750, 750]], dtype=torch.float32)  # Note that kornia uses the points in the (N,2) format (assuming 1 image!)
 
     augmented_image, bin_mask, aug_keypoints = augment_data_batch(
         image_tensor, bin_mask, keypoints)
@@ -318,8 +358,10 @@ def test_AugmentationSequential():
     axs[0].axis('off')
 
     # Plot original point
-    axs[0].scatter(keypoints[0, 0].item(), keypoints[0, 0].item(), c='r', s=40, label='Original Point')
-    axs[0].scatter(keypoints[1, 1].item(), keypoints[1, 1].item(), c='g', s=40, label='Original Point 2')
+    axs[0].scatter(keypoints[0, 0].item(), keypoints[0, 0].item(),
+                   c='r', s=40, label='Original Point')
+    axs[0].scatter(keypoints[1, 1].item(), keypoints[1, 1].item(),
+                   c='g', s=40, label='Original Point 2')
 
     # Plot augmented image
     axs[1].imshow(aug_img, cmap='gray')
@@ -328,10 +370,12 @@ def test_AugmentationSequential():
 
     # Plot transformed point if available
     aug_point = aug_keypoints.detach().cpu().numpy()
-    axs[1].scatter(keypoints[0, 0].item(), keypoints[0, 1].item(), c='r', s=40, label='Original Point 1')
-    axs[1].scatter(keypoints[1, 0].item(), keypoints[1, 1].item(), c='g', s=40, label='Original Point 2')
+    axs[1].scatter(keypoints[0, 0].item(), keypoints[0, 1].item(),
+                   c='r', s=40, label='Original Point 1')
+    axs[1].scatter(keypoints[1, 0].item(), keypoints[1, 1].item(),
+                   c='g', s=40, label='Original Point 2')
 
-    axs[1].scatter(aug_point[0, 0], aug_point[0, 1], c='r', s=40, 
+    axs[1].scatter(aug_point[0, 0], aug_point[0, 1], c='r', s=40,
                    label='Transformed Point 1', marker='x')
     axs[1].scatter(aug_point[1, 0], aug_point[1, 1], c='g',
                    s=40, label='Transformed Point 2', marker='x')
@@ -348,14 +392,14 @@ def test_AugmentationSequential():
 @pytest.mark.parametrize("gaussian_blur_aug_prob", [0, 1])
 @pytest.mark.parametrize("brightness_aug_prob", [0, 1])
 @pytest.mark.parametrize("contrast_aug_prob", [0, 1])
-def test_augmentation_helper_preserves_device(device, 
+def test_augmentation_helper_preserves_device(device,
                                               shift_aug_prob,
                                               rotation_aug_prob,
                                               gaussian_noise_aug_prob,
                                               gaussian_blur_aug_prob,
                                               brightness_aug_prob,
                                               contrast_aug_prob) -> None:
-    
+
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available.")
 
@@ -391,6 +435,7 @@ def test_augmentation_helper_preserves_device(device,
     assert out_img.device.type == device
     assert out_lbl.device.type == device
 
+
 def test_zero_augs_input_unchanged():
     device = 'cpu'
     cfg = AugmentationConfig(
@@ -421,13 +466,16 @@ def test_zero_augs_input_unchanged():
     out_img, out_lbl = augs_helper(x, lbl)
 
     # Verify that outputs are the same as inputs
-    assert torch.allclose(out_img, x), "Output image should be the same as input"
-    assert torch.allclose(out_lbl, lbl), "Output labels should be the same as input labels"
+    assert torch.allclose(
+        out_img, x), "Output image should be the same as input"
+    assert torch.allclose(
+        out_lbl, lbl), "Output labels should be the same as input labels"
+
 
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
 
-    device = "cuda" if torch.cuda.is_available() else "cpu" 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     shift_aug_prob = 0.0
     rotation_aug_prob = 0.0
     gaussian_noise_aug_prob = 0.0
@@ -435,11 +483,10 @@ if __name__ == '__main__':
     brightness_aug_prob = 0.0
     contrast_aug_prob = 0.0
 
-
-    #test_synthetic_mask_augmentation()
+    # test_synthetic_mask_augmentation()
     test_sample_images_augmentation()
-    #test_AugmentationSequential()
-    #test_augmentation_helper_preserves_device(device,
+    # test_AugmentationSequential()
+    # test_augmentation_helper_preserves_device(device,
     #                                          shift_aug_prob,
     #                                          rotation_aug_prob,
     #                                          gaussian_noise_aug_prob,
