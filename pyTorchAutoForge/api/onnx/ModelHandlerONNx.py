@@ -62,12 +62,13 @@ class ModelHandlerONNx:
             print('No name provided for the ONNx model. Assign default value.')
             onnx_model_name = 'onnx_export'
         
-        os.makedirs(os.path.dirname(self.onnx_export_path), exist_ok=True)
+        # Create export folder if it does not exist
+        os.makedirs(self.onnx_export_path, exist_ok=True)
 
         # Check if any model is already exported in the export path and append ID to the filename if any
         nameID = 0
         onnx_model_name_tmp = onnx_model_name + "_" + str(nameID)
-        while os.path.isfile(os.path.join(os.path.dirname(self.onnx_export_path), onnx_model_name_tmp + ".onnx")):
+        while os.path.isfile(os.path.join(self.onnx_export_path, onnx_model_name_tmp + ".onnx")):
             onnx_model_name_tmp = onnx_model_name + "_" + str(nameID)
             nameID += 1
 

@@ -61,7 +61,7 @@ class ModelProfilerHelper():
         self.activities = list(activities)
         self.record_shapes = record_shapes
 
-        if isinstance(input_shape_or_sample, tuple):
+        if isinstance(input_shape_or_sample, (tuple, list)):
             # If input is a list or tuple indicating shape, generate random
             self.input_sample = torch.randn((1, *input_shape_or_sample[1:]))
         else:

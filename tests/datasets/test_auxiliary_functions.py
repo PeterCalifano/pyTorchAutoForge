@@ -4,14 +4,14 @@ from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey
 import os
 import numpy as np
 
-from pyTorchAutoForge.setup.AutoForgeInit import is_headless
+from pyTorchAutoForge.setup.AutoForgeInit import Is_session_headless
 
 def test_LoadDatasetToMem():
 
     import matplotlib
     import matplotlib.pyplot as plt
 
-    if is_headless():
+    if Is_session_headless():
         matplotlib.use(backend='Agg')
     else:
         matplotlib.use(backend='TkAgg')

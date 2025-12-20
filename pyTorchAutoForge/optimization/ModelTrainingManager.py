@@ -567,14 +567,14 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
             raise TypeError(
                 f'{colorama.Fore.RED}Expected dataloaderIndex to be of type DataloaderIndex, but found {type(dataloaderIndex)} instead.')
 
-        self.trainingDataloader: DataLoader = dataloaderIndex.TrainingDataLoader
-        self.validationDataloader: DataLoader = dataloaderIndex.ValidationDataLoader
+        self.trainingDataloader = dataloaderIndex.TrainingDataLoader
+        self.validationDataloader = dataloaderIndex.ValidationDataLoader
 
         self.trainingDataloaderSize: int = len(self.trainingDataloader)
         self.validationDataloaderSize: int = len(self.validationDataloader)
 
         if dataloaderIndex.testingDataLoader is not None:
-            self.testingDataloader: DataLoader = dataloaderIndex.testingDataLoader
+            self.testingDataloader = dataloaderIndex.testingDataLoader
 
         print(
             f"Training DataLoader size: {self.trainingDataloaderSize}, Validation DataLoader size: {self.validationDataloaderSize}")
