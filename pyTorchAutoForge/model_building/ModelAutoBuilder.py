@@ -165,7 +165,8 @@ def AutoComputeConvBlocksOutput(first_input_size: int | list[int] | tuple[int, i
     # Loop over input lists 
     flattened_sizes = []
     intermediated_maps_sizes = []
-    conv_block_map_output_size = (0, 0) # Initialize as zero
+    # Initialize to the current input size so that an empty kernel_sizes yields a meaningful output
+    conv_block_map_output_size = (first_input_size[0], first_input_size[1])
 
     for idL in range(len(kernel_sizes)):
 
