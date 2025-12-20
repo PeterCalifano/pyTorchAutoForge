@@ -8,6 +8,8 @@ from pyTorchAutoForge.datasets.LabelsClasses import (
     GeometricLabels,
     AuxiliaryLabels,
     KptsHeatmapsLabels,
+    PTAF_Datakey,
+    Parse_ptaf_datakeys,
 )
 
 def test_to_dict_and_from_dict():
@@ -141,6 +143,62 @@ def test_lbl_containers_loading_from_yaml():
     import pprint
     print("Loaded Container:")
     pprint.pprint(container, indent=2)
+
+
+def test_parse_ptaf_datakeys_valid_input():
+    """Test Parse_ptaf_datakeys with valid label strings."""
+    # Test single valid label
+    result = Parse_ptaf_datakeys(["IMAGE"])
+    assert result == (PTAF_Datakey.IMAGE,)
+    
+    # Test multiple valid labels
+    result = Parse_ptaf_datakeys(["IMAGE", "MASK", "BBOX"])
+    assert result == (PTAF_Datakey.IMAGE, PTAF_Datakey.MASK, PTAF_Datakey.BBOX)
+    
+    # Test all valid labels
+    all_labels = ["IMAGE", "INPUT", "MASK", "BBOX", "BBOX_XYXY", "BBOX_XYWH", 
+                  "KEYPOINTS", "CLASS", "RANGE_TO_COM", "REFERENCE_SIZE", 
+                  "PHASE_ANGLE", "CENTRE_OF_FIGURE", "APPARENT_SIZE"]
+    result = Parse_ptaf_datakeys(all_labels)
+    assert len(result) == len(all_labels)
+    assert all(isinstance(key, PTAF_Datakey) for key in result)
+
+
+def test_parse_ptaf_datakeys_case_insensitive():
+    """Test Parse_ptaf_datakeys handles mixed case input correctly."""
+    # Test lowercase
+    result = Parse_ptaf_datakeys(["image", "mask"])
+    assert result == (PTAF_Datakey.IMAGE, PTAF_Datakey.MASK)
+    
+    # Test mixed case
+    result = Parse_ptaf_datakeys(["Image", "MaSk", "bBoX"])
+    assert result == (PTAF_Datakey.IMAGE, PTAF_Datakey.MASK, PTAF_Datakey.BBOX)
+
+
+def test_parse_ptaf_datakeys_empty_input():
+    """Test Parse_ptaf_datakeys with empty input."""
+    result = Parse_ptaf_datakeys([])
+    assert result == ()
+
+
+def test_parse_ptaf_datakeys_unknown_label():
+    """Test Parse_ptaf_datakeys raises ValueError for unknown labels."""
+    with pytest.raises(ValueError) as exc_info:
+        Parse_ptaf_datakeys(["UNKNOWN_LABEL"])
+    
+    assert "Unknown PTAF_Datakey: UNKNOWN_LABEL" in str(exc_info.value)
+    
+    # Test that the original KeyError is chained
+    assert exc_info.value.__cause__ is not None
+    assert isinstance(exc_info.value.__cause__, KeyError)
+
+
+def test_parse_ptaf_datakeys_partial_invalid():
+    """Test Parse_ptaf_datakeys raises error when one label in sequence is invalid."""
+    with pytest.raises(ValueError) as exc_info:
+        Parse_ptaf_datakeys(["IMAGE", "INVALID", "MASK"])
+    
+    assert "Unknown PTAF_Datakey: INVALID" in str(exc_info.value)
 
 
 if __name__ == "__main__":
