@@ -155,10 +155,8 @@ def test_parse_ptaf_datakeys_valid_input():
     result = Parse_ptaf_datakeys(["IMAGE", "MASK", "BBOX"])
     assert result == (PTAF_Datakey.IMAGE, PTAF_Datakey.MASK, PTAF_Datakey.BBOX)
     
-    # Test all valid labels
-    all_labels = ["IMAGE", "INPUT", "MASK", "BBOX", "BBOX_XYXY", "BBOX_XYWH", 
-                  "KEYPOINTS", "CLASS", "RANGE_TO_COM", "REFERENCE_SIZE", 
-                  "PHASE_ANGLE", "CENTRE_OF_FIGURE", "APPARENT_SIZE"]
+    # Test all valid labels (dynamically generated from enum)
+    all_labels = [key.name for key in PTAF_Datakey]
     result = Parse_ptaf_datakeys(all_labels)
     assert len(result) == len(all_labels)
     assert all(isinstance(key, PTAF_Datakey) for key in result)
