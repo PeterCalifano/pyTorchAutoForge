@@ -6,7 +6,7 @@ from .base_backbones import EfficientNetConfig, FeatureExtractorFactory
 import torch
 import torch.nn.functional as F
 from pyTorchAutoForge.model_building.backbones.spatial_features_operators import SpatialKptFeatureSoftmaxLocator
-from pyTorchAutoForge.model_building.poolingBlocks import CustomAdaptiveMaxPool2d, CustomAdaptiveAvgPool2d
+from pyTorchAutoForge.model_building.poolingBlocks import CustomAdaptiveMaxPool2d
 
 class EfficientNetBackbone(nn.Module):
     def __init__(self, cfg: EfficientNetConfig):
