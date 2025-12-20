@@ -163,7 +163,7 @@ class testTorchAdaptivePoolModel(nn.Module):
     ],
 )
 def test_torch_builtin_adaptive_pool_dynamo_export(
-    pool_ctor, should_succeed, tmp_path: pathlib.Path | str = "/tmp/"
+    pool_ctor, should_succeed, tmp_path: pathlib.Path | str
 ):
     if not hasattr(torch.onnx, "dynamo_export"):
         pytest.skip("torch.onnx.dynamo_export not available in this Torch version")
