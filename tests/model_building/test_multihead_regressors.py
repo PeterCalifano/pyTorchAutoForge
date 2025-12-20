@@ -1,6 +1,5 @@
 import pytest
 import torch
-import numpy as np
 from pyTorchAutoForge.model_building.ModelAutoBuilder import (
     MultiHeadRegressor,
     CascadedHeadRegressor,
