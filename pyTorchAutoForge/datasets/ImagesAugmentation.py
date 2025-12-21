@@ -307,6 +307,34 @@ class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
         return out_imgs
 
 
+class RandomBinarizeImage(IntensityAugmentationBase2D):
+    def __init__(self,
+                 aug_prob: float = 0.5,
+                 masking_quantile: float = 0.15) -> None:
+        super().__init__(p=aug_prob)
+        self.masking_quantile = masking_quantile
+
+    def apply_transform(self,
+                        input: torch.Tensor,
+                        params: dict[str, torch.Tensor],
+                        flags: dict[str, Any],
+                        transform: torch.Tensor | None = None) -> torch.Tensor:
+
+        img_batch = input[0]
+        B = input.shape[0]
+        device, dtype = img_batch.device, img_batch.dtype
+
+        # Compute threshold
+        avg_brightness = img_batch.mean(dim=1, keepdim=True)  # B×1×H×W
+        brightness_thr = (avg_brightness.view(
+            B, 1, -1)).quantile(self.masking_quantile, dim=2, keepdim=True)
+
+        # Get binarized image
+        img_batch_mask = (avg_brightness > brightness_thr).float()
+
+        return img_batch_mask
+
+
 # %% Geometric augmentations
 class BorderAwareRandomAffine(GeometricAugmentationBase2D):
     """
