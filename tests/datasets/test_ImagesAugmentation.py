@@ -2,8 +2,7 @@ import torch
 from pyTorchAutoForge.datasets.ImagesAugmentation import (
     PoissonShotNoise,
     RandomGaussianNoiseVariableSigma,
-    Flip_coords_X,
-    Flip_coords_Y,
+    BorderAwareRandomAffine,
 )
 import pytest
 import matplotlib.pyplot as plt
@@ -67,7 +66,6 @@ def test_random_gaussian_noise_variable_sigma_shape_dtype():
     assert out.shape == x.shape
     assert out.dtype == x.dtype
 
-
 def test_random_gaussian_noise_validation_filters_dark_images():
     # Validation should zero sigma for images without enough bright pixels
     torch.manual_seed(0)
@@ -95,45 +93,30 @@ def test_random_gaussian_noise_validation_filters_dark_images():
     assert torch.allclose(out[1], x[1])
     assert not torch.allclose(out[2], x[2])
 
+def test_detect_border_crossing_white_masks():
+    imgs = torch.zeros((4, 1, 16, 16), dtype=torch.float32)
 
-@pytest.mark.parametrize("coords,width", [
-    (torch.tensor([[0, 1], [3, 4]]), 5),
-    (torch.tensor([[[0, 0], [2, 2]], [[1, 1], [4, 4]]]), 6),
-])
-def test_flip_coords_x(coords, width):
-    flipped = Flip_coords_X(coords, image_width=width)
-    # original x + flipped x = width - 1
-    x_orig = coords[..., 0]
-    x_flip = flipped[..., 0]
-    assert torch.all(x_orig + x_flip == width - 1)
-    # y unchanged
-    assert torch.equal(flipped[..., 1], coords[..., 1])
+    # No crossing: bright square away from borders
+    imgs[0, 0, 6:10, 6:10] = 255.0
 
+    # Vertical crossing: left border run
+    imgs[1, 0, 3:9, 0] = 255.0
 
-@pytest.mark.parametrize("coords,height", [
-    (torch.tensor([[0, 1], [3, 4]]), 5),
-    (torch.tensor([[[0, 0], [2, 2]], [[1, 1], [4, 4]]]), 6),
-])
-def test_flip_coords_y(coords, height):
-    flipped = Flip_coords_Y(coords, image_height=height)
-    # original y + flipped y = height - 1
-    y_orig = coords[..., 1]
-    y_flip = flipped[..., 1]
-    assert torch.all(y_orig + y_flip == height - 1)
-    # x unchanged
-    assert torch.equal(flipped[..., 0], coords[..., 0])
+    # Horizontal crossing: top border run
+    imgs[2, 0, 0, 4:10] = 255.0
 
+    # Both crossings: top + left
+    imgs[3, 0, 0, 2:8] = 255.0
+    imgs[3, 0, 2:8, 0] = 255.0
 
-def test_flip_coords_invalid_dim():
-    bad = torch.randn(2, 2, 2, 2)
-    with pytest.raises(ValueError):
-        Flip_coords_X(bad, image_width=10)
-    with pytest.raises(ValueError):
-        Flip_coords_Y(bad, image_height=10)
+    crossing_type, vertical, horizontal = BorderAwareRandomAffine.Detect_border_crossing(
+        imgs, num_pix_detect=4, intensity_threshold_uint8=7.0)
+
+    assert crossing_type.tolist() == [0, 1, 2, 3]
+    assert vertical.squeeze(-1).tolist() == [False, True, False, True]
+    assert horizontal.squeeze(-1).tolist() == [False, False, True, True]
 
 # %% Integrated tests
-
-
 def test_synthetic_mask_augmentation():
 
     augs_datakey = [DataKey.IMAGE, DataKey.KEYPOINTS]
@@ -496,4 +479,5 @@ if __name__ == '__main__':
     #                                          brightness_aug_prob,
     #                                          contrast_aug_prob)
     # test_zero_augs_input_unchanged()
-    test_random_gaussian_noise_validation_filters_dark_images()
+    #test_random_gaussian_noise_validation_filters_dark_images()
+    test_detect_border_crossing_white_masks()

@@ -1,3 +1,4 @@
+import kornia.augmentation as K
 from logging import warning
 from warnings import warn
 from typing import Any
@@ -19,6 +20,7 @@ except ImportError:
 
 from typing import Literal, TypeAlias
 import torch
+import torch.nn.functional as F
 from torch import nn, Tensor
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -98,21 +100,16 @@ class PoissonShotNoise(IntensityAugmentationBase2D):
             torch.Tensor | tuple[torch.Tensor, ...]: Images with Poisson shot noise applied, or a tuple containing such images.
 
         """
-
-        # TODO modify to handle tuple inputs
-
         # Randomly sample a boolean mask to index batch size
         B = input.shape[0]
         device, dtype = input.device, input.dtype
 
         # Pixel value is the variance of the Photon Shot Noise (higher where brighter).
         # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel.
-        photon_shot_noise = torch.poisson(input)
+        photon_shot_noise = torch.poisson(input).to(device=device)
 
-        # Sum noise to the original images according to mask
-        input += photon_shot_noise
-
-        return input
+        # Sum noise to the original images
+        return input + photon_shot_noise
 
     def generate_parameters(self,
                             shape: tuple[int, ...]) -> dict:
@@ -244,14 +241,15 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
             else:
                 # Use the configured scalar threshold for all samples
                 validation_pixel_threshold_ = torch.full((B,),
-                                                        float(
-                                                            self.validation_pixel_threshold),
-                                                        device=input.device,
-                                                        dtype=flat_input.dtype,
-                                                        )
+                                                         float(
+                    self.validation_pixel_threshold),
+                    device=input.device,
+                    dtype=flat_input.dtype,
+                )
 
             # Count number of bright pixels per image in batch
-            is_pixel_bright_count_mask = flat_input.gt(validation_pixel_threshold_.view(B, 1)).sum(dim=1)  # Get count of bright pixels per image
+            is_pixel_bright_count_mask = flat_input.gt(validation_pixel_threshold_.view(
+                B, 1)).sum(dim=1)  # Get count of bright pixels per image
 
             # Determine valid images mask
             # Get bool mask where >= min_bright pixels shapes as (B,)
@@ -310,185 +308,284 @@ class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
 
 
 # %% Geometric augmentations
-# TODO (PC) move translate_batch to this custom augmentation class, add rotation and extend for multiple points labels shift
-class RandomImageLabelsRotoTranslation(GeometricAugmentationBase2D):
+class BorderAwareRandomAffine(GeometricAugmentationBase2D):
     """
-    RandomImageLabelsRotoTranslation _summary_
+    BorderAwareRandomAffine Class reimplementing Kornia's RandomAffine with border crossing constraints.
 
-    _extended_summary_
+    This augmentation applies random affine transformations to a batch of images while considering border crossing constraints. It detects bright pixel runs along image borders to classify crossing types and modifies the affine transformation parameters accordingly before computing the transformation. The rest of the implementation follows RandomAffine. Depending on the detected crossing type, it constrains translations and rotations to prevent unrealistic augmentations. Detection is performed based on bright pixel runs along image borders (tailored for typical space images with near black background).
 
-    :param AugsBaseClass: _description_
-    :type AugsBaseClass: _type_
+    :param GeometricAugmentationBase2D: Base class for 2D geometric augmentations in Kornia.
+    :type GeometricAugmentationBase2D: class
     """
 
     def __init__(self,
-                 angles: float | tuple[float, float] = (0.0, 360.0),
-                 distribution_type: Literal["uniform", "normal"] = "uniform"):
-        super().__init__()
-        self.angles = angles
-        self.distribution_type = distribution_type
+                 base_random_affine: K.RandomAffine,
+                 num_pix_crossing_detect: int = 10,
+                 intensity_threshold_uint8: float = 7.0):
+        super().__init__(p=base_random_affine.p,
+                         same_on_batch=base_random_affine.same_on_batch,
+                         keepdim=base_random_affine.keepdim)
 
-    def forward(self,
-                input: torch.Tensor,
-                params: dict[str, torch.Tensor] | None = None,
-                **kwargs: Any) -> torch.Tensor:
+        # Input validity check
+        assert isinstance(
+            base_random_affine, K.RandomAffine), "base_random_affine must be an instance of K.RandomAffine"
 
-        # TODO implement forward
-        if 1:
-            raise NotImplementedError("Implementation todo")
+        # Store base random affine
+        self.base_random_affine = base_random_affine
 
-        return x
+        # Get generator and flags from RandomAffine base
+        self._param_generator = base_random_affine._param_generator
+        self.flags = dict(resample=base_random_affine.flags["resample"],
+                          padding_mode=base_random_affine.flags["padding_mode"],
+                          align_corners=base_random_affine.flags["align_corners"])
 
+        # Store attributes
+        self.num_pix_crossing_detect = num_pix_crossing_detect
+        self.intensity_threshold_uint8 = intensity_threshold_uint8
 
-def Flip_coords_X(coords: torch.Tensor,
-                  image_width: int
-                  ) -> torch.Tensor:
-    """
-    Flip x-coordinates horizontally for a set of coordinates, given the image width.
+        # Assert validity of parameters
+        if self.num_pix_crossing_detect <= 0:
+            raise ValueError(
+                "num_pix_crossing_detect must be a positive integer.")
+        if self.intensity_threshold_uint8 < 0:
+            raise ValueError(
+                "intensity_threshold_uint8 must be a non-negative float.")
 
-    This function flips the x-coordinates of points or batches of points horizontally,
-    such that the leftmost point becomes the rightmost and vice versa, relative to the image width.
+    def compute_transformation(self,
+                               input: torch.Tensor,
+                               params: dict[str, torch.Tensor],
+                               flags: dict[str, Any]) -> torch.Tensor:
+        """
+        compute_transformation Computes the affine transformation matrix for each sample in the batch, taking into account border crossing constraints. Detection is performed based on bright pixel runs along image borders (tailored for typical space images with near black background).
+        """
 
-    Args:
-        coords (torch.Tensor): Tensor of shape (N, 2) or (B, N, 2) representing coordinates.
-        image_width (int): The width of the image.
+        # Get transform parameters (per sample)
+        translations = params["translations"]
+        angle = params["angle"]
+        scale = params["scale"]
+        shear_x = params["shear_x"]
+        shear_y = params["shear_y"]
 
-    Returns:
-        torch.Tensor: Tensor of the same shape as `coords` with x-coordinates flipped.
+        # Get previously computed crossing type for this batch if available
+        crossing_types = params.get("crossing_types", None)
 
-    Raises:
-        ValueError: If `coords` does not have shape (N,2) or (B,N,2).
-    """
+        # Else compute crossing_types mask
+        if crossing_types is None:
+            crossing_types, _, _ = BorderAwareRandomAffine.Detect_border_crossing(
+                img_batch=input,
+                num_pix_detect=self.num_pix_crossing_detect,
+                intensity_threshold_uint8=self.intensity_threshold_uint8)
+            params["crossing_types"] = crossing_types
 
-    if coords.dim() == 2:
-        # Get x, y coordinates from (N,2)
-        x = coords[:, 0]
-        y = coords[:, 1]
+        # Determine masks for transformations
+        crossing_types = crossing_types.to(device=translations.device)
 
-        # Compute new X coordinates
-        new_x = (image_width - 1) - x
-        return torch.stack([new_x, y], dim=1)
+        vertical_only = crossing_types == 1
+        horizontal_only = crossing_types == 2
+        blocked = crossing_types == 3
 
-    elif coords.dim() == 3:
-        # Get x, y coordinates from (B,N,2)
-        x = coords[..., 0]
-        y = coords[..., 1]
+        # If any crossing found, modify params accordingly
+        if vertical_only.any() or horizontal_only.any() or blocked.any():
 
-        # Compute new X coordinates
-        new_x = (image_width - 1) - x
-        return torch.stack([new_x, y], dim=-1)
+            # Clone to avoid modifying original params
+            translations = translations.clone()
+            angle = angle.clone()
+            scale = scale.clone()
+            shear_x = shear_x.clone()
+            shear_y = shear_y.clone()
 
-    else:
-        raise ValueError("coords must have shape (N,2) or (B,N,2)")
+            # Apply vertical only translation constraint (null out X translation)
+            if vertical_only.any():
+                translations[vertical_only, 0] = 0
+                angle[vertical_only] = 0
+                shear_x[vertical_only] = 0
+                shear_y[vertical_only] = 0
+                scale[vertical_only] = 1
 
+            # Apply horizontal only translation constraint (null out Y translation)
+            if horizontal_only.any():
+                translations[horizontal_only, 1] = 0
+                angle[horizontal_only] = 0
+                shear_x[horizontal_only] = 0
+                shear_y[horizontal_only] = 0
+                scale[horizontal_only] = 1
 
-def Flip_coords_Y(coords: torch.Tensor,
-                  image_height: int
-                  ) -> torch.Tensor:
-    """
-    Flip y-coordinates vertically for a set of coordinates, given the image height.
+            # Apply blocked constraint (null out all transformations)
+            if blocked.any():
+                translations[blocked] = 0
+                angle[blocked] = 0
+                shear_x[blocked] = 0
+                shear_y[blocked] = 0
+                scale[blocked] = 1
 
-    This function flips the y-coordinates of points or batches of points vertically,
-    such that the topmost point becomes the bottommost and vice versa, relative to the image height.
+            # Re-assign modified params
+            params["translations"] = translations
+            params["angle"] = angle
+            params["scale"] = scale
+            params["shear_x"] = shear_x
+            params["shear_y"] = shear_y
 
-    Args:
-        coords (torch.Tensor): Tensor of shape (N, 2) or (B, N, 2) representing coordinates.
-        image_height (int): The height of the image.
+        return KG.get_affine_matrix2d(
+            torch.as_tensor(params["translations"],
+                            device=input.device, dtype=input.dtype),
+            torch.as_tensor(params["center"],
+                            device=input.device, dtype=input.dtype),
+            torch.as_tensor(params["scale"],
+                            device=input.device, dtype=input.dtype),
+            torch.as_tensor(params["angle"],
+                            device=input.device, dtype=input.dtype),
+            KG.deg2rad(torch.as_tensor(
+                params["shear_x"], device=input.device, dtype=input.dtype)),
+            KG.deg2rad(torch.as_tensor(
+                params["shear_y"], device=input.device, dtype=input.dtype)),
+        )
 
-    Returns:
-        torch.Tensor: Tensor of the same shape as `coords` with y-coordinates flipped.
+    def apply_transform(self,
+                        input: torch.Tensor,
+                        params: dict[str, torch.Tensor],
+                        flags: dict[str, Any],
+                        transform: torch.Tensor | None = None) -> torch.Tensor:
 
-    Raises:
-        ValueError: If `coords` does not have shape (N,2) or (B,N,2).
-    """
-    if coords.dim() == 2:
-        # Get x, y coordinates from (N,2)
-        x = coords[:, 0]
-        y = coords[:, 1]
+        _, _, height, width = input.shape
 
-        # Compute new Y coords
-        new_y = (image_height - 1) - y
-        return torch.stack([x, new_y], dim=1)
+        if not isinstance(transform, torch.Tensor):
+            raise TypeError(
+                f"Expected the `transform` be a Tensor. Got {type(transform)}.")
 
-    elif coords.dim() == 3:
-        # Get x, y coordinates from (B,N,2)
-        x = coords[..., 0]
-        y = coords[..., 1]
+        # Apply affine warp
+        return KG.warp_affine(input,
+                              transform[:, :2, :],
+                              (height, width),
+                              flags["resample"].name.lower(),
+                              align_corners=flags["align_corners"],
+                              padding_mode=flags["padding_mode"].name.lower(),
+                              )
 
-        # Compute new Y coords
-        new_y = (image_height - 1) - y
-        return torch.stack([x, new_y], dim=-1)
+    def inverse_transform(self,
+                          input: torch.Tensor,
+                          flags: dict[str, Any],
+                          transform: torch.Tensor | None = None,
+                          size: tuple[int, int] | None = None) -> torch.Tensor:
 
-    else:
-        raise ValueError("coords must have shape (N,2) or (B,N,2)")
+        if not isinstance(transform, torch.Tensor):
+            raise TypeError(
+                f"Expected the `transform` be a Tensor. Got {type(transform)}.")
 
+        return self.apply_transform(input,
+                                    params=self._params,
+                                    transform=torch.as_tensor(
+                                        transform,
+                                        device=input.device,
+                                        dtype=input.dtype),            flags=flags,
+                                    )
 
-# %% Kornia augmentations module
-if has_kornia:
-    class CustomImageCoordsFlipHoriz(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self, apply_prob: float = 0.5) -> None:
-            super().__init__(apply_prob)
+    @staticmethod
+    def Make_constrained_random_affines(base: K.RandomAffine):
 
-        def forward(self,
-                    input: torch.Tensor,
-                    params: dict[str, torch.Tensor] | None = None,
-                    **kwargs: Any) -> torch.Tensor:
-            """
-            Uses Kornia to horizontally flip a batch of images (B,C,H,W), and adjusts coords.
+        gen = base._param_generator
+        tx, ty = (0.0, 0.0) if gen.translate is None else [
+            float(v) for v in gen.translate]
 
-            Args:
-                image (torch.Tensor): shape = (B, C, H, W)
-                coords (torch.Tensor): shape = (B, N, 2) or (B, 2), each (x,y)
-            Returns:
-                flipped_image: (B, C, H, W)
-                flipped_coords: (B, N, 2)
-            """
+        common_opts = dict(resample=base.flags["resample"],
+                           padding_mode=base.flags["padding_mode"],
+                           same_on_batch=base.same_on_batch,
+                           align_corners=base.flags["align_corners"],
+                           p=base.p,
+                           keepdim=base.keepdim,
+                           )
 
-            raise NotImplementedError(
-                "Error: not updated and compatible with supertype")
+        # Build constrained random affines
+        vertical_only = K.RandomAffine(degrees=0.0,
+                                       translate=(0.0, ty),
+                                       scale=None,
+                                       shear=None,
+                                       **common_opts)
 
-            # Flip the batch of images
-            flipped_image = kornia.geometry.transform.hflip(image)
+        horizontal_only = K.RandomAffine(degrees=0.0,
+                                         translate=(tx, 0.0),
+                                         scale=None,
+                                         shear=None, **common_opts)
 
-            # Flip coordinates
-            _, _, H, W = image.shape
-            flipped_coords = Flip_coords_X(coords, image_width=W)
-            return flipped_image, flipped_coords
+        return base, vertical_only, horizontal_only
 
-    class CustomImageCoordsFlipVert(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self, apply_prob: float = 0.5) -> None:
-            super().__init__(apply_prob)
+    @staticmethod
+    def Detect_border_crossing(img_batch,
+                               num_pix_detect: int = 10,
+                               intensity_threshold_uint8: float = 7.0):
+        """
+        Detect bright pixel runs along image borders to classify crossing types.
 
-        def forward(self,
-                    input: torch.Tensor,
-                    params: dict[str, torch.Tensor] | None = None,
-                    **kwargs: Any) -> torch.Tensor:
-            """
-            Uses Kornia to vertically flip a batch of images (B,C,H,W), and adjusts coords.
+        Returns:
+            crossing_type (torch.Tensor): Long tensor (B,) where 0=full/none, 1=vertical-only, 2=horizontal-only, 3=both.
+            vertical_crossing (torch.Tensor): Bool tensor (B,) true when left/right borders have a run.
+            horizontal_crossing (torch.Tensor): Bool tensor (B,) true when top/bottom borders have a run.
+        """
+        if img_batch.ndim != 4:
+            raise ValueError(
+                f"Expected BCHW tensor, got shape {tuple(img_batch.shape)}")
 
-            Args:
-                image (torch.Tensor): shape = (B, C, H, W)
-                coords (torch.Tensor): shape = (B, N, 2) or (B, 2), each (x,y)
-            Returns:
-                flipped_image: (B, C, H, W)
-                flipped_coords: (B, N, 2)
-            """
-            raise NotImplementedError(
-                "Error: not updated and compatible with supertype")
-            flipped_image = kornia.geometry.transform.vflip(image)
-            _, _, H, W = image.shape
-            flipped_coords = Flip_coords_Y(coords, image_height=H)
-            return flipped_image, flipped_coords
-else:
-    class CustomImageCoordsFlipHoriz(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self) -> None:
-            raise ImportError(
-                "Kornia is not installed. Run `pip install kornia`.")
+        # Create bright pixel mask based on threshold (assumes uint8 input)
+        binarized_img_mask = (img_batch > intensity_threshold_uint8).any(dim=1)
 
-    class CustomImageCoordsFlipVert(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self) -> None:
-            raise ImportError(
-                "Kornia is not installed. Run `pip install kornia`.")
+        B, H, W = binarized_img_mask.shape
+        device = binarized_img_mask.device
+
+        horizontal_edges = torch.cat(
+            (binarized_img_mask[:, 0, :], binarized_img_mask[:, -1, :]), dim=0)
+        vertical_edges = torch.cat(
+            (binarized_img_mask[:, :, 0], binarized_img_mask[:, :, -1]), dim=0)
+
+        # Determine crossings using convolutional count
+        horizontal_crossing = BorderAwareRandomAffine.ConvCount_intensity_line1d(
+            horizontal_edges, num_pix_detect)
+        vertical_crossing = BorderAwareRandomAffine.ConvCount_intensity_line1d(
+            vertical_edges, num_pix_detect)
+
+        # Get batch-wise masks
+        horizontal_crossing = horizontal_crossing[:B] | horizontal_crossing[B:]
+        vertical_crossing = vertical_crossing[:B] | vertical_crossing[B:]
+
+        # Determine crossing type
+        crossing_type = torch.full(
+            (B, 1), 0, device=device, dtype=torch.int64)  # 0: all allowed
+        crossing_type[vertical_crossing & ~
+                      horizontal_crossing] = 1  # 1: vertical only
+
+        crossing_type[horizontal_crossing & ~
+                      vertical_crossing] = 2  # 2: horizontal only
+
+        crossing_type[vertical_crossing &
+                      horizontal_crossing] = 3  # 3: none allowed
+
+        return crossing_type.squeeze(-1), vertical_crossing, horizontal_crossing
+
+    @staticmethod
+    def ConvCount_intensity_line1d(line_bool_mask: torch.Tensor,
+                                   window_length: int,
+                                   device: torch.device | str | None = None) -> torch.Tensor:
+
+        # Get length of line
+        length = line_bool_mask.shape[-1]
+
+        if device is None:
+            device = line_bool_mask.device
+
+        if length < window_length:
+            return torch.zeros(line_bool_mask.shape[0],
+                               device=device,
+                               dtype=torch.bool)
+
+        # Define convolution kernel
+        kernel = torch.ones((1, 1, window_length),
+                            device=device,
+                            dtype=torch.float32)
+
+        # Run convolution across line
+        conv = F.conv1d(input=line_bool_mask.float().unsqueeze(1),
+                        weight=kernel)
+
+        # Check if any window is fully filled
+        return conv.amax(dim=-1) >= window_length
 
 # %% Augmentation helper configuration dataclass
 
@@ -499,6 +596,7 @@ class AugmentationConfig:
     input_data_keys: list[DataKey]
     keepdim: bool = True
     same_on_batch: bool = False
+    random_apply_photometric: bool = False
     random_apply_minmax: tuple[int, int] = (1, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
 
@@ -620,6 +718,13 @@ class ImageAugmentationsHelper(nn.Module):
         # Define kornia augmentation pipeline
         augs_ops: list[GeometricAugmentationBase2D |
                        IntensityAugmentationBase2D] = []
+
+        # TODO categorize augmentations
+        geometric_augs_ops: list[GeometricAugmentationBase2D] = []
+        photometric_augs_ops: list[IntensityAugmentationBase2D] = []
+        optics_augs_ops: list[IntensityAugmentationBase2D] = []
+        noise_augs_ops: list[IntensityAugmentationBase2D] = []
+
         torch_vision_ops = nn.ModuleList()
 
         # GEOMETRIC AUGMENTATIONS
@@ -647,12 +752,17 @@ class ImageAugmentationsHelper(nn.Module):
                 translate_shift = (0.0, 0.0)
 
             # Construct RandomAffine
-            augs_ops.append(K.RandomAffine(degrees=rotation_degrees,
-                                           translate=translate_shift,
-                                           p=augs_cfg.rotation_aug_prob,
-                                           keepdim=True,
-                                           align_corners=augs_cfg.affine_align_corners,
-                                           same_on_batch=False))
+            base_random_affine = K.RandomAffine(degrees=rotation_degrees,
+                                                translate=translate_shift,
+                                                p=augs_cfg.rotation_aug_prob,
+                                                keepdim=True,
+                                                align_corners=augs_cfg.affine_align_corners,
+                                                same_on_batch=False)
+            # Wrap into BorderAwareRandomAffine
+            augs_ops.append(BorderAwareRandomAffine(base_random_affine=base_random_affine,
+                                                    num_pix_crossing_detect=10,
+                                                    intensity_threshold_uint8=2.0)
+                            )
 
         # INTENSITY AUGMENTATIONS
         # Random brightness
@@ -702,6 +812,7 @@ class ImageAugmentationsHelper(nn.Module):
         # Add placeholder if needed to prevent errors due to scalar augmentation count
         if len(augs_ops) == 0:
             print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops! Forward pass will not do anything if called.{colorama.Style.RESET_ALL}")
+
         elif len(augs_ops) == 1:
             # If len of augs_ops == 1 add placeholder augs for random_apply
             augs_ops.append(PlaceholderAugmentation())
@@ -710,12 +821,18 @@ class ImageAugmentationsHelper(nn.Module):
 
         # Build AugmentationSequential from nn.ModuleList
         # Use maximum number of augmentations if upper bound not provided
-        if augs_cfg.random_apply_minmax[1] == -1:
-            random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
-            random_apply_minmax_[1] = len(augs_ops) - 1
+        if augs_cfg.random_apply_photometric:
+            if augs_cfg.random_apply_minmax[1] == -1:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = len(augs_ops) - 1
+            else:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = tmp_random_apply_minmax_[1] - 1
+
+            random_apply_minmax_: tuple[int, int] | bool = (
+                tmp_random_apply_minmax_[0], tmp_random_apply_minmax_[1])
         else:
-            random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
-            random_apply_minmax_[1] = random_apply_minmax_[1] - 1
+            random_apply_minmax_ = False
 
         # Transfer all modules to device if specified
         if augs_cfg.device is not None:
@@ -730,7 +847,8 @@ class ImageAugmentationsHelper(nn.Module):
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
                                                          keepdim=False,
-                                                         random_apply=(random_apply_minmax_[0], random_apply_minmax_[1])).to(augs_cfg.device)
+                                                         random_apply=random_apply_minmax_
+                                                         ).to(augs_cfg.device)
 
         # if augs_cfg.append_custom_module_after_ is not None:
         #    pass
@@ -771,17 +889,10 @@ class ImageAugmentationsHelper(nn.Module):
 
             # Apply torchvision augmentation module
             if self.torchvision_augs_module is not None:
-                # TODO any way to modify the rotation centre at runtime? --> No way, need to switch to kornia custom with warp_affine
+                UserWarning(
+                    "WARNING: torchvision augmentations module is currently not implemented. Interface will likely be deprecated.")
                 # TODO how to do labels update in torchvision?
-                img_tensor = self.torchvision_augs_module(img_tensor)
-
-            # Apply translation
-            # if self.augs_cfg.shift_aug_prob > 0:
-            #    img_shifted, lbl_shifted = self.translate_batch_(
-            #        img_tensor, labels)
-            # else:
-            #    img_shifted = img_tensor
-            #    lbl_shifted = numpy_to_torch(labels).float()
+                # img_tensor = self.torchvision_augs_module(img_tensor)
 
             # Recompose inputs replacing image
             inputs = list(inputs)
@@ -789,8 +900,8 @@ class ImageAugmentationsHelper(nn.Module):
 
             ##########
             # Unsqueeze keypoints if input is [B, 2], must be [N, 2]
-            # DEVNOTE temporary code that requires extension to be more general!
-            # TODO find a way to actually get keypoints and other entries without to index those manually!
+            # DEVNOTE temporary code that requires extension to be more general
+            # TODO find a way to actually get keypoints and other entries without to index those manually
 
             lbl_to_unsqueeze = inputs[1].dim() == 2
             if lbl_to_unsqueeze:
@@ -803,11 +914,11 @@ class ImageAugmentationsHelper(nn.Module):
             inputs[1] = keypoints
             ##########
 
-            # Apply augmentations module
             if self.num_aug_ops > 0:
+                # %% Apply augmentations module
                 aug_inputs = self.kornia_augs_module(*inputs)
 
-                # Transformed image validator and fixer
+                # %% Validate and fix augmentations
                 if self.augs_cfg.enable_batch_validation_check:
                     aug_inputs = self.validate_fix_input_img_(
                         *aug_inputs, original_inputs=inputs)
@@ -858,7 +969,7 @@ class ImageAugmentationsHelper(nn.Module):
         # DEVNOTE: image appears to be transferred to cpu for no reason. To investigate.
         ###
         aug_inputs[0] = aug_inputs[0].to(keypoints.device)
-        aug_inputs[1].to(keypoints.device)
+        aug_inputs[1] = aug_inputs[1].to(keypoints.device)
         ###
 
         return aug_inputs
@@ -1115,16 +1226,26 @@ class ImageAugmentationsHelper(nn.Module):
         # Return validity mask and new invalid tensor samples (using index_select)
         return is_valid_mask, invalid_inputs
 
-    # TODO (PC) move method to dedicated custom augmentation class
-    # DEPRECATED, move outside for archive
+    # Overload "to" method
+    def to(self, *args, **kwargs):
+        """Overload to method to apply to all submodules."""
+        super().to(*args, **kwargs)
+        self.kornia_augs_module.to(*args, **kwargs)
 
-    def translate_batch_(self,
-                         images: torch.Tensor,
-                         labels: ndArrayOrTensor
-                         ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.torchvision_augs_module is not None:
+            self.torchvision_augs_module.to(*args, **kwargs)
+
+        return self
+
+    # STATIC METHODS
+    @staticmethod
+    def Shift_image_point_batch(augs_cfg: AugmentationConfig,
+                                images: torch.Tensor,
+                                labels: ndArrayOrTensor
+                                ) -> tuple[torch.Tensor, torch.Tensor]:
         """
             images: [B,C,H,W]
-            labels: torch.Tensor[B,N] or np.ndarray
+            labels: torch.Tensor[B,2] or np.ndarray
             returns: shifted images & labels in torch.Tensor
         """
 
@@ -1141,27 +1262,28 @@ class ImageAugmentationsHelper(nn.Module):
             lbl.shape[0] == B), f"Label batch size {lbl.shape[0]} does not match image batch size {B}."
 
         # Sample shifts for each batch: dx ∈ [-max_x, max_x], same for dy
-        if isinstance(self.augs_cfg.max_shift_img_fraction, (tuple, list)):
-            max_x, max_y = self.augs_cfg.max_shift_img_fraction
+        if isinstance(augs_cfg.max_shift_img_fraction, (tuple, list)):
+            max_x, max_y = augs_cfg.max_shift_img_fraction
         else:
-            max_x, max_y = (self.augs_cfg.max_shift_img_fraction,
-                            self.augs_cfg.max_shift_img_fraction)
+            max_x, max_y = (augs_cfg.max_shift_img_fraction,
+                            augs_cfg.max_shift_img_fraction)
 
-        if self.augs_cfg.translate_distribution_type == "uniform":
+        if augs_cfg.translate_distribution_type == "uniform":
             # Sample shifts by applying 0.99 margin
             dx = torch.randint(-int(max_x), int(max_x)+1, (B,))
             dy = torch.randint(-int(max_y), int(max_y)+1, (B,))
-        elif self.augs_cfg.translate_distribution_type == "normal":
+
+        elif augs_cfg.translate_distribution_type == "normal":
             # Sample shifts from normal distribution
             dx = torch.normal(mean=0.0, std=max_x, size=(B,))
             dy = torch.normal(mean=0.0, std=max_y, size=(B,))
         else:
             raise ValueError(
-                f"Unsupported distribution type: {self.translate_distribution_type}. Supported types are 'uniform' and 'normal'.")
+                f"Unsupported distribution type: {augs_cfg.translate_distribution_type}. Supported types are 'uniform' and 'normal'.")
 
         shifted_imgs = images.new_zeros(images.shape)
 
-        # TODO improve this method, currently not capable of preventing the object to exit the plane
+        # TODO improve this method, currently not capable of preventing the object to exit the plane. Also, can be optimized with tensor ops
         for i in range(B):
             ox, oy = int(dx[i]), int(dy[i])
 
@@ -1186,17 +1308,6 @@ class ImageAugmentationsHelper(nn.Module):
                 torch.tensor([ox, oy], dtype=lbl.dtype, device=lbl.device)
 
         return shifted_imgs, lbl
-
-    # Overload "to" method
-    def to(self, *args, **kwargs):
-        """Overload to method to apply to all submodules."""
-        super().to(*args, **kwargs)
-        self.kornia_augs_module.to(*args, **kwargs)
-
-        if self.torchvision_augs_module is not None:
-            self.torchvision_augs_module.to(*args, **kwargs)
-
-        return self
 
 # %% Prototypes TODO
 
@@ -1250,25 +1361,6 @@ class ImageNormalization():
         return image / self.normalization_type.value
 
 
-# TODO GeometryAugsModule TBD may be unneeded
-class GeometryAugsModule(AugsBaseClass):
-    def __init__(self):
-        super(GeometryAugsModule, self).__init__()
-
-        # Example usage
-        self.augmentations = AugmentationSequential(
-            kornia_aug.RandomRotation(degrees=30.0, p=1.0),
-            kornia_aug.RandomAffine(degrees=0, translate=(0.1, 0.1), p=1.0),
-            data_keys=["input", "mask"]
-        )  # Define the keys: image is "input", mask is "mask"
-
-    def forward(self, x: torch.Tensor, labels: torch.Tensor | tuple[torch.Tensor]) -> torch.Tensor:
-        # TODO define interface (input, output format and return type)
-        x, labels = self.augmentations(x, labels)
-
-        return x, labels
-
-
 ############################################################################################################################
 # %% DEPRECATED functions (legacy code)
 def build_kornia_augs(sigma_noise: float, sigma_gaussian_blur: tuple | float = (0.0001, 1.0),
@@ -1308,111 +1400,6 @@ def build_kornia_augs(sigma_noise: float, sigma_gaussian_blur: tuple | float = (
     return torch.nn.Sequential(random_brightness, random_contrast, gaussian_blur, gaussian_noise)
 
 
-def TranslateObjectImgAndPoints(image: torch.Tensor,
-                                label: torch.Tensor,
-                                max_size_in_pix: float | torch.Tensor | list[float]) -> tuple:
-
-    if not (isinstance(max_size_in_pix, torch.Tensor)):
-        max_size_in_pix = torch.Tensor([max_size_in_pix, max_size_in_pix])
-
-    num_entries = 1  # TODO update to support multiple images
-
-    # Get image size
-    image_size = image.shape
-
-    # Get max shift coefficients (how many times the size enters half image with margin)
-    # TODO validate computation
-    max_vertical = 0.99 * (0.5 * image_size[1] / max_size_in_pix[1] - 1)
-    max_horizontal = 0.99 * (0.5 * image_size[2] / max_size_in_pix[0] - 1)
-
-    raise NotImplementedError("TODO")
-
-    # Sample shift interval uniformly --> TODO for batch processing: this has to generate uniformly sampled array
-    shift_horizontal = torch.randint(-max_horizontal,
-                                     max_horizontal, (num_entries,))
-    shift_vertical = torch.randint(-max_vertical, max_vertical, (num_entries,))
-
-    # Shift vector --> TODO for batch processing: becomes a matrix
-    origin_shift_vector = torch.round(torch.Tensor(
-        [shift_horizontal, shift_vertical]) * max_size_in_pix)
-
-    # print("Origin shift vector: ", originShiftVector)
-
-    # Determine index for image cropping
-    # Vertical
-    idv1 = int(np.floor(np.max([0, origin_shift_vector[1]])))
-    idv2 = int(
-        np.floor(np.min([image_size[1], origin_shift_vector[1] + image_size[1]])))
-
-    # Horizontal
-    idu1 = int(np.floor(np.max([0, origin_shift_vector[0]])))
-    idu2 = int(
-        np.floor(np.min([image_size[2], origin_shift_vector[0] + image_size[2]])))
-
-    croppedImg = image[:, idv1:idv2, idu1:idu2]
-
-    # print("Cropped image shape: ", croppedImg.shape)
-
-    # Create new image and store crop
-    shiftedImage = torch.zeros(
-        image_size[0], image_size[1], image_size[2], dtype=torch.float32)
-
-    # Determine index for pasting
-    # Vertical
-    idv1 = int(abs(origin_shift_vector[1])
-               ) if origin_shift_vector[1] < 0 else 0
-    idv2 = idv1 + croppedImg.shape[1]
-    # Horizontal
-    idu1 = int(abs(origin_shift_vector[0])
-               ) if origin_shift_vector[0] < 0 else 0
-    idu2 = idu1 + croppedImg.shape[2]
-
-    shiftedImage[:, idv1:idv2, idu1:idu2] = croppedImg
-
-    # Shift labels (note that coordinate of centroid are modified in the opposite direction as of the origin)
-    shiftedLabel = label - \
-        torch.Tensor(
-            [origin_shift_vector[0], origin_shift_vector[1], 0], dtype=torch.float32)
-
-    return shiftedImage, shiftedLabel
-
-
-# %% DEVELOPMENT CODE
+# %% Code for development
 if __name__ == "__main__":
     pass
-
-"""
-    # For possible later development: translation on batch, tensorized
-    def _translate_batch(self,
-                         images: torch.Tensor,
-                         labels: ArrayOrTensor
-                        ) -> Tuple[torch.Tensor, torch.Tensor]:
-        B,C,H,W = images.shape
-        # convert labels
-        lbl = torch.from_numpy(labels).float() if isinstance(labels, np.ndarray) else labels.float()
-        if lbl.dim()==2:
-            lbl = lbl.unsqueeze(0)
-        # prepare per-sample max shifts
-        if isinstance(self.cfg.max_shift, torch.Tensor):
-            ms = self.cfg.max_shift.to(images.device).long()
-        elif isinstance(self.cfg.max_shift, list):
-            ms = torch.tensor(self.cfg.max_shift, device=images.device).long()
-        else:
-            fx,fy = self.cfg.max_shift if isinstance(self.cfg.max_shift,tuple) else (self.cfg.max_shift,self.cfg.max_shift)
-            ms = torch.tensor([[int(fx),int(fy)]]*B, device=images.device)
-        # random shifts uniform integer in [-max, max]
-        dx = torch.randint(-ms[:,0], ms[:,0]+1, (B,), device=images.device)
-        dy = torch.randint(-ms[:,1], ms[:,1]+1, (B,), device=images.device)
-        # normalized translation for affine: tx = dx/(W/2), ty = dy/(H/2)
-        tx = dx.float()/(W/2)
-        ty = dy.float()/(H/2)
-        # build theta for each sample: [[1,0,tx],[0,1,ty]]
-        theta = torch.zeros((B,2,3), device=images.device, dtype=images.dtype)
-        theta[:,0,0] = 1; theta[:,1,1] = 1
-        theta[:,0,2] = tx; theta[:,1,2] = ty
-        # grid and sample
-        grid = F.affine_grid(theta, images.size(), align_corners=False)
-        shifted = F.grid_sample(images, grid, padding_mode='zeros', align_corners=False)
-        # shift labels in pixel space
-        lbl_t = lbl - torch.stack([dx,dy], dim=1).unsqueeze(1).float()
-"""

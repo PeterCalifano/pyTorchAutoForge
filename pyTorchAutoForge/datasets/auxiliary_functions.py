@@ -125,7 +125,7 @@ try:
 
             # Set all entries <= 7 to 0.0
             scaled_img = image_scaling_coeff * tmpImage.astype(np.float32)
-            pix_zero_mask = scaled_img <= 7
+            pix_zero_mask = scaled_img <= 1.0
             scaled_img[pix_zero_mask] = 0.0
             print(f"\rLoading image {id+1}/{total_num_imgs}", end='')
 
