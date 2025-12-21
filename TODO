@@ -33,8 +33,15 @@
   - [x] Add optional validation check in Augmentation helper to ensure all inputs are valid ones with remedy action
   - [x] Improve handling of training errors (stop and kill run if nan or Inf)
 
-- Patches of v0.2.X
+- Minor versions and patches of v0.2.X
   - [x] Major fixes in v0.2.1 (bugs introduced in v0.2.0)
+  - [x] Fix bugs in augmentation module (validation module)
+  - [ ] [MAJOR] Restructure and expand augmentations module to correctly handle images and 1D vectors jointly
+  - [ ] Change random apply and structure of augs module for images (split based on type)
+  - [ ] Implement "binarize" augmentation for images
+  - [ ] Review and unit test selection criteria implementation
+  - [ ] Extend augs-trainer integration to allow "discard" option in validation module
+  - [x] Implement tailoring of RandomAffine to make it border crossing aware 
 
 - [ ] v0.3.X
   - [x] Implement custom adaptive pooling layers for ONNx static export
