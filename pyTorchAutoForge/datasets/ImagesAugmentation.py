@@ -761,7 +761,7 @@ class ImageAugmentationsHelper(nn.Module):
             # Wrap into BorderAwareRandomAffine
             augs_ops.append(BorderAwareRandomAffine(base_random_affine=base_random_affine,
                                                     num_pix_crossing_detect=10,
-                                                    intensity_threshold_uint8=7.0)
+                                                    intensity_threshold_uint8=2.0)
                             )
 
         # INTENSITY AUGMENTATIONS
