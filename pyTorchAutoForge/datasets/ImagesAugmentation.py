@@ -244,14 +244,15 @@ class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
             else:
                 # Use the configured scalar threshold for all samples
                 validation_pixel_threshold_ = torch.full((B,),
-                                                        float(
-                                                            self.validation_pixel_threshold),
-                                                        device=input.device,
-                                                        dtype=flat_input.dtype,
-                                                        )
+                                                         float(
+                    self.validation_pixel_threshold),
+                    device=input.device,
+                    dtype=flat_input.dtype,
+                )
 
             # Count number of bright pixels per image in batch
-            is_pixel_bright_count_mask = flat_input.gt(validation_pixel_threshold_.view(B, 1)).sum(dim=1)  # Get count of bright pixels per image
+            is_pixel_bright_count_mask = flat_input.gt(validation_pixel_threshold_.view(
+                B, 1)).sum(dim=1)  # Get count of bright pixels per image
 
             # Determine valid images mask
             # Get bool mask where >= min_bright pixels shapes as (B,)
@@ -499,6 +500,7 @@ class AugmentationConfig:
     input_data_keys: list[DataKey]
     keepdim: bool = True
     same_on_batch: bool = False
+    random_apply_photometric: bool = False
     random_apply_minmax: tuple[int, int] = (1, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
 
@@ -710,12 +712,17 @@ class ImageAugmentationsHelper(nn.Module):
 
         # Build AugmentationSequential from nn.ModuleList
         # Use maximum number of augmentations if upper bound not provided
-        if augs_cfg.random_apply_minmax[1] == -1:
-            random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
-            random_apply_minmax_[1] = len(augs_ops) - 1
+        if augs_cfg.random_apply_photometric:
+            if augs_cfg.random_apply_minmax[1] == -1:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = len(augs_ops) - 1
+            else:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = tmp_random_apply_minmax_[1] - 1
+
+            random_apply_minmax_: tuple[int,int] | bool = (tmp_random_apply_minmax_[0], tmp_random_apply_minmax_[1])
         else:
-            random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
-            random_apply_minmax_[1] = random_apply_minmax_[1] - 1
+            random_apply_minmax_ = False
 
         # Transfer all modules to device if specified
         if augs_cfg.device is not None:
@@ -730,7 +737,8 @@ class ImageAugmentationsHelper(nn.Module):
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
                                                          keepdim=False,
-                                                         random_apply=(random_apply_minmax_[0], random_apply_minmax_[1])).to(augs_cfg.device)
+                                                         random_apply=random_apply_minmax_
+                                                         ).to(augs_cfg.device)
 
         # if augs_cfg.append_custom_module_after_ is not None:
         #    pass
