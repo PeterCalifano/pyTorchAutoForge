@@ -335,6 +335,28 @@ class RandomBinarizeImage(IntensityAugmentationBase2D):
         return img_batch_mask
 
 
+class RandomConvertTextureToShadingLaw(IntensityAugmentationBase2D):
+    """
+    RandomConvertTextureToShadingLaw Random augmentation that replaces textured regions with smooth shading based on selected shading law.
+    """
+
+    _extended_summary_
+
+    :param IntensityAugmentationBase2D: _description_
+    :type IntensityAugmentationBase2D: _type_
+    """
+    def __init__(self,
+                    aug_prob: float = 0.5):
+    super().__init__(p=aug_prob)
+
+    def apply_transform(self,
+                        input: torch.Tensor,
+                        params: dict[str, torch.Tensor],
+                        flags: dict[str, Any],
+                        transform: torch.Tensor | None = None) -> torch.Tensor:
+        pass
+    
+
 # %% Geometric augmentations
 class BorderAwareRandomAffine(GeometricAugmentationBase2D):
     """
