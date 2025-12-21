@@ -317,6 +317,7 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
     :param GeometricAugmentationBase2D: Base class for 2D geometric augmentations in Kornia.
     :type GeometricAugmentationBase2D: class
     """
+
     def __init__(self,
                  base_random_affine: K.RandomAffine,
                  num_pix_crossing_detect: int = 10,
@@ -354,7 +355,6 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
             raise ValueError(
                 "intensity_threshold_uint8 must be a non-negative float.")
 
-
     def compute_transformation(self,
                                input: torch.Tensor,
                                params: dict[str, torch.Tensor],
@@ -381,7 +381,7 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
                 intensity_threshold_uint8=self.intensity_threshold_uint8)
             params["crossing_types"] = crossing_types
 
-        # Determine masks for transformations    
+        # Determine masks for transformations
         crossing_types = crossing_types.to(device=translations.device)
 
         vertical_only = crossing_types == 1
@@ -390,7 +390,7 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
 
         # If any crossing found, modify params accordingly
         if vertical_only.any() or horizontal_only.any() or blocked.any():
-            
+
             # Clone to avoid modifying original params
             translations = translations.clone()
             angle = angle.clone()
@@ -449,7 +449,7 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
                         params: dict[str, torch.Tensor],
                         flags: dict[str, Any],
                         transform: torch.Tensor | None = None) -> torch.Tensor:
-        
+
         _, _, height, width = input.shape
 
         if not isinstance(transform, torch.Tensor):
@@ -478,8 +478,8 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
         return self.apply_transform(input,
                                     params=self._params,
                                     transform=torch.as_tensor(
-                                        transform, 
-                                        device=input.device, 
+                                        transform,
+                                        device=input.device,
                                         dtype=input.dtype),            flags=flags,
                                     )
 
@@ -551,16 +551,15 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
 
         # Determine crossing type
         crossing_type = torch.full(
-            (B,1), 0, device=device, dtype=torch.int64)  # 0: all allowed
+            (B, 1), 0, device=device, dtype=torch.int64)  # 0: all allowed
         crossing_type[vertical_crossing & ~
                       horizontal_crossing] = 1  # 1: vertical only
-        
+
         crossing_type[horizontal_crossing & ~
                       vertical_crossing] = 2  # 2: horizontal only
-        
+
         crossing_type[vertical_crossing &
                       horizontal_crossing] = 3  # 3: none allowed
-
 
         return crossing_type.squeeze(-1), vertical_crossing, horizontal_crossing
 
@@ -593,6 +592,8 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
         return conv.amax(dim=-1) >= window_length
 
 # %% Augmentation helper configuration dataclass
+
+
 @dataclass
 class AugmentationConfig:
     # Input specification
@@ -755,12 +756,17 @@ class ImageAugmentationsHelper(nn.Module):
                 translate_shift = (0.0, 0.0)
 
             # Construct RandomAffine
-            augs_ops.append(K.RandomAffine(degrees=rotation_degrees,
-                                           translate=translate_shift,
-                                           p=augs_cfg.rotation_aug_prob,
-                                           keepdim=True,
-                                           align_corners=augs_cfg.affine_align_corners,
-                                           same_on_batch=False))
+            base_random_affine = K.RandomAffine(degrees=rotation_degrees,
+                                                translate=translate_shift,
+                                                p=augs_cfg.rotation_aug_prob,
+                                                keepdim=True,
+                                                align_corners=augs_cfg.affine_align_corners,
+                                                same_on_batch=False)
+            # Wrap into BorderAwareRandomAffine
+            augs_ops.append(BorderAwareRandomAffine(base_random_affine=base_random_affine,
+                                                    num_pix_crossing_detect=10,
+                                                    intensity_threshold_uint8=7.0)
+                            )
 
         # INTENSITY AUGMENTATIONS
         # Random brightness
