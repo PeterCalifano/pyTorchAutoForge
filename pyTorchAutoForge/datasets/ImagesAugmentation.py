@@ -338,8 +338,7 @@ class RandomBinarizeImage(IntensityAugmentationBase2D):
 class RandomConvertTextureToShadingLaw(IntensityAugmentationBase2D):
     """
     RandomConvertTextureToShadingLaw Random augmentation that replaces textured regions with smooth shading based on selected shading law.
-    """
-
+    
     _extended_summary_
 
     :param IntensityAugmentationBase2D: _description_
@@ -347,7 +346,7 @@ class RandomConvertTextureToShadingLaw(IntensityAugmentationBase2D):
     """
     def __init__(self,
                     aug_prob: float = 0.5):
-    super().__init__(p=aug_prob)
+        super().__init__(p=aug_prob)
 
     def apply_transform(self,
                         input: torch.Tensor,
