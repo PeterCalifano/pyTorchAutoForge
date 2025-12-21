@@ -329,10 +329,6 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
         # Input validity check
         assert isinstance(
             base_random_affine, K.RandomAffine), "base_random_affine must be an instance of K.RandomAffine"
-        assert hasattr(base_random_affine,
-                       "degrees"), "base_random_affine must have 'degrees' attribute"
-        assert hasattr(base_random_affine,
-                       "translate"), "base_random_affine must have 'translate' attribute"
 
         # Store base random affine
         self.base_random_affine = base_random_affine
