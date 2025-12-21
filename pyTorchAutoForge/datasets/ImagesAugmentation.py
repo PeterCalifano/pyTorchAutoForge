@@ -55,6 +55,8 @@ class PlaceholderAugmentation(IntensityAugmentationBase2D):
         return input
 
 # %% Intensity augmentations
+
+
 class PoissonShotNoise(IntensityAugmentationBase2D):
     """
     Applies Poisson shot noise to a batch of images.
@@ -308,19 +310,20 @@ class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
 # %% Geometric augmentations
 class BorderAwareRandomAffine(GeometricAugmentationBase2D):
     """
-    RandomImageLabelsRotoTranslation _summary_
+    BorderAwareRandomAffine Class reimplementing Kornia's RandomAffine with border crossing constraints.
 
-    _extended_summary_
+    This augmentation applies random affine transformations to a batch of images while considering border crossing constraints. It detects bright pixel runs along image borders to classify crossing types and modifies the affine transformation parameters accordingly before computing the transformation. The rest of the implementation follows RandomAffine. Depending on the detected crossing type, it constrains translations and rotations to prevent unrealistic augmentations. Detection is performed based on bright pixel runs along image borders (tailored for typical space images with near black background).
 
-    :param AugsBaseClass: _description_
-    :type AugsBaseClass: _type_
+    :param GeometricAugmentationBase2D: Base class for 2D geometric augmentations in Kornia.
+    :type GeometricAugmentationBase2D: class
     """
-
     def __init__(self,
                  base_random_affine: K.RandomAffine,
                  num_pix_crossing_detect: int = 10,
                  intensity_threshold_uint8: float = 7.0):
-        super().__init__()
+        super().__init__(p=base_random_affine.p,
+                         same_on_batch=base_random_affine.same_on_batch,
+                         keepdim=base_random_affine.keepdim)
 
         # Input validity check
         assert isinstance(
@@ -331,8 +334,13 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
                        "translate"), "base_random_affine must have 'translate' attribute"
 
         # Store base random affine
-        self.base_random_affine, self.vertical_only_translate, self.horizontal_only_translate = BorderAwareRandomAffine.Make_constrained_random_affines(
-            base_random_affine)
+        self.base_random_affine = base_random_affine
+
+        # Get generator and flags from RandomAffine base
+        self._param_generator = base_random_affine._param_generator
+        self.flags = dict(resample=base_random_affine.flags["resample"],
+                          padding_mode=base_random_affine.flags["padding_mode"],
+                          align_corners=base_random_affine.flags["align_corners"])
 
         # Store attributes
         self.num_pix_crossing_detect = num_pix_crossing_detect
@@ -347,59 +355,133 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
                 "intensity_threshold_uint8 must be a non-negative float.")
 
 
-    def forward(self,
-                input: torch.Tensor,
-                params: dict[str, torch.Tensor] | None = None,
-                **kwargs: Any) -> torch.Tensor:
+    def compute_transformation(self,
+                               input: torch.Tensor,
+                               params: dict[str, torch.Tensor],
+                               flags: dict[str, Any]) -> torch.Tensor:
+        """
+        compute_transformation Computes the affine transformation matrix for each sample in the batch, taking into account border crossing constraints. Detection is performed based on bright pixel runs along image borders (tailored for typical space images with near black background).
+        """
 
-        # Get image and labels
-        img_batch = input[0]
-        lbl_batch = input[1]
+        # Get transform parameters (per sample)
+        translations = params["translations"]
+        angle = params["angle"]
+        scale = params["scale"]
+        shear_x = params["shear_x"]
+        shear_y = params["shear_y"]
 
-        # Determine crossing masks
-        crossing_type, vertical_crossing, horizontal_crossing = BorderAwareRandomAffine.Detect_border_crossing(
-            img_batch=img_batch,
-            num_pix_detect=self.num_pix_crossing_detect,
-            intensity_threshold_uint8=self.intensity_threshold_uint8)
+        # Get previously computed crossing type for this batch if available
+        crossing_types = params.get("crossing_types", None)
 
-        # Apply appropriate affine transformation based on crossing type
-        out_img_batch = torch.empty_like(img_batch)
-        out_lbl_batch = torch.empty_like(lbl_batch)
+        # Else compute crossing_types mask
+        if crossing_types is None:
+            crossing_types, _, _ = BorderAwareRandomAffine.Detect_border_crossing(
+                img_batch=input,
+                num_pix_detect=self.num_pix_crossing_detect,
+                intensity_threshold_uint8=self.intensity_threshold_uint8)
+            params["crossing_types"] = crossing_types
 
-        # Allocate inputs and labels with crossing_type 3 (full crossing) without transformation
-        no_transform_mask = (crossing_type == 3)
-        out_img_batch[no_transform_mask] = img_batch[no_transform_mask]
-        out_lbl_batch[no_transform_mask] = lbl_batch[no_transform_mask]
+        # Determine masks for transformations    
+        crossing_types = crossing_types.to(device=translations.device)
 
-        # Apply vertical-only translation where crossing_type == 1
-        vertical_only_mask = (crossing_type == 1)
-        if vertical_only_mask.any():
-            out_img_batch[vertical_only_mask] = self.vertical_only_translate(
-                img_batch[vertical_only_mask])
+        vertical_only = crossing_types == 1
+        horizontal_only = crossing_types == 2
+        blocked = crossing_types == 3
+
+        # If any crossing found, modify params accordingly
+        if vertical_only.any() or horizontal_only.any() or blocked.any():
             
-            out_lbl_batch[vertical_only_mask] = self.vertical_only_translate(
-                lbl_batch[vertical_only_mask])
-            
-        # Apply horizontal-only translation where crossing_type == 2
-        horizontal_only_mask = (crossing_type == 2)
-        if horizontal_only_mask.any():
-            out_img_batch[horizontal_only_mask] = self.horizontal_only_translate(
-                img_batch[horizontal_only_mask])
-            
-            out_lbl_batch[horizontal_only_mask] = self.horizontal_only_translate(
-                lbl_batch[horizontal_only_mask])
-            
-        # Apply full random affine where crossing_type == 0
-        full_transform_mask = (crossing_type == 0)
-        if full_transform_mask.any():
-            out_img_batch[full_transform_mask] = self.base_random_affine(
-                img_batch[full_transform_mask])
-            
-            out_lbl_batch[full_transform_mask] = self.base_random_affine(
-                lbl_batch[full_transform_mask])
+            # Clone to avoid modifying original params
+            translations = translations.clone()
+            angle = angle.clone()
+            scale = scale.clone()
+            shear_x = shear_x.clone()
+            shear_y = shear_y.clone()
+
+            # Apply vertical only translation constraint (null out X translation)
+            if vertical_only.any():
+                translations[vertical_only, 0] = 0
+                angle[vertical_only] = 0
+                shear_x[vertical_only] = 0
+                shear_y[vertical_only] = 0
+                scale[vertical_only] = 1
+
+            # Apply horizontal only translation constraint (null out Y translation)
+            if horizontal_only.any():
+                translations[horizontal_only, 1] = 0
+                angle[horizontal_only] = 0
+                shear_x[horizontal_only] = 0
+                shear_y[horizontal_only] = 0
+                scale[horizontal_only] = 1
+
+            # Apply blocked constraint (null out all transformations)
+            if blocked.any():
+                translations[blocked] = 0
+                angle[blocked] = 0
+                shear_x[blocked] = 0
+                shear_y[blocked] = 0
+                scale[blocked] = 1
+
+            # Re-assign modified params
+            params["translations"] = translations
+            params["angle"] = angle
+            params["scale"] = scale
+            params["shear_x"] = shear_x
+            params["shear_y"] = shear_y
+
+        return KG.get_affine_matrix2d(
+            torch.as_tensor(params["translations"],
+                            device=input.device, dtype=input.dtype),
+            torch.as_tensor(params["center"],
+                            device=input.device, dtype=input.dtype),
+            torch.as_tensor(params["scale"],
+                            device=input.device, dtype=input.dtype),
+            torch.as_tensor(params["angle"],
+                            device=input.device, dtype=input.dtype),
+            KG.deg2rad(torch.as_tensor(
+                params["shear_x"], device=input.device, dtype=input.dtype)),
+            KG.deg2rad(torch.as_tensor(
+                params["shear_y"], device=input.device, dtype=input.dtype)),
+        )
+
+    def apply_transform(self,
+                        input: torch.Tensor,
+                        params: dict[str, torch.Tensor],
+                        flags: dict[str, Any],
+                        transform: torch.Tensor | None = None) -> torch.Tensor:
         
-        # Wrap outputs as tuple
-        return out_img_batch, out_lbl_batch 
+        _, _, height, width = input.shape
+
+        if not isinstance(transform, torch.Tensor):
+            raise TypeError(
+                f"Expected the `transform` be a Tensor. Got {type(transform)}.")
+
+        # Apply affine warp
+        return KG.warp_affine(input,
+                              transform[:, :2, :],
+                              (height, width),
+                              flags["resample"].name.lower(),
+                              align_corners=flags["align_corners"],
+                              padding_mode=flags["padding_mode"].name.lower(),
+                              )
+
+    def inverse_transform(self,
+                          input: torch.Tensor,
+                          flags: dict[str, Any],
+                          transform: torch.Tensor | None = None,
+                          size: tuple[int, int] | None = None) -> torch.Tensor:
+
+        if not isinstance(transform, torch.Tensor):
+            raise TypeError(
+                f"Expected the `transform` be a Tensor. Got {type(transform)}.")
+
+        return self.apply_transform(input,
+                                    params=self._params,
+                                    transform=torch.as_tensor(
+                                        transform, 
+                                        device=input.device, 
+                                        dtype=input.dtype),            flags=flags,
+                                    )
 
     @staticmethod
     def Make_constrained_random_affines(base: K.RandomAffine):
@@ -469,15 +551,18 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
 
         # Determine crossing type
         crossing_type = torch.full(
-            (B,), 0, device=device, dtype=torch.int64)  # 0: all allowed
+            (B,1), 0, device=device, dtype=torch.int64)  # 0: all allowed
         crossing_type[vertical_crossing & ~
                       horizontal_crossing] = 1  # 1: vertical only
+        
         crossing_type[horizontal_crossing & ~
                       vertical_crossing] = 2  # 2: horizontal only
+        
         crossing_type[vertical_crossing &
                       horizontal_crossing] = 3  # 3: none allowed
 
-        return crossing_type, vertical_crossing, horizontal_crossing
+
+        return crossing_type.squeeze(-1), vertical_crossing, horizontal_crossing
 
     @staticmethod
     def ConvCount_intensity_line1d(line_bool_mask: torch.Tensor,
@@ -1311,6 +1396,7 @@ def build_kornia_augs(sigma_noise: float, sigma_gaussian_blur: tuple | float = (
     # motion_blur = kornia_aug.RandomMotionBlur((3, 3), (0, 360), direction=(direction_min, direction_max), p=0.75, keepdim=True)
 
     return torch.nn.Sequential(random_brightness, random_contrast, gaussian_blur, gaussian_noise)
+
 
 # %% Code for development
 if __name__ == "__main__":
