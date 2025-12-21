@@ -1,3 +1,4 @@
+import kornia.augmentation as K
 from logging import warning
 from warnings import warn
 from typing import Any
@@ -19,6 +20,7 @@ except ImportError:
 
 from typing import Literal, TypeAlias
 import torch
+import torch.nn.functional as F
 from torch import nn, Tensor
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -53,8 +55,6 @@ class PlaceholderAugmentation(IntensityAugmentationBase2D):
         return input
 
 # %% Intensity augmentations
-
-
 class PoissonShotNoise(IntensityAugmentationBase2D):
     """
     Applies Poisson shot noise to a batch of images.
@@ -98,21 +98,16 @@ class PoissonShotNoise(IntensityAugmentationBase2D):
             torch.Tensor | tuple[torch.Tensor, ...]: Images with Poisson shot noise applied, or a tuple containing such images.
 
         """
-
-        # TODO modify to handle tuple inputs
-
         # Randomly sample a boolean mask to index batch size
         B = input.shape[0]
         device, dtype = input.device, input.dtype
 
         # Pixel value is the variance of the Photon Shot Noise (higher where brighter).
         # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel.
-        photon_shot_noise = torch.poisson(input)
+        photon_shot_noise = torch.poisson(input).to(device=device)
 
-        # Sum noise to the original images according to mask
-        input += photon_shot_noise
-
-        return input
+        # Sum noise to the original images
+        return input + photon_shot_noise
 
     def generate_parameters(self,
                             shape: tuple[int, ...]) -> dict:
@@ -311,8 +306,7 @@ class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
 
 
 # %% Geometric augmentations
-# TODO (PC) move translate_batch to this custom augmentation class, add rotation and extend for multiple points labels shift
-class RandomImageLabelsRotoTranslation(GeometricAugmentationBase2D):
+class BorderAwareRandomAffine(GeometricAugmentationBase2D):
     """
     RandomImageLabelsRotoTranslation _summary_
 
@@ -323,22 +317,195 @@ class RandomImageLabelsRotoTranslation(GeometricAugmentationBase2D):
     """
 
     def __init__(self,
-                 angles: float | tuple[float, float] = (0.0, 360.0),
-                 distribution_type: Literal["uniform", "normal"] = "uniform"):
+                 base_random_affine: K.RandomAffine,
+                 num_pix_crossing_detect: int = 10,
+                 intensity_threshold_uint8: float = 7.0):
         super().__init__()
-        self.angles = angles
-        self.distribution_type = distribution_type
+
+        # Input validity check
+        assert isinstance(
+            base_random_affine, K.RandomAffine), "base_random_affine must be an instance of K.RandomAffine"
+        assert hasattr(base_random_affine,
+                       "degrees"), "base_random_affine must have 'degrees' attribute"
+        assert hasattr(base_random_affine,
+                       "translate"), "base_random_affine must have 'translate' attribute"
+
+        # Store base random affine
+        self.base_random_affine, self.vertical_only_translate, self.horizontal_only_translate = BorderAwareRandomAffine.Make_constrained_random_affines(
+            base_random_affine)
+
+        # Store attributes
+        self.num_pix_crossing_detect = num_pix_crossing_detect
+        self.intensity_threshold_uint8 = intensity_threshold_uint8
+
+        # Assert validity of parameters
+        if self.num_pix_crossing_detect <= 0:
+            raise ValueError(
+                "num_pix_crossing_detect must be a positive integer.")
+        if self.intensity_threshold_uint8 < 0:
+            raise ValueError(
+                "intensity_threshold_uint8 must be a non-negative float.")
+
 
     def forward(self,
                 input: torch.Tensor,
                 params: dict[str, torch.Tensor] | None = None,
                 **kwargs: Any) -> torch.Tensor:
 
-        # TODO implement forward
-        if 1:
-            raise NotImplementedError("Implementation todo")
+        # Get image and labels
+        img_batch = input[0]
+        lbl_batch = input[1]
 
-        return x
+        # Determine crossing masks
+        crossing_type, vertical_crossing, horizontal_crossing = BorderAwareRandomAffine.Detect_border_crossing(
+            img_batch=img_batch,
+            num_pix_detect=self.num_pix_crossing_detect,
+            intensity_threshold_uint8=self.intensity_threshold_uint8)
+
+        # Apply appropriate affine transformation based on crossing type
+        out_img_batch = torch.empty_like(img_batch)
+        out_lbl_batch = torch.empty_like(lbl_batch)
+
+        # Allocate inputs and labels with crossing_type 3 (full crossing) without transformation
+        no_transform_mask = (crossing_type == 3)
+        out_img_batch[no_transform_mask] = img_batch[no_transform_mask]
+        out_lbl_batch[no_transform_mask] = lbl_batch[no_transform_mask]
+
+        # Apply vertical-only translation where crossing_type == 1
+        vertical_only_mask = (crossing_type == 1)
+        if vertical_only_mask.any():
+            out_img_batch[vertical_only_mask] = self.vertical_only_translate(
+                img_batch[vertical_only_mask])
+            
+            out_lbl_batch[vertical_only_mask] = self.vertical_only_translate(
+                lbl_batch[vertical_only_mask])
+            
+        # Apply horizontal-only translation where crossing_type == 2
+        horizontal_only_mask = (crossing_type == 2)
+        if horizontal_only_mask.any():
+            out_img_batch[horizontal_only_mask] = self.horizontal_only_translate(
+                img_batch[horizontal_only_mask])
+            
+            out_lbl_batch[horizontal_only_mask] = self.horizontal_only_translate(
+                lbl_batch[horizontal_only_mask])
+            
+        # Apply full random affine where crossing_type == 0
+        full_transform_mask = (crossing_type == 0)
+        if full_transform_mask.any():
+            out_img_batch[full_transform_mask] = self.base_random_affine(
+                img_batch[full_transform_mask])
+            
+            out_lbl_batch[full_transform_mask] = self.base_random_affine(
+                lbl_batch[full_transform_mask])
+        
+        # Wrap outputs as tuple
+        return out_img_batch, out_lbl_batch 
+
+    @staticmethod
+    def Make_constrained_random_affines(base: K.RandomAffine):
+
+        gen = base._param_generator
+        tx, ty = (0.0, 0.0) if gen.translate is None else [
+            float(v) for v in gen.translate]
+
+        common_opts = dict(resample=base.flags["resample"],
+                           padding_mode=base.flags["padding_mode"],
+                           same_on_batch=base.same_on_batch,
+                           align_corners=base.flags["align_corners"],
+                           p=base.p,
+                           keepdim=base.keepdim,
+                           )
+
+        # Build constrained random affines
+        vertical_only = K.RandomAffine(degrees=0.0,
+                                       translate=(0.0, ty),
+                                       scale=None,
+                                       shear=None,
+                                       **common_opts)
+
+        horizontal_only = K.RandomAffine(degrees=0.0,
+                                         translate=(tx, 0.0),
+                                         scale=None,
+                                         shear=None, **common_opts)
+
+        return base, vertical_only, horizontal_only
+
+    @staticmethod
+    def Detect_border_crossing(img_batch,
+                               num_pix_detect: int = 10,
+                               intensity_threshold_uint8: float = 7.0):
+        """
+        Detect bright pixel runs along image borders to classify crossing types.
+
+        Returns:
+            crossing_type (torch.Tensor): Long tensor (B,) where 0=full/none, 1=vertical-only, 2=horizontal-only, 3=both.
+            vertical_crossing (torch.Tensor): Bool tensor (B,) true when left/right borders have a run.
+            horizontal_crossing (torch.Tensor): Bool tensor (B,) true when top/bottom borders have a run.
+        """
+        if img_batch.ndim != 4:
+            raise ValueError(
+                f"Expected BCHW tensor, got shape {tuple(img_batch.shape)}")
+
+        # Create bright pixel mask based on threshold (assumes uint8 input)
+        binarized_img_mask = (img_batch > intensity_threshold_uint8).any(dim=1)
+
+        B, H, W = binarized_img_mask.shape
+        device = binarized_img_mask.device
+
+        horizontal_edges = torch.cat(
+            (binarized_img_mask[:, 0, :], binarized_img_mask[:, -1, :]), dim=0)
+        vertical_edges = torch.cat(
+            (binarized_img_mask[:, :, 0], binarized_img_mask[:, :, -1]), dim=0)
+
+        # Determine crossings using convolutional count
+        horizontal_crossing = BorderAwareRandomAffine.ConvCount_intensity_line1d(
+            horizontal_edges, num_pix_detect)
+        vertical_crossing = BorderAwareRandomAffine.ConvCount_intensity_line1d(
+            vertical_edges, num_pix_detect)
+
+        # Get batch-wise masks
+        horizontal_crossing = horizontal_crossing[:B] | horizontal_crossing[B:]
+        vertical_crossing = vertical_crossing[:B] | vertical_crossing[B:]
+
+        # Determine crossing type
+        crossing_type = torch.full(
+            (B,), 0, device=device, dtype=torch.int64)  # 0: all allowed
+        crossing_type[vertical_crossing & ~
+                      horizontal_crossing] = 1  # 1: vertical only
+        crossing_type[horizontal_crossing & ~
+                      vertical_crossing] = 2  # 2: horizontal only
+        crossing_type[vertical_crossing &
+                      horizontal_crossing] = 3  # 3: none allowed
+
+        return crossing_type, vertical_crossing, horizontal_crossing
+
+    @staticmethod
+    def ConvCount_intensity_line1d(line_bool_mask: torch.Tensor,
+                                   window_length: int,
+                                   device: torch.device | str | None = None) -> torch.Tensor:
+
+        # Get length of line
+        length = line_bool_mask.shape[-1]
+
+        if device is None:
+            device = line_bool_mask.device
+
+        if length < window_length:
+            return torch.zeros(line_bool_mask.shape[0],
+                               device=device,
+                               dtype=torch.bool)
+
+        # Define convolution kernel
+        kernel = torch.ones((1, 1, window_length),
+                            device=device,
+                            dtype=torch.float32)
+
+        # Run convolution across line
+        conv = F.conv1d(input=line_bool_mask.float().unsqueeze(1),
+                        weight=kernel)
+
+        # Check if any window is fully filled
+        return conv.amax(dim=-1) >= window_length
 
 
 def Flip_coords_X(coords: torch.Tensor,
@@ -728,7 +895,8 @@ class ImageAugmentationsHelper(nn.Module):
                 tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
                 tmp_random_apply_minmax_[1] = tmp_random_apply_minmax_[1] - 1
 
-            random_apply_minmax_: tuple[int,int] | bool = (tmp_random_apply_minmax_[0], tmp_random_apply_minmax_[1])
+            random_apply_minmax_: tuple[int, int] | bool = (
+                tmp_random_apply_minmax_[0], tmp_random_apply_minmax_[1])
         else:
             random_apply_minmax_ = False
 
@@ -778,7 +946,8 @@ class ImageAugmentationsHelper(nn.Module):
 
             # Detect type, convert to torch Tensor [B,C,H,W], determine scaling factor
             is_numpy = isinstance(images_, np.ndarray)
-            img_tensor, to_numpy, scale_factor = self.preprocess_images_(images_)
+            img_tensor, to_numpy, scale_factor = self.preprocess_images_(
+                images_)
 
             # Undo scaling before adding augs if is_normalized
             if scale_factor is not None and self.augs_cfg.is_normalized:
@@ -789,8 +958,8 @@ class ImageAugmentationsHelper(nn.Module):
                 UserWarning(
                     "WARNING: torchvision augmentations module is currently not implemented. Interface will likely be deprecated.")
                 # TODO how to do labels update in torchvision?
-                #img_tensor = self.torchvision_augs_module(img_tensor)
-                
+                # img_tensor = self.torchvision_augs_module(img_tensor)
+
             # Recompose inputs replacing image
             inputs = list(inputs)
             inputs[img_index] = img_tensor
@@ -806,7 +975,8 @@ class ImageAugmentationsHelper(nn.Module):
                 inputs[1] = inputs[1].unsqueeze(1)
 
             keypoints = inputs[1][..., :2]
-            additional_entries = inputs[1][..., 2:] if inputs[1].shape[-1] > 2 else None
+            additional_entries = inputs[1][...,
+                                           2:] if inputs[1].shape[-1] > 2 else None
             inputs[1] = keypoints
             ##########
 
@@ -816,7 +986,8 @@ class ImageAugmentationsHelper(nn.Module):
 
                 # %% Validate and fix augmentations
                 if self.augs_cfg.enable_batch_validation_check:
-                    aug_inputs = self.validate_fix_input_img_(*aug_inputs, original_inputs=inputs)
+                    aug_inputs = self.validate_fix_input_img_(
+                        *aug_inputs, original_inputs=inputs)
 
             else:
                 aug_inputs = inputs
@@ -1131,13 +1302,13 @@ class ImageAugmentationsHelper(nn.Module):
             self.torchvision_augs_module.to(*args, **kwargs)
 
         return self
-    
-    ## STATIC METHODS
+
+    # STATIC METHODS
     @staticmethod
     def Shift_image_point_batch(augs_cfg: AugmentationConfig,
-                         images: torch.Tensor,
-                         labels: ndArrayOrTensor
-                         ) -> tuple[torch.Tensor, torch.Tensor]:
+                                images: torch.Tensor,
+                                labels: ndArrayOrTensor
+                                ) -> tuple[torch.Tensor, torch.Tensor]:
         """
             images: [B,C,H,W]
             labels: torch.Tensor[B,2] or np.ndarray
@@ -1205,6 +1376,8 @@ class ImageAugmentationsHelper(nn.Module):
         return shifted_imgs, lbl
 
 # %% Prototypes TODO
+
+
 class ImageNormalizationCoeff(Enum):
     """Enum for image normalization types."""
     SOURCE = -1.0
@@ -1212,6 +1385,7 @@ class ImageNormalizationCoeff(Enum):
     UINT8 = 255.0
     UINT16 = 65535.0
     UINT32 = 4294967295.0
+
 
 class ImageNormalization():
     """ImageNormalization class.
@@ -1291,8 +1465,6 @@ def build_kornia_augs(sigma_noise: float, sigma_gaussian_blur: tuple | float = (
 
     return torch.nn.Sequential(random_brightness, random_contrast, gaussian_blur, gaussian_noise)
 
-##################################################################################################################################à
 # %% Code for development
 if __name__ == "__main__":
     pass
-
