@@ -34,6 +34,8 @@ from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
 
 
 # %% Intensity augmentations
+
+
 class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
     """
     Randomly fills the masked region with structured noise. 
@@ -75,12 +77,25 @@ class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
         return out_imgs
 
 
-class RandomBinarizeImage(IntensityAugmentationBase2D):
+class RandomSoftBinarizeImage(IntensityAugmentationBase2D):
     def __init__(self,
                  aug_prob: float = 0.5,
-                 masking_quantile: float = 0.15) -> None:
+                 masking_quantile: float = 0.005,
+                 blending_factor_minmax: None | tuple[float, float] = (0.3, 0.7)):
         super().__init__(p=aug_prob)
         self.masking_quantile = masking_quantile
+        self.blending_factor_minmax = blending_factor_minmax
+
+        # Assert blending factor minmax validity
+        if blending_factor_minmax is not None:
+            assert blending_factor_minmax[0] >= 0.0 and blending_factor_minmax[1] <= 1.0, \
+                "Blending factor minmax values must be in [0, 1] range."
+            assert blending_factor_minmax[0] < blending_factor_minmax[1], \
+                "Blending factor min must be smaller than blending factor max."
+
+        # Assert validity of masking quantile
+        assert masking_quantile >= 0.0 and masking_quantile <= 1.0, \
+            "Masking quantile must be in [0, 1] range."
 
     def apply_transform(self,
                         input: torch.Tensor,
@@ -88,7 +103,7 @@ class RandomBinarizeImage(IntensityAugmentationBase2D):
                         flags: dict[str, Any],
                         transform: torch.Tensor | None = None) -> torch.Tensor:
 
-        img_batch = input[0]
+        img_batch = input.contiguous()
         B = input.shape[0]
         device, dtype = img_batch.device, img_batch.dtype
 
