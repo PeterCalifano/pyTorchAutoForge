@@ -41,7 +41,8 @@
   - [ ] Implement "binarize" augmentation for images
   - [ ] Review and unit test selection criteria implementation
   - [ ] Extend augs-trainer integration to allow "discard" option in validation module
-  - [x] Implement tailoring of RandomAffine to make it border crossing aware 
+  - [x] Implement tailoring of RandomAffine to make it border crossing aware
+  - [ ] Implement 1d vector error models (from selected distributions)
 
 - [ ] v0.3.X
   - [x] Implement custom adaptive pooling layers for ONNx static export

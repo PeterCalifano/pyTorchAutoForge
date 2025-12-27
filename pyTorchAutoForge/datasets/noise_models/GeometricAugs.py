@@ -205,8 +205,17 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
                                     )
 
     @staticmethod
-    def Make_constrained_random_affines(base: K.RandomAffine):
+    def Make_constrained_random_affines(base: K.RandomAffine) -> tuple[K.RandomAffine, K.RandomAffine, K.RandomAffine]:
+        """
+        Make_constrained_random_affines _summary_
 
+        _extended_summary_
+
+        :param base: _description_
+        :type base: K.RandomAffine
+        :return: _description_
+        :rtype: tuple[RandomAffine, RandomAffine, RandomAffine]
+        """
         gen = base._param_generator
         tx, ty = (0.0, 0.0) if gen.translate is None else [
             float(v) for v in gen.translate]
@@ -288,6 +297,20 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
     def ConvCount_intensity_line1d(line_bool_mask: torch.Tensor,
                                    window_length: int,
                                    device: torch.device | str | None = None) -> torch.Tensor:
+        """
+        ConvCount_intensity_line1d _summary_
+
+        _extended_summary_
+
+        :param line_bool_mask: _description_
+        :type line_bool_mask: torch.Tensor
+        :param window_length: _description_
+        :type window_length: int
+        :param device: _description_, defaults to None
+        :type device: torch.device | str | None, optional
+        :return: _description_
+        :rtype: torch.Tensor
+        """
 
         # Get length of line
         length = line_bool_mask.shape[-1]
