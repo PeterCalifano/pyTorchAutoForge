@@ -1,8 +1,10 @@
+import os
 import torch
 from pyTorchAutoForge.datasets.ImagesAugmentation import (
     PoissonShotNoise,
     RandomGaussianNoiseVariableSigma,
     BorderAwareRandomAffine,
+    RandomSoftBinarizeImage,
 )
 import pytest
 import matplotlib.pyplot as plt
@@ -12,6 +14,10 @@ import numpy as np
 import PIL
 from kornia.constants import DataKey
 
+# Determine matplotlib backend based on environment
+import matplotlib
+if os.getenv("DISPLAY", "") == "":
+    matplotlib.use('agg') # Use non-interactive backend if no display is available
 
 # Auxiliary functions
 def load_sample_images(max_num: int = 5):  # -> list[Any]:
@@ -20,15 +26,19 @@ def load_sample_images(max_num: int = 5):  # -> list[Any]:
     test_data_path = os.path.dirname(__file__)
     sample_imgs_path = os.path.join(
         test_data_path, "..", ".test_samples/test_images")
+    
     sample_imgs = os.listdir(sample_imgs_path)
+
+    # Apply random shuffling of sample_imgs
+    np.random.shuffle(sample_imgs)
 
     images = []
     for idx, img_file in enumerate(sample_imgs):
-        img_path = os.path.join(sample_imgs_path, img_file)
-        images.append(np.array(PIL.Image.open(img_path).convert("L")))
-
         if idx >= max_num:
             break
+
+        img_path = os.path.join(sample_imgs_path, img_file)
+        images.append(np.array(PIL.Image.open(img_path).convert("L")))
 
     assert len(images) > 0, "No images found in the sample_imgs folder."
     assert all(isinstance(img, np.ndarray)
@@ -37,8 +47,6 @@ def load_sample_images(max_num: int = 5):  # -> list[Any]:
     return images
 
 # %% Augmentation modules-specific tests
-
-
 def test_random_gaussian_noise_variable_sigma_no_noise():
     # gaussian_noise_aug_prob=0 ⇒ output equals input
     x = torch.randn(5, 3, 4, 4)
@@ -132,6 +140,9 @@ def test_synthetic_mask_augmentation():
         sigma_gaussian_noise_dn=15,
         gaussian_noise_aug_prob=1.0,
         gaussian_blur_aug_prob=1.0,
+        softbinarize_aug_prob=0.5,
+        softbinarize_thr_quantile=0.005,
+        softbinarize_blending_factor_minmax=(0.3, 0.7),
         is_torch_layout=False,
         min_max_brightness_factor=(0.6, 1.2),
         min_max_contrast_factor=(0.6, 1.2),
@@ -169,6 +180,10 @@ def test_synthetic_mask_augmentation():
 
     # Plot inputs and outputs in a 2×batch_size grid
     fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
+    test_name = "Synthetic mask augs"
+    
+    # Set figure name
+    fig.suptitle(test_name, fontsize=16)
 
     for i in range(batch_size):
         # Input
@@ -229,6 +244,9 @@ def test_sample_images_augmentation():
                              sigma_gaussian_noise_dn=15,
                              gaussian_noise_aug_prob=1.0,
                              gaussian_blur_aug_prob=1.0,
+                             softbinarize_aug_prob=0.5,
+                             softbinarize_thr_quantile=0.005,
+                             softbinarize_blending_factor_minmax=(0.3, 0.7),
                              is_torch_layout=False,
                              min_max_brightness_factor=(0.6, 1.2),
                              min_max_contrast_factor=(0.6, 1.2),
@@ -236,6 +254,7 @@ def test_sample_images_augmentation():
                              contrast_aug_prob=1.0,
                              input_normalization_factor=255.0,
                              enable_auto_input_normalization=True,
+                             enable_batch_validation_check=True
                              )
 
     augs_helper = ImageAugmentationsHelper(cfg)
@@ -254,6 +273,9 @@ def test_sample_images_augmentation():
 
         # Plot inputs and outputs in a 2×batch_size grid
         fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
+        test_name = "Sample images augmentation (full module)"
+        # Set figure name
+        fig.suptitle(test_name, fontsize=16)
 
         for i in range(batch_size):
             # Input
@@ -276,8 +298,83 @@ def test_sample_images_augmentation():
 
         plt.tight_layout()
         # plt.pause(2)
-        plt.show()
+        # Call show only if gui is available
+        if plt.get_backend() != 'agg':
+            plt.show()
         plt.close()
+
+def test_random_softbinarize_only_sample_images_visualization():
+    # Load sample images
+    np.random.seed(0)
+    torch.manual_seed(0)
+    imgs = load_sample_images()
+
+    # Make all images of same type and size
+    resolution = (1024, 1024)
+    imgs = [np.array(PIL.Image.fromarray(img).resize(
+        resolution, resample=PIL.Image.LANCZOS)) for img in imgs]
+
+    # Downscale to uint8 if larger
+    for i in range(len(imgs)):
+        if imgs[i].dtype != np.uint8 and imgs[i].max() >= 255:
+            imgs[i] = (imgs[i] / 255.0).astype(np.uint8)
+
+        elif imgs[i].dtype != np.uint8:
+            imgs[i] = imgs[i].astype(np.uint8)
+
+    # Convert to batch numpy array
+    batch_size = len(imgs)
+    imgs = np.stack(imgs, axis=0)
+
+    # Zero out everything that is below 2
+    imgs[imgs < 2] = 0
+
+    imgs_t = numpy_to_torch(imgs, dtype=torch.float32)
+    if imgs_t.ndim == 3:
+        imgs_t = imgs_t.unsqueeze(1)
+
+    aug = RandomSoftBinarizeImage(
+        aug_prob=1.0,
+        masking_quantile=0.01,
+        blending_factor_minmax=(0.1, 0.9),
+    )
+
+    out_imgs = aug(imgs_t)
+
+    assert out_imgs.shape == imgs_t.shape
+    assert out_imgs.dtype == imgs_t.dtype
+    per_sample_delta = (out_imgs - imgs_t).abs().view(batch_size, -1).max(dim=1).values
+    assert torch.any(per_sample_delta > 0)
+
+    out_imgs = torch_to_numpy(out_imgs)
+    if out_imgs.ndim == 4:
+        out_imgs = out_imgs[:, 0, :, :]
+
+    fig, axs = plt.subplots(2, batch_size, figsize=(4 * batch_size, 8))
+    test_name = "RandomSoftBinarizeImage only (sample images)"
+    fig.suptitle(test_name, fontsize=16)
+
+    for i in range(batch_size):
+        # Input
+        axs[0, i].imshow(imgs[i], cmap='gray')
+        axs[0, i].set_title(f"Input {i}")
+        axs[0, i].axis('off')
+
+        # Output
+        disp = out_imgs[i]
+        if disp.max() <= 1.0:
+            disp = (disp * 255).astype(np.uint8)
+        else:
+            disp = disp.astype(np.uint8)
+
+        axs[1, i].imshow(disp, cmap='gray')
+        axs[1, i].set_title(f"SoftBinarize {i}")
+        axs[1, i].axis('off')
+
+    plt.tight_layout()
+    if plt.get_backend() != 'agg':
+        plt.show()
+    plt.close()
 
 
 def test_AugmentationSequential():
@@ -366,7 +463,8 @@ def test_AugmentationSequential():
                    s=40, label='Transformed Point 2', marker='x')
 
     plt.tight_layout()
-    plt.show()
+    if plt.get_backend() != 'agg':
+        plt.show()
 
 
 # Chain parametrize to test combinations
@@ -399,6 +497,9 @@ def test_augmentation_helper_preserves_device(device,
         sigma_gaussian_noise_dn=0.0,       # Disable noise for simplicity
         gaussian_noise_aug_prob=gaussian_noise_aug_prob,
         gaussian_blur_aug_prob=gaussian_blur_aug_prob,
+        softbinarize_aug_prob=0.5,
+        softbinarize_thr_quantile=0.01,
+        softbinarize_blending_factor_minmax=(0.3, 0.7),
         is_torch_layout=False,
         min_max_brightness_factor=(1.0, 1.0),
         min_max_contrast_factor=(1.0, 1.0),
@@ -469,7 +570,8 @@ if __name__ == '__main__':
     contrast_aug_prob = 0.0
 
     # test_synthetic_mask_augmentation()
-    # test_sample_images_augmentation()
+    #test_sample_images_augmentation()
+    test_random_softbinarize_only_sample_images_visualization()
     # test_AugmentationSequential()
     # test_augmentation_helper_preserves_device(device,
     #                                          shift_aug_prob,
@@ -480,4 +582,4 @@ if __name__ == '__main__':
     #                                          contrast_aug_prob)
     # test_zero_augs_input_unchanged()
     #test_random_gaussian_noise_validation_filters_dark_images()
-    test_detect_border_crossing_white_masks()
+    #test_detect_border_crossing_white_masks()

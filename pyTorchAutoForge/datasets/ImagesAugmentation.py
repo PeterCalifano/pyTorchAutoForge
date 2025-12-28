@@ -32,7 +32,7 @@ from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
 from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
 
-from pyTorchAutoForge.datasets.noise_models.IntensityAugs import RandomBinarizeImage, RandomConvertTextureToShadingLaw, RandomNoiseTexturePattern
+from pyTorchAutoForge.datasets.noise_models.IntensityAugs import RandomSoftBinarizeImage, RandomConvertTextureToShadingLaw, RandomNoiseTexturePattern
 from pyTorchAutoForge.datasets.noise_models.NoiseErrorsAugs import RandomGaussianNoiseVariableSigma, PoissonShotNoise
 
 from pyTorchAutoForge.datasets.noise_models.GeometricAugs import BorderAwareRandomAffine
@@ -45,6 +45,8 @@ ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
 # TODO modify to be usable by AugmentationSequential? Inherint from _AugmentationBase. Search how to define custom augmentations in Kornia
 
 # DEVNOTE issue with random apply: 0 is not allowed, but 1 is not either because it implies the user MUST specify at LEAST 2 augs. Easy workaround: automatically add a dummy that acts as a placeholder to make it work with 1
+
+
 class PlaceholderAugmentation(IntensityAugmentationBase2D):
 
     def __init__(self):
@@ -59,6 +61,8 @@ class PlaceholderAugmentation(IntensityAugmentationBase2D):
         return input
 
 # %% Augmentation helper configuration dataclass
+
+
 @dataclass
 class AugmentationConfig:
     # Input specification
@@ -69,7 +73,7 @@ class AugmentationConfig:
     random_apply_minmax: tuple[int, int] = (1, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
 
-    # Affine roto-translation augmentation
+    # Affine roto-translation augmentation (border aware)
     affine_align_corners: bool = False
     affine_fill_value: int = 0  # Fill value for empty pixels after rotation
 
@@ -111,6 +115,12 @@ class AugmentationConfig:
     min_max_contrast_factor: tuple[float, float] = (0.8, 1.2)
     brightness_aug_prob: float = 0.0
     contrast_aug_prob: float = 0.0
+
+    # Random binarization
+    softbinarize_aug_prob: float = 0.0
+    softbinarize_thr_quantile: float = 0.01
+    softbinarize_blending_factor_minmax: None | tuple[float, float] = (
+        0.3, 0.7)
 
     # Scaling factors for labels
     label_scaling_factors: ndArrayOrTensor | None = None
@@ -248,6 +258,12 @@ class ImageAugmentationsHelper(nn.Module):
                                              p=augs_cfg.contrast_aug_prob,
                                              keepdim=True,
                                              clip_output=False))
+
+        # Random soft binarization
+        if augs_cfg.softbinarize_aug_prob > 0:
+            augs_ops.append(RandomSoftBinarizeImage(aug_prob=augs_cfg.softbinarize_aug_prob,
+                                                    masking_quantile=augs_cfg.softbinarize_thr_quantile,
+                                                    blending_factor_minmax=augs_cfg.softbinarize_blending_factor_minmax))
 
         # OPTICS AUGMENTATIONS
         # Random Gaussian blur
@@ -830,40 +846,154 @@ class ImageNormalization():
 
 
 ############################################################################################################################
-# %% DEPRECATED functions (legacy code)
+# Standalone factory function for AugmentationSequential
 def build_kornia_augs(sigma_noise: float, sigma_gaussian_blur: tuple | float = (0.0001, 1.0),
                       brightness_factor: tuple | float = (0.0001, 0.01),
-                      contrast_factor: tuple | float = (0.0001, 0.01)) -> torch.nn.Sequential:
+                      contrast_factor: tuple | float = (0.0001, 0.01),
+                      use_cfg_factory: bool = True,
+                      augs_cfg: AugmentationConfig | None = None) -> nn.Module:
+    """Deprecated: prefer AugmentationConfig/ImageAugmentationsHelper; legacy path kept for reference."""
 
-    # Define kornia augmentation pipeline
-
-    # Random brightness
     brightness_min, brightness_max = brightness_factor if isinstance(
         brightness_factor, tuple) else (brightness_factor, brightness_factor)
-
-    random_brightness = kornia_aug.RandomBrightness(brightness=(
-        brightness_min, brightness_max), clip_output=False, same_on_batch=False, p=1.0, keepdim=True)
-
-    # Random contrast
     contrast_min, contrast_max = contrast_factor if isinstance(
         contrast_factor, tuple) else (contrast_factor, contrast_factor)
-
-    random_contrast = kornia_aug.RandomContrast(contrast=(
-        contrast_min, contrast_max), clip_output=False, same_on_batch=False, p=1.0, keepdim=True)
-
-    # Gaussian Blur
     sigma_gaussian_blur_min, sigma_gaussian_blur_max = sigma_gaussian_blur if isinstance(
         sigma_gaussian_blur, tuple) else (sigma_gaussian_blur, sigma_gaussian_blur)
+
+    if use_cfg_factory:
+        if augs_cfg is None:
+            augs_cfg = AugmentationConfig(
+                input_data_keys=[DataKey.IMAGE],
+                min_max_brightness_factor=(brightness_min, brightness_max),
+                brightness_aug_prob=1.0,
+                min_max_contrast_factor=(contrast_min, contrast_max),
+                contrast_aug_prob=1.0,
+                kernel_size=(5, 5),
+                sigma_gaussian_blur=(sigma_gaussian_blur_min,
+                                     sigma_gaussian_blur_max),
+                gaussian_blur_aug_prob=0.75,
+                sigma_gaussian_noise_dn=sigma_noise,
+                gaussian_noise_aug_prob=0.75,
+            )
+
+        augs_ops: list[GeometricAugmentationBase2D |
+                       IntensityAugmentationBase2D] = []
+
+        if augs_cfg.hflip_prob > 0:
+            augs_ops.append(K.RandomHorizontalFlip(p=augs_cfg.hflip_prob))
+
+        if augs_cfg.vflip_prob > 0:
+            augs_ops.append(K.RandomVerticalFlip(p=augs_cfg.vflip_prob))
+
+        if augs_cfg.shift_aug_prob > 0 or augs_cfg.rotation_aug_prob:
+
+            if augs_cfg.rotation_aug_prob > 0:
+                rotation_degrees = augs_cfg.rotation_angle
+            else:
+                rotation_degrees = 0.0
+
+            if augs_cfg.shift_aug_prob > 0:
+                translate_shift = augs_cfg.max_shift_img_fraction if isinstance(augs_cfg.max_shift_img_fraction, tuple) else (
+                    augs_cfg.max_shift_img_fraction, augs_cfg.max_shift_img_fraction)
+            else:
+                translate_shift = (0.0, 0.0)
+
+            base_random_affine = K.RandomAffine(degrees=rotation_degrees,
+                                                translate=translate_shift,
+                                                p=augs_cfg.rotation_aug_prob,
+                                                keepdim=True,
+                                                align_corners=augs_cfg.affine_align_corners,
+                                                same_on_batch=False)
+            augs_ops.append(BorderAwareRandomAffine(base_random_affine=base_random_affine,
+                                                    num_pix_crossing_detect=10,
+                                                    intensity_threshold_uint8=2.0)
+                            )
+
+        if augs_cfg.brightness_aug_prob > 0:
+            augs_ops.append(K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,
+                                               p=augs_cfg.brightness_aug_prob,
+                                               keepdim=True,
+                                               clip_output=False))
+
+        if augs_cfg.contrast_aug_prob > 0:
+            augs_ops.append(K.RandomContrast(contrast=augs_cfg.min_max_contrast_factor,
+                                             p=augs_cfg.contrast_aug_prob,
+                                             keepdim=True,
+                                             clip_output=False))
+
+        if augs_cfg.softbinarize_aug_prob > 0:
+            augs_ops.append(RandomSoftBinarizeImage(aug_prob=augs_cfg.softbinarize_aug_prob,
+                                                    masking_quantile=augs_cfg.softbinarize_thr_quantile,
+                                                    blending_factor_minmax=augs_cfg.softbinarize_blending_factor_minmax))
+
+        if augs_cfg.gaussian_blur_aug_prob > 0:
+            augs_ops.append(K.RandomGaussianBlur(kernel_size=augs_cfg.kernel_size,
+                                                 sigma=augs_cfg.sigma_gaussian_blur,
+                                                 p=augs_cfg.gaussian_blur_aug_prob,
+                                                 keepdim=True))
+
+        if augs_cfg.poisson_shot_noise_aug_prob > 0:
+            augs_ops.append(PoissonShotNoise(
+                probability=augs_cfg.poisson_shot_noise_aug_prob))
+
+        if augs_cfg.gaussian_noise_aug_prob > 0:
+            augs_ops.append(RandomGaussianNoiseVariableSigma(sigma_noise=augs_cfg.sigma_gaussian_noise_dn,
+                                                             gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob,
+                                                             keep_scalar_sigma_fixed=False,
+                                                             enable_img_validation_mode=augs_cfg.enable_batch_validation_check,
+                                                             validation_min_num_bright_pixels=50,
+                                                             validation_pixel_threshold=5.0
+                                                             ))
+
+        if len(augs_ops) == 0:
+            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops! Forward pass will not do anything if called.{colorama.Style.RESET_ALL}")
+        elif len(augs_ops) == 1:
+            augs_ops.append(PlaceholderAugmentation())
+
+        if augs_cfg.random_apply_photometric:
+            if augs_cfg.random_apply_minmax[1] == -1:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = len(augs_ops) - 1
+            else:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = tmp_random_apply_minmax_[1] - 1
+
+            random_apply_minmax_: tuple[int, int] | bool = (
+                tmp_random_apply_minmax_[0], tmp_random_apply_minmax_[1])
+        else:
+            random_apply_minmax_ = False
+
+        if augs_cfg.device is not None:
+            for aug_op in augs_ops:
+                aug_op.to(augs_cfg.device)
+
+        return AugmentationSequential(*augs_ops,
+                                      data_keys=augs_cfg.input_data_keys,
+                                      same_on_batch=False,
+                                      keepdim=False,
+                                      random_apply=random_apply_minmax_
+                                      ).to(augs_cfg.device)
+
+    random_brightness = kornia_aug.RandomBrightness(brightness=(
+        brightness_min, brightness_max),
+        clip_output=False,
+        same_on_batch=False,
+        p=1.0,
+        keepdim=True)
+
+    random_contrast = kornia_aug.RandomContrast(contrast=(
+        contrast_min, contrast_max),
+        clip_output=False,
+        same_on_batch=False,
+        p=1.0,
+        keepdim=True)
+
     gaussian_blur = kornia_aug.RandomGaussianBlur(
         (5, 5), (sigma_gaussian_blur_min, sigma_gaussian_blur_max), p=0.75, keepdim=True)
 
-    # Gaussian noise
     gaussian_noise = kornia_aug.RandomGaussianNoise(
         mean=0.0, std=sigma_noise, p=0.75, keepdim=True)
-
-    # Motion blur
-    # direction_min, direction_max = -1.0, 1.0
-    # motion_blur = kornia_aug.RandomMotionBlur((3, 3), (0, 360), direction=(direction_min, direction_max), p=0.75, keepdim=True)
 
     return torch.nn.Sequential(random_brightness, random_contrast, gaussian_blur, gaussian_noise)
 

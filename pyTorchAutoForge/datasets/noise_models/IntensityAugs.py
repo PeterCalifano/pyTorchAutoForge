@@ -32,7 +32,6 @@ from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
 from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
 
-
 # %% Intensity augmentations
 
 
@@ -80,7 +79,7 @@ class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
 class RandomSoftBinarizeImage(IntensityAugmentationBase2D):
     def __init__(self,
                  aug_prob: float = 0.5,
-                 masking_quantile: float = 0.005,
+                 masking_quantile: float = 0.01,
                  blending_factor_minmax: None | tuple[float, float] = (0.3, 0.7)):
         super().__init__(p=aug_prob)
         self.masking_quantile = masking_quantile
@@ -107,21 +106,52 @@ class RandomSoftBinarizeImage(IntensityAugmentationBase2D):
         B = input.shape[0]
         device, dtype = img_batch.device, img_batch.dtype
 
-        # Compute threshold
-        avg_brightness = img_batch.mean(dim=1, keepdim=True)  # B×1×H×W
-        brightness_thr = (avg_brightness.view(
-            B, 1, -1)).quantile(self.masking_quantile, dim=2, keepdim=True)
+        # Convert rgb to gray if needed
+        gray_brightness = img_batch
+        if img_batch.shape[1] == 3:
+            gray_brightness = 0.2989 * img_batch[:, 0:1, :, :] + \
+                0.5870 * img_batch[:, 1:2, :, :] + \
+                0.1140 * img_batch[:, 2:3, :, :]
+
+        # Compute brightness threshold for each image in the batch based on masking quantile (illuminate regions only)
+        gray_flat = gray_brightness.view(B, 1, -1)  # [B,1,H*W]
+        valid_flat = gray_flat >= 0.0  # [B,1,H*W]
+        flat_valid = torch.where(valid_flat.view(B, 1, -1),
+                                 gray_flat,
+                                 torch.nan)
+
+        brightness_thr = torch.nanquantile(flat_valid,
+                                           self.masking_quantile,
+                                           dim=2,
+                                           keepdim=True).view(B, 1, 1, 1)
+        
+        high_quantile_per_sample = torch.nanquantile(flat_valid,
+                                           0.999,
+                                           dim=2,
+                                           keepdim=True).view(B, 1, 1, 1)
 
         # Get binarized image
-        img_batch_mask = (avg_brightness > brightness_thr).float()
+        img_batch_mask = (gray_brightness >
+                          brightness_thr).float().to(device, dtype)        
 
-        return img_batch_mask
+        # Check if blending is to be applied (if blending factors are not 0)
+        if self.blending_factor_minmax is not None:
+            # Sample random blending factors for each image in the batch
+            blending_factors = (torch.ones(size=(B, 1, 1, 1),
+                                           device=device,
+                                           dtype=dtype)).uniform_(self.blending_factor_minmax[0], self.blending_factor_minmax[1])
+
+            # Blend original gray brightness with binarized mask (keep zero regions as zero)
+            return img_batch_mask * (blending_factors * high_quantile_per_sample * img_batch_mask + (1.0 - blending_factors) * gray_brightness)
+        
+        else:
+            return img_batch_mask * high_quantile_per_sample
 
 
 class RandomConvertTextureToShadingLaw(IntensityAugmentationBase2D):
     """
     RandomConvertTextureToShadingLaw Random augmentation that replaces textured regions with smooth shading based on selected shading law.
-    
+
     _extended_summary_
 
     :param IntensityAugmentationBase2D: _description_
