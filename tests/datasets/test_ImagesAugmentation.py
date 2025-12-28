@@ -20,7 +20,7 @@ if os.getenv("DISPLAY", "") == "":
     matplotlib.use('agg') # Use non-interactive backend if no display is available
 
 # Auxiliary functions
-def load_sample_images(max_num: int = 5):  # -> list[Any]:
+def _load_sample_images(max_num: int = 5):  # -> list[Any]:
     # Load images in samples_imgs folder
     import os
     test_data_path = os.path.dirname(__file__)
@@ -209,10 +209,9 @@ def test_synthetic_mask_augmentation():
     plt.show()
     plt.close()
 
-
 def test_sample_images_augmentation():
     # Load sample images
-    imgs = load_sample_images()
+    imgs = _load_sample_images()
 
     # Make all images of same type and size
     resolution = (1024, 1024)
@@ -245,7 +244,7 @@ def test_sample_images_augmentation():
                              gaussian_noise_aug_prob=1.0,
                              gaussian_blur_aug_prob=1.0,
                              softbinarize_aug_prob=0.5,
-                             softbinarize_thr_quantile=0.005,
+                             softbinarize_thr_quantile=0.01,
                              softbinarize_blending_factor_minmax=(0.3, 0.7),
                              is_torch_layout=False,
                              min_max_brightness_factor=(0.6, 1.2),
@@ -307,7 +306,7 @@ def test_random_softbinarize_only_sample_images_visualization():
     # Load sample images
     np.random.seed(0)
     torch.manual_seed(0)
-    imgs = load_sample_images()
+    imgs = _load_sample_images()
 
     # Make all images of same type and size
     resolution = (1024, 1024)
@@ -376,13 +375,12 @@ def test_random_softbinarize_only_sample_images_visualization():
         plt.show()
     plt.close()
 
-
 def test_AugmentationSequential():
     from kornia.augmentation import AugmentationSequential, RandomAffine, RandomHorizontalFlip
     from kornia.constants import DataKey
 
     # Get sample image
-    imgs = load_sample_images()
+    imgs = _load_sample_images()
 
     data_augmentation_module = AugmentationSequential(
         RandomAffine(degrees=0.0,
@@ -398,12 +396,6 @@ def test_AugmentationSequential():
 
         # Apply augmentations
         outputs = data_augmentation_module(*inputs)
-        # NOTE: output is a list not a tuple
-
-        # Ensure outputs are in tuple format
-        # if not isinstance(outputs, tuple):
-        #    outputs = (outputs,)
-
         return outputs
 
     img = imgs[1]
@@ -465,8 +457,7 @@ def test_AugmentationSequential():
     plt.tight_layout()
     if plt.get_backend() != 'agg':
         plt.show()
-
-
+  
 # Chain parametrize to test combinations
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
 @pytest.mark.parametrize("shift_aug_prob", [0, 1])
@@ -509,6 +500,9 @@ def test_augmentation_helper_preserves_device(device,
         enable_auto_input_normalization=False,
     )
 
+    augs_helper = ImageAugmentationsHelper(cfg).to(device)
+
+    # Check that modules are on the correct device
     augs_helper = ImageAugmentationsHelper(cfg)
 
     # Create dummy inputs on CUDA
@@ -571,15 +565,15 @@ if __name__ == '__main__':
 
     # test_synthetic_mask_augmentation()
     #test_sample_images_augmentation()
-    test_random_softbinarize_only_sample_images_visualization()
+    #test_random_softbinarize_only_sample_images_visualization()
     # test_AugmentationSequential()
-    # test_augmentation_helper_preserves_device(device,
-    #                                          shift_aug_prob,
-    #                                          rotation_aug_prob,
-    #                                          gaussian_noise_aug_prob,
-    #                                          gaussian_blur_aug_prob,
-    #                                          brightness_aug_prob,
-    #                                          contrast_aug_prob)
+    test_augmentation_helper_preserves_device(device,
+                                             shift_aug_prob,
+                                             rotation_aug_prob,
+                                             gaussian_noise_aug_prob,
+                                             gaussian_blur_aug_prob,
+                                             brightness_aug_prob,
+                                             contrast_aug_prob)
     # test_zero_augs_input_unchanged()
     #test_random_gaussian_noise_validation_filters_dark_images()
     #test_detect_border_crossing_white_masks()

@@ -85,11 +85,6 @@ class AugmentationConfig:
     max_shift_img_fraction: float | tuple[float, float] = (0.5, 0.5)
     translate_distribution_type: Literal["uniform", "normal"] = "uniform"
 
-    # Default is None = image centre
-    # rotation_centre: tuple[float, float] | None = None
-    # rotation_interp_mode: transforms.InterpolationMode = transforms.InterpolationMode.BILINEAR
-    # rotation_expand: bool = False  # If True, expands rotated image to fill size
-
     # Flip augmentation probability
     hflip_prob: float = 0.0
     vflip_prob: float = 0.0
