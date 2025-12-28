@@ -115,7 +115,15 @@ class RandomSoftBinarizeImage(IntensityAugmentationBase2D):
 
         # Compute brightness threshold for each image in the batch based on masking quantile (illuminate regions only)
         gray_flat = gray_brightness.view(B, 1, -1)  # [B,1,H*W]
-        valid_flat = gray_flat >= 0.0  # [B,1,H*W]
+        
+        # Determine validity threshold for quantile based on scale
+        validity_thr = 0.0
+        if torch.abs(gray_flat).max() > 1.0:
+            validity_thr = 1.0  # [B,1,H*W]
+
+        # Apply thresholding
+        valid_flat = gray_flat >= validity_thr  # [B,1,H*W]
+
         flat_valid = torch.where(valid_flat.view(B, 1, -1),
                                  gray_flat,
                                  torch.nan)
