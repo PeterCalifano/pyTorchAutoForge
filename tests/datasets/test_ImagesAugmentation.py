@@ -11,22 +11,26 @@ import matplotlib.pyplot as plt
 from pyTorchAutoForge.datasets import ImagesLabelsCachedDataset, AugmentationConfig, ImageAugmentationsHelper
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
 import numpy as np
+from time import perf_counter
 import PIL
 from kornia.constants import DataKey
 
 # Determine matplotlib backend based on environment
 import matplotlib
 if os.getenv("DISPLAY", "") == "":
-    matplotlib.use('agg') # Use non-interactive backend if no display is available
+    # Use non-interactive backend if no display is available
+    matplotlib.use('agg')
 
-# Auxiliary functions
+# Helper functions
+
+
 def _load_sample_images(max_num: int = 5):  # -> list[Any]:
     # Load images in samples_imgs folder
     import os
     test_data_path = os.path.dirname(__file__)
     sample_imgs_path = os.path.join(
         test_data_path, "..", ".test_samples/test_images")
-    
+
     sample_imgs = os.listdir(sample_imgs_path)
 
     # Apply random shuffling of sample_imgs
@@ -46,7 +50,79 @@ def _load_sample_images(max_num: int = 5):  # -> list[Any]:
 
     return images
 
+
+def _assert_module_device(module, device: torch.device) -> None:
+    """Helper function to assert that a nn.Module is on a specific device"""
+    for name, param in module.named_parameters(recurse=False):
+        assert param.device.type == device.type, (
+            f"{module.__class__.__name__}.{name} on {param.device}, expected {device}."
+        )
+
+    for name, buf in module.named_buffers(recurse=False):
+        assert buf.device.type == device.type, (
+            f"{module.__class__.__name__}.{name} on {buf.device}, expected {device}."
+        )
+
+    mod_device = getattr(module, "device", None)
+    if isinstance(mod_device, torch.device):
+        assert mod_device.type == device.type, (
+            f"{module.__class__.__name__}.device is {mod_device}, expected {device}."
+        )
+
+    param_gen = getattr(module, "_param_generator", None)
+    if param_gen is not None:
+        gen_device = getattr(param_gen, "device", None)
+        if isinstance(gen_device, torch.device):
+            assert gen_device.type == device.type, (
+                f"{module.__class__.__name__}._param_generator.device is {gen_device}, expected {device}."
+            )
+
+    params = getattr(module, "_params", None)
+    if isinstance(params, dict):
+        for key, val in params.items():
+            if torch.is_tensor(val):
+                assert val.device.type == device.type, (
+                    f"{module.__class__.__name__}._params[{key}] on {val.device}, expected {device}."
+                )
+
+
+def _assert_helper_modules_on_device(augs_helper: ImageAugmentationsHelper,
+                                     device: torch.device,
+                                     ) -> None:
+    """Helper function to assert that modules loaded in ImageAugmentationsHelper are on a specific device"""
+    if augs_helper.kornia_augs_module is not None:
+        for module in augs_helper.kornia_augs_module.modules():
+            _assert_module_device(module, device)
+
+    if augs_helper.torchvision_augs_module is not None:
+        for module in augs_helper.torchvision_augs_module.modules():
+            _assert_module_device(module, device)
+
+
+def _time_augmentation_helper(augs_helper: ImageAugmentationsHelper,
+                              images: torch.Tensor,
+                              labels: torch.Tensor,
+                              num_iters: int = 100,
+                              ) -> float:
+    """Helper function to time execution of ImageAugmentationsHelper forward pass (compare cpu vs gpu)"""
+    for _ in range(3):
+        augs_helper(images, labels)
+
+    if images.device.type == "cuda":
+        torch.cuda.synchronize()
+
+    start = perf_counter()
+    for _ in range(num_iters):
+        augs_helper(images, labels)
+
+    if images.device.type == "cuda":
+        torch.cuda.synchronize()
+
+    return perf_counter() - start
+
 # %% Augmentation modules-specific tests
+
+
 def test_random_gaussian_noise_variable_sigma_no_noise():
     # gaussian_noise_aug_prob=0 ⇒ output equals input
     x = torch.randn(5, 3, 4, 4)
@@ -74,6 +150,7 @@ def test_random_gaussian_noise_variable_sigma_shape_dtype():
     assert out.shape == x.shape
     assert out.dtype == x.dtype
 
+
 def test_random_gaussian_noise_validation_filters_dark_images():
     # Validation should zero sigma for images without enough bright pixels
     torch.manual_seed(0)
@@ -82,7 +159,7 @@ def test_random_gaussian_noise_validation_filters_dark_images():
     half_img = torch.zeros((1, 1, 24, 24))
 
     # Add some content in half_img
-    half_img[0,0,4:8, 9:17] = 1.0
+    half_img[0, 0, 4:8, 9:17] = 1.0
 
     x = torch.cat([bright_img, dark_img, half_img], dim=0)
 
@@ -100,6 +177,7 @@ def test_random_gaussian_noise_validation_filters_dark_images():
     assert not torch.allclose(out[0], x[0])
     assert torch.allclose(out[1], x[1])
     assert not torch.allclose(out[2], x[2])
+
 
 def test_detect_border_crossing_white_masks():
     imgs = torch.zeros((4, 1, 16, 16), dtype=torch.float32)
@@ -125,6 +203,8 @@ def test_detect_border_crossing_white_masks():
     assert horizontal.squeeze(-1).tolist() == [False, False, True, True]
 
 # %% Integrated tests
+
+
 def test_synthetic_mask_augmentation():
 
     augs_datakey = [DataKey.IMAGE, DataKey.KEYPOINTS]
@@ -181,7 +261,7 @@ def test_synthetic_mask_augmentation():
     # Plot inputs and outputs in a 2×batch_size grid
     fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
     test_name = "Synthetic mask augs"
-    
+
     # Set figure name
     fig.suptitle(test_name, fontsize=16)
 
@@ -209,9 +289,14 @@ def test_synthetic_mask_augmentation():
     plt.show()
     plt.close()
 
+
 def test_sample_images_augmentation():
     # Load sample images
     imgs = _load_sample_images()
+
+    # Zero out everything that is below 1
+    for i in range(len(imgs)):
+        imgs[i][imgs[i] < 1] = 0
 
     # Make all images of same type and size
     resolution = (1024, 1024)
@@ -302,6 +387,7 @@ def test_sample_images_augmentation():
             plt.show()
         plt.close()
 
+
 def test_random_softbinarize_only_sample_images_visualization():
     # Load sample images
     np.random.seed(0)
@@ -342,7 +428,8 @@ def test_random_softbinarize_only_sample_images_visualization():
 
     assert out_imgs.shape == imgs_t.shape
     assert out_imgs.dtype == imgs_t.dtype
-    per_sample_delta = (out_imgs - imgs_t).abs().view(batch_size, -1).max(dim=1).values
+    per_sample_delta = (
+        out_imgs - imgs_t).abs().view(batch_size, -1).max(dim=1).values
     assert torch.any(per_sample_delta > 0)
 
     out_imgs = torch_to_numpy(out_imgs)
@@ -374,6 +461,7 @@ def test_random_softbinarize_only_sample_images_visualization():
     if plt.get_backend() != 'agg':
         plt.show()
     plt.close()
+
 
 def test_AugmentationSequential():
     from kornia.augmentation import AugmentationSequential, RandomAffine, RandomHorizontalFlip
@@ -457,8 +545,10 @@ def test_AugmentationSequential():
     plt.tight_layout()
     if plt.get_backend() != 'agg':
         plt.show()
-  
+
 # Chain parametrize to test combinations
+
+
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
 @pytest.mark.parametrize("shift_aug_prob", [0, 1])
 @pytest.mark.parametrize("rotation_aug_prob", [0, 1])
@@ -474,7 +564,7 @@ def test_augmentation_helper_preserves_device(device,
                                               brightness_aug_prob,
                                               contrast_aug_prob) -> None:
 
-    if not torch.cuda.is_available():
+    if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA not available.")
 
     # Create a minimal configuration for the augmentations helper.
@@ -502,18 +592,70 @@ def test_augmentation_helper_preserves_device(device,
 
     augs_helper = ImageAugmentationsHelper(cfg).to(device)
 
-    # Check that modules are on the correct device
-    augs_helper = ImageAugmentationsHelper(cfg)
+    device_t = torch.device(device)
+    _assert_helper_modules_on_device(augs_helper, device_t)
 
-    # Create dummy inputs on CUDA
+    # Create dummy inputs on the target device
     x = torch.randn(1, 1, 64, 64, device=device)
     lbl = torch.tensor([[32, 32]], dtype=torch.float32, device=device)
 
     out_img, out_lbl = augs_helper(x, lbl)
 
-    # Verify that outputs remain on cuda
+    # Verify that outputs remain on the target device
     assert out_img.device.type == device
     assert out_lbl.device.type == device
+    _assert_helper_modules_on_device(augs_helper, device_t)
+
+
+def test_augmentation_helper_timing_cpu_vs_cuda():
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available.")
+
+    cfg_kwargs = dict(
+        max_shift_img_fraction=(0.2, 0.2),
+        input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
+        shift_aug_prob=1.0,
+        is_normalized=True,
+        rotation_angle=(-10, 10),
+        rotation_aug_prob=1.0,
+        sigma_gaussian_noise_dn=0.2,
+        gaussian_noise_aug_prob=1.0,
+        gaussian_blur_aug_prob=1.0,
+        softbinarize_aug_prob=1.0,
+        softbinarize_thr_quantile=0.01,
+        softbinarize_blending_factor_minmax=(0.3, 0.7),
+        is_torch_layout=True,
+        min_max_brightness_factor=(0.8, 1.2),
+        min_max_contrast_factor=(0.8, 1.2),
+        brightness_aug_prob=1.0,
+        contrast_aug_prob=1.0,
+        input_normalization_factor=1.0,
+        enable_auto_input_normalization=False,
+    )
+
+    cpu_helper = ImageAugmentationsHelper(
+        AugmentationConfig(**cfg_kwargs)).to("cpu")
+    cuda_helper = ImageAugmentationsHelper(
+        AugmentationConfig(**cfg_kwargs)).to("cuda")
+
+    batch_size = 8
+    x_cpu = torch.rand(batch_size, 1, 256, 256, device="cpu")
+    lbl_cpu = torch.tensor(
+        [[128, 128]], dtype=torch.float32).repeat(batch_size, 1)
+
+    x_cuda = x_cpu.to("cuda")
+    lbl_cuda = lbl_cpu.to("cuda")
+
+    cpu_time = _time_augmentation_helper(
+        cpu_helper, x_cpu, lbl_cpu, num_iters=20)
+    cuda_time = _time_augmentation_helper(
+        cuda_helper, x_cuda, lbl_cuda, num_iters=20)
+
+    assert cpu_time > 0.0
+    assert cuda_time > 0.0
+    print(
+        f"ImageAugmentationsHelper timing - cpu: {cpu_time:.4f}s, cuda: {cuda_time:.4f}s"
+    )
 
 
 def test_zero_augs_input_unchanged():
@@ -564,16 +706,16 @@ if __name__ == '__main__':
     contrast_aug_prob = 0.0
 
     # test_synthetic_mask_augmentation()
-    #test_sample_images_augmentation()
-    #test_random_softbinarize_only_sample_images_visualization()
+    # test_sample_images_augmentation()
+    # test_random_softbinarize_only_sample_images_visualization()
     # test_AugmentationSequential()
-    test_augmentation_helper_preserves_device(device,
-                                             shift_aug_prob,
-                                             rotation_aug_prob,
-                                             gaussian_noise_aug_prob,
-                                             gaussian_blur_aug_prob,
-                                             brightness_aug_prob,
-                                             contrast_aug_prob)
+    # test_augmentation_helper_preserves_device(device,
+    #                                         shift_aug_prob,
+    #                                         rotation_aug_prob,
+    #                                         gaussian_noise_aug_prob,
+    #                                         gaussian_blur_aug_prob,
+    #                                         brightness_aug_prob,
+    #                                         contrast_aug_prob)
     # test_zero_augs_input_unchanged()
-    #test_random_gaussian_noise_validation_filters_dark_images()
-    #test_detect_border_crossing_white_masks()
+    # test_random_gaussian_noise_validation_filters_dark_images()
+    # test_detect_border_crossing_white_masks()
