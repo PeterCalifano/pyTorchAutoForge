@@ -183,6 +183,8 @@ class ImageAugmentationsHelper(nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
         super().__init__()
         self.augs_cfg = augs_cfg
+        self.device = torch.device(
+            augs_cfg.device) if augs_cfg.device is not None else None
         self.num_aug_ops = 0
 
         # TODO add input_data_keys to AugmentationConfig
@@ -314,26 +316,55 @@ class ImageAugmentationsHelper(nn.Module):
             random_apply_minmax_ = False
 
         # Transfer all modules to device if specified
-        if augs_cfg.device is not None:
+        if self.device is not None:
 
             for aug_op in augs_ops:
-                aug_op.to(augs_cfg.device)
+                aug_op.to(self.device)
 
             for aug_op in torch_vision_ops:
-                aug_op.to(augs_cfg.device)
+                aug_op.to(self.device)
 
         self.kornia_augs_module = AugmentationSequential(*augs_ops,
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
                                                          keepdim=False,
                                                          random_apply=random_apply_minmax_
-                                                         ).to(augs_cfg.device)
+                                                         )
+        if self.device is not None:
+            self.kornia_augs_module.to(self.device)
 
         # if augs_cfg.append_custom_module_after_ is not None:
         #    pass
 
         self.torchvision_augs_module = nn.Sequential(
             *torch_vision_ops) if len(torch_vision_ops) > 0 else None
+        if self.device is not None and self.torchvision_augs_module is not None:
+            self.torchvision_augs_module.to(self.device)
+
+    def _resolve_device(self, *tensors: torch.Tensor) -> torch.device | None:
+        """Helper method to resolve device from input or configuration"""
+        if self.device is not None:
+            return self.device
+
+        for tensor in tensors:
+            if torch.is_tensor(tensor):
+                return tensor.device
+
+        return None
+
+    def _move_input_to_device(self, input: Any, device: torch.device | None) -> Any:
+        """Helper method to move inputs to device"""
+        if device is None:
+            return input
+
+        if torch.is_tensor(input):
+            return input.to(device)
+
+        if isinstance(input, (list, tuple)):
+            return type(input)(
+                self._move_input_to_device(item, device) for item in input)
+
+        return input
 
     # images: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
     # labels: ndArrayOrTensor
@@ -361,6 +392,10 @@ class ImageAugmentationsHelper(nn.Module):
             is_numpy = isinstance(images_, np.ndarray)
             img_tensor, to_numpy, scale_factor = self.preprocess_images_(
                 images_)
+            
+            target_device = self._resolve_device(img_tensor)
+            if target_device is not None:
+                img_tensor = img_tensor.to(target_device)
 
             # Undo scaling before adding augs if is_normalized
             if scale_factor is not None and self.augs_cfg.is_normalized:
@@ -376,6 +411,13 @@ class ImageAugmentationsHelper(nn.Module):
             # Recompose inputs replacing image
             inputs = list(inputs)
             inputs[img_index] = img_tensor
+
+            # Ensure that inputs are on the correct device
+            if target_device is not None:
+                inputs = [
+                    self._move_input_to_device(input, target_device)
+                    for input in inputs
+                ]
 
             ##########
             # Unsqueeze keypoints if input is [B, 2], must be [N, 2]
@@ -445,11 +487,11 @@ class ImageAugmentationsHelper(nn.Module):
                     aug_inputs[img_index].permute(0, 2, 3, 1))
                 aug_inputs[lbl_index] = torch_to_numpy(aug_inputs[lbl_index])
 
-        # DEVNOTE: image appears to be transferred to cpu for no reason. To investigate.
-        ###
-        aug_inputs[0] = aug_inputs[0].to(keypoints.device)
-        aug_inputs[1] = aug_inputs[1].to(keypoints.device)
-        ###
+        if target_device is not None:
+            aug_inputs = type(aug_inputs)(
+                self._move_input_to_device(input, target_device)
+                for input in aug_inputs
+            )
 
         return aug_inputs
 
@@ -686,7 +728,9 @@ class ImageAugmentationsHelper(nn.Module):
         # mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
 
         # Move all inputs to the same device
-        inputs = tuple(input.to(self.augs_cfg.device) for input in inputs)
+        target_device = self._resolve_device(inputs[img_index])
+        inputs = tuple(
+            self._move_input_to_device(input, target_device) for input in inputs)
 
         # A threshold to detect near-black images (tune if needed)
         # TODO remove hardcoded threshold. It also assumes that the value of intensity is NOT [0,1]!
@@ -708,6 +752,11 @@ class ImageAugmentationsHelper(nn.Module):
     # Overload "to" method
     def to(self, *args, **kwargs):
         """Overload to method to apply to all submodules."""
+        device, _, _, _ = torch._C._nn._parse_to(*args, **kwargs)
+        if device is not None:
+            self.device = device
+            self.augs_cfg.device = str(device)
+
         super().to(*args, **kwargs)
         self.kornia_augs_module.to(*args, **kwargs)
 

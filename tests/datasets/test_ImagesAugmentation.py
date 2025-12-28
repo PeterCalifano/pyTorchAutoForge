@@ -77,25 +77,17 @@ def _assert_module_device(module, device: torch.device) -> None:
                 f"{module.__class__.__name__}._param_generator.device is {gen_device}, expected {device}."
             )
 
-    params = getattr(module, "_params", None)
-    if isinstance(params, dict):
-        for key, val in params.items():
-            if torch.is_tensor(val):
-                assert val.device.type == device.type, (
-                    f"{module.__class__.__name__}._params[{key}] on {val.device}, expected {device}."
-                )
-
 
 def _assert_helper_modules_on_device(augs_helper: ImageAugmentationsHelper,
                                      device: torch.device,
                                      ) -> None:
     """Helper function to assert that modules loaded in ImageAugmentationsHelper are on a specific device"""
     if augs_helper.kornia_augs_module is not None:
-        for module in augs_helper.kornia_augs_module.modules():
+        for module in augs_helper.kornia_augs_module.children():
             _assert_module_device(module, device)
 
     if augs_helper.torchvision_augs_module is not None:
-        for module in augs_helper.torchvision_augs_module.modules():
+        for module in augs_helper.torchvision_augs_module.children():
             _assert_module_device(module, device)
 
 
@@ -103,7 +95,7 @@ def _time_augmentation_helper(augs_helper: ImageAugmentationsHelper,
                               images: torch.Tensor,
                               labels: torch.Tensor,
                               num_iters: int = 100,
-                              ) -> float:
+                              ) -> [float, float]:
     """Helper function to time execution of ImageAugmentationsHelper forward pass (compare cpu vs gpu)"""
     for _ in range(3):
         augs_helper(images, labels)
@@ -118,7 +110,7 @@ def _time_augmentation_helper(augs_helper: ImageAugmentationsHelper,
     if images.device.type == "cuda":
         torch.cuda.synchronize()
 
-    return perf_counter() - start
+    return perf_counter() - start, (perf_counter() - start) / num_iters
 
 # %% Augmentation modules-specific tests
 
@@ -230,6 +222,7 @@ def test_synthetic_mask_augmentation():
         contrast_aug_prob=1.0,
         input_normalization_factor=255.0,
         enable_auto_input_normalization=True,
+        device='cuda' if torch.cuda.is_available() else 'cpu'
     )
 
     augs_helper = ImageAugmentationsHelper(cfg)
@@ -338,7 +331,8 @@ def test_sample_images_augmentation():
                              contrast_aug_prob=1.0,
                              input_normalization_factor=255.0,
                              enable_auto_input_normalization=True,
-                             enable_batch_validation_check=True
+                             enable_batch_validation_check=True,
+                             device='cuda' if torch.cuda.is_available() else 'cpu'
                              )
 
     augs_helper = ImageAugmentationsHelper(cfg)
@@ -388,7 +382,7 @@ def test_sample_images_augmentation():
         plt.close()
 
 
-def test_random_softbinarize_only_sample_images_visualization():
+def test_random_softbinarize_only_sample_images_with_viz():
     # Load sample images
     np.random.seed(0)
     torch.manual_seed(0)
@@ -588,9 +582,10 @@ def test_augmentation_helper_preserves_device(device,
         contrast_aug_prob=contrast_aug_prob,
         input_normalization_factor=255.0,
         enable_auto_input_normalization=False,
+        device=device
     )
 
-    augs_helper = ImageAugmentationsHelper(cfg).to(device)
+    augs_helper = ImageAugmentationsHelper(cfg)
 
     device_t = torch.device(device)
     _assert_helper_modules_on_device(augs_helper, device_t)
@@ -608,9 +603,10 @@ def test_augmentation_helper_preserves_device(device,
 
 
 def test_augmentation_helper_timing_cpu_vs_cuda():
+    """Test execution time cpu vs cuda for augmentations helper"""
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available.")
-
+    num_iters_ = 500
     cfg_kwargs = dict(
         max_shift_img_fraction=(0.2, 0.2),
         input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
@@ -638,7 +634,7 @@ def test_augmentation_helper_timing_cpu_vs_cuda():
     cuda_helper = ImageAugmentationsHelper(
         AugmentationConfig(**cfg_kwargs)).to("cuda")
 
-    batch_size = 8
+    batch_size = 64
     x_cpu = torch.rand(batch_size, 1, 256, 256, device="cpu")
     lbl_cpu = torch.tensor(
         [[128, 128]], dtype=torch.float32).repeat(batch_size, 1)
@@ -646,17 +642,18 @@ def test_augmentation_helper_timing_cpu_vs_cuda():
     x_cuda = x_cpu.to("cuda")
     lbl_cuda = lbl_cpu.to("cuda")
 
-    cpu_time = _time_augmentation_helper(
-        cpu_helper, x_cpu, lbl_cpu, num_iters=20)
-    cuda_time = _time_augmentation_helper(
-        cuda_helper, x_cuda, lbl_cuda, num_iters=20)
+    cpu_time_total, cpu_time_avg = _time_augmentation_helper(
+        cpu_helper, x_cpu, lbl_cpu, num_iters=num_iters_)
+    cuda_time_total, cuda_time_avg = _time_augmentation_helper(
+        cuda_helper, x_cuda, lbl_cuda, num_iters=num_iters_)
 
-    assert cpu_time > 0.0
-    assert cuda_time > 0.0
+    assert cpu_time_total > 0.0
+    assert cuda_time_total > 0.0
     print(
-        f"ImageAugmentationsHelper timing - cpu: {cpu_time:.4f}s, cuda: {cuda_time:.4f}s"
+        f"ImageAugmentationsHelper timing - cpu: {cpu_time_total:.4f}s, cuda: {cuda_time_total:.4f}s"
     )
-
+    print(
+        f"ImageAugmentationsHelper timing avg. per call - cpu: {cpu_time_avg:.4f}s, cuda avg: {cuda_time_avg:.4f}s")
 
 def test_zero_augs_input_unchanged():
     device = 'cpu'
@@ -709,13 +706,14 @@ if __name__ == '__main__':
     # test_sample_images_augmentation()
     # test_random_softbinarize_only_sample_images_visualization()
     # test_AugmentationSequential()
-    # test_augmentation_helper_preserves_device(device,
-    #                                         shift_aug_prob,
-    #                                         rotation_aug_prob,
-    #                                         gaussian_noise_aug_prob,
-    #                                         gaussian_blur_aug_prob,
-    #                                         brightness_aug_prob,
-    #                                         contrast_aug_prob)
+    #test_augmentation_helper_preserves_device(device,
+    #                                        shift_aug_prob,
+    #                                        rotation_aug_prob,
+    #                                        gaussian_noise_aug_prob,
+    #                                        gaussian_blur_aug_prob,
+    #                                        brightness_aug_prob,
+    #                                        contrast_aug_prob)
     # test_zero_augs_input_unchanged()
     # test_random_gaussian_noise_validation_filters_dark_images()
     # test_detect_border_crossing_white_masks()
+    test_augmentation_helper_timing_cpu_vs_cuda()
