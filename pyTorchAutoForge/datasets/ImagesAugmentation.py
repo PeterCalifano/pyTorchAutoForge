@@ -403,8 +403,10 @@ class ImageAugmentationsHelper(nn.Module):
 
             # Apply torchvision augmentation module
             if self.torchvision_augs_module is not None:
-                UserWarning(
-                    "WARNING: torchvision augmentations module is currently not implemented. Interface will likely be deprecated.")
+                warn(
+                    "WARNING: torchvision augmentations module is currently not implemented. Interface will likely be deprecated.",
+                    UserWarning,
+                )
                 # TODO how to do labels update in torchvision?
                 # img_tensor = self.torchvision_augs_module(img_tensor)
 
