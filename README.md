@@ -5,29 +5,19 @@ A library based on PyTorch (<https://pytorch.org/>) and designed to automate ML 
 
 ## Installation using pip
 
-This is the suggested installation method, the others are mostly intended for development and may not be completely up-to-date with the newest release versions. 
-Run in a conda or virtual environment:
+The suggested installation method is through pip as the others are mostly intended for development and may not be completely up-to-date with the newest release versions. 
+In whatever conda or virtual environment you like (preferably with a sufficiently new torch release, to install from pypi:
 
 ```bash
 pip install pyTorchAutoForge
 ```
 
-Dependencies for the core modules should be installed automatically using pip.
+Or from a local copy of the repository (requires `hatch` module for the build):
 
-## Manual installation (venv)
+```bash
+cd pyTorchAutoforge
+pip install .
+```
 
-1) Clone the repository
-2) Create a virtual environment using python >= 3.10 (tested with 3.11), using `python -m venv <your_venv_name>`
-3) Activate the virtual environment using `source <your_venv_name>/bin/activate`
-4) Install the requirements using `pip install -r requirements.txt`
-5) Install the package using `pip install .` in the root folder of the repository
-
-## Manual installation (conda)
-
-### Option A:
-  1) Clone the repository
-  2) Create a new conda environment (python >=3.10) using the provided `enrivonment.yml` file
-
-### Option B;
-  1) Clone the repository
-  2) Use the automatic installation script `conda_install.sh`. There are several options, use those you need. It will automatically create a new environment named **autoforge**.
+An automatic installation script `conda_install.sh` is provided and should work in most cases. Note that it will automatically create a new environment named **autoforge** and makes several assumptions about your environment.
+Dependencies for the core modules should be installed automatically using pip. However, this is currently not fully tested. Please open related issues.
