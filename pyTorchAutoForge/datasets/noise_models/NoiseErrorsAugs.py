@@ -82,7 +82,7 @@ class PoissonShotNoise(IntensityAugmentationBase2D):
 
         # Pixel value is the variance of the Photon Shot Noise (higher where brighter).
         # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel.
-        photon_shot_noise = torch.poisson(input).to(device=device)
+        photon_shot_noise = torch.poisson(input)
 
         # Sum noise to the original images
         return input + photon_shot_noise
