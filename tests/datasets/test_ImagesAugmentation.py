@@ -95,7 +95,7 @@ def _time_augmentation_helper(augs_helper: ImageAugmentationsHelper,
                               images: torch.Tensor,
                               labels: torch.Tensor,
                               num_iters: int = 100,
-                              ) -> [float, float]:
+                              ) -> tuple[float, float]:
     """Helper function to time execution of ImageAugmentationsHelper forward pass (compare cpu vs gpu)"""
     for _ in range(3):
         augs_helper(images, labels)
