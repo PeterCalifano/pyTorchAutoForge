@@ -1,3 +1,4 @@
+import kornia.augmentation as K
 from logging import warning
 from warnings import warn
 from typing import Any
@@ -19,6 +20,7 @@ except ImportError:
 
 from typing import Literal, TypeAlias
 import torch
+import torch.nn.functional as F
 from torch import nn, Tensor
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -29,6 +31,12 @@ import colorama
 from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
 from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
+
+from pyTorchAutoForge.datasets.noise_models.IntensityAugs import RandomSoftBinarizeImage, RandomConvertTextureToShadingLaw, RandomNoiseTexturePattern
+from pyTorchAutoForge.datasets.noise_models.NoiseErrorsAugs import RandomGaussianNoiseVariableSigma, PoissonShotNoise
+
+from pyTorchAutoForge.datasets.noise_models.GeometricAugs import BorderAwareRandomAffine
+
 
 # %% Type aliases
 ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
@@ -52,444 +60,6 @@ class PlaceholderAugmentation(IntensityAugmentationBase2D):
 
         return input
 
-# %% Intensity augmentations
-
-
-class PoissonShotNoise(IntensityAugmentationBase2D):
-    """
-    Applies Poisson shot noise to a batch of images.
-
-    This module simulates photon shot noise, where the variance of the noise 
-    is proportional to the pixel intensity. The noise is applied to a random 
-    subset of the batch based on the specified probability.
-
-    Args:
-        nn (torch.nn.Module): Base class for all neural network modules.
-
-    Attributes:
-        probability (float): Probability of applying Poisson noise to each 
-            image in the batch.
-
-    Methods:
-        forward(imgs_array: torch.Tensor) -> torch.Tensor:
-            Applies Poisson shot noise to the input batch of images.
-
-    Example:
-        >>> noise = PoissonShotNoise(probability=0.5)
-        >>> noisy_images = noise(images)
-    """
-
-    def __init__(self, probability: float = 0.0):
-        super().__init__(p=probability)
-
-    def apply_transform(self,
-                        input: torch.Tensor,
-                        params: dict[str, torch.Tensor],
-                        flags: dict[str, Any],
-                        transform: torch.Tensor | None = None) -> torch.Tensor:
-        """
-        Applies Poisson shot noise to the input batch of images.
-
-        Args:
-            x (torch.Tensor | tuple[torch.Tensor]): Input images as a tensor or tuple of tensors.
-            labels (torch.Tensor | tuple[torch.Tensor] | None, optional): Optional labels associated with the images.
-
-        Returns:
-            torch.Tensor | tuple[torch.Tensor, ...]: Images with Poisson shot noise applied, or a tuple containing such images.
-
-        """
-
-        # TODO modify to handle tuple inputs
-
-        # Randomly sample a boolean mask to index batch size
-        B = input.shape[0]
-        device, dtype = input.device, input.dtype
-
-        # Pixel value is the variance of the Photon Shot Noise (higher where brighter).
-        # Therefore, the mean rate parameter mu is equal to the DN at the specific pixel.
-        photon_shot_noise = torch.poisson(input)
-
-        # Sum noise to the original images according to mask
-        input += photon_shot_noise
-
-        return input
-
-    def generate_parameters(self,
-                            shape: tuple[int, ...]) -> dict:
-        return {}  # Not needed for this kind of noise
-
-    def compute_transformation(self, input: torch.Tensor, params: dict, flags: dict) -> torch.Tensor:
-        return torch.empty(0)  # Not used in IntensityAugmentationBase2D
-
-
-class RandomGaussianNoiseVariableSigma(IntensityAugmentationBase2D):
-    """
-    Applies per-sample Gaussian noise with variable sigma.
-    This augmentation adds Gaussian noise to each sample in a batch, where the standard deviation (sigma) can be a scalar, a (min, max) tuple for random sampling, or a per-sample array/tensor. The noise is applied to each sample with a specified probability.
-
-    Args:
-        sigma_noise (float or tuple[float, float]): Standard deviation of the Gaussian noise. Can be a scalar
-            or a tuple specifying the (min, max) range for random sampling per sample.
-        gaussian_noise_aug_prob (float, optional): Probability of applying noise to each sample. Defaults to 0.5.
-
-    Methods:
-        forward(x, labels=None):
-            Applies Gaussian noise to the input tensor with variable sigma per sample.
-
-    Example:
-        >>> aug = RandomGaussianNoiseVariableSigma(sigma_noise=(0.1, 0.5), gaussian_noise_aug_prob=0.7)
-        >>> noisy_imgs = aug(images)
-    """
-
-    def __init__(self,
-                 sigma_noise: int | float | tuple[float | int, float | int],
-                 gaussian_noise_aug_prob: float = 0.5,
-                 keep_scalar_sigma_fixed: bool = False,
-                 enable_img_validation_mode: bool = True,
-                 validation_min_num_bright_pixels: int = 50,
-                 validation_pixel_threshold: float = 5.0):
-
-        # Init superclass
-        super().__init__(p=gaussian_noise_aug_prob)
-
-        # Store parameters
-        self.sigma_gaussian_noise_dn = sigma_noise
-        self.keep_scalar_sigma_fixed: bool = keep_scalar_sigma_fixed
-
-        self.enable_img_validation_mode: bool = enable_img_validation_mode
-        self.validation_min_num_bright_pixels: int = validation_min_num_bright_pixels
-
-        # Pixel intensity threshold to consider a pixel "bright"
-        self.validation_pixel_threshold: float | Tensor = validation_pixel_threshold
-
-        # Initialization checks on sigma values
-        if isinstance(self.sigma_gaussian_noise_dn, (tuple, list)):
-            if len(self.sigma_gaussian_noise_dn) != 2:
-                raise ValueError(
-                    f'Invalid sigma_noise tuple length. Expected 2 got {len(self.sigma_gaussian_noise_dn)}')
-            if self.sigma_gaussian_noise_dn[0] < 0 or self.sigma_gaussian_noise_dn[1] < 0:
-                raise ValueError(
-                    'Sigma noise values must be non-negative.')
-            if self.sigma_gaussian_noise_dn[0] >= self.sigma_gaussian_noise_dn[1]:
-                raise ValueError(
-                    'Invalid sigma noise range. Minimum must be less than maximum.')
-            # Cast to tuple to ensure immutability
-            self.sigma_gaussian_noise_dn = tuple(
-                self.sigma_gaussian_noise_dn)  # type:ignore
-
-        elif isinstance(self.sigma_gaussian_noise_dn, (int, float)):
-            if self.sigma_gaussian_noise_dn < 0:
-                raise ValueError('Sigma noise value must be non-negative.')
-            # Cast to float
-            self.sigma_gaussian_noise_dn = float(self.sigma_gaussian_noise_dn)
-
-        else:
-            raise TypeError(
-                f'Invalid sigma_noise value. Expected int, float or tuple[float | int, float | int] got {type(self.sigma_gaussian_noise_dn)}')
-
-    def apply_transform(self,
-                        input: torch.Tensor,
-                        params: dict[str, torch.Tensor],
-                        flags: dict[str, Any],
-                        transform: torch.Tensor | None = None) -> torch.Tensor:
-
-        # Expect BCHW
-        if input.ndim != 4:
-            raise ValueError(
-                f"Expected 4D BCHW, got shape {tuple(input.shape)}")
-
-        B, C, H, W = input.shape
-        device = input.device
-
-        # Determine sigma per sample
-        sigma_val = self.sigma_gaussian_noise_dn
-
-        if isinstance(sigma_val, (tuple, list)):
-            # Get min-max values
-            min_s, max_s = sigma_val
-
-            # Do uniform sampling per sample
-            sigma_array = (max_s - min_s) * \
-                torch.rand(B, device=device) + min_s
-
-        elif isinstance(sigma_val, (float, int)):
-
-            if self.keep_scalar_sigma_fixed:
-                # Use same assigned sigma as fixed value
-                sigma_array = torch.full((B,), float(sigma_val), device=device)
-
-            else:
-                # Randomize using interval [0, sigma_val]
-                sigma_array = (sigma_val * torch.rand(B, device=device))
-        else:
-            raise TypeError(
-                f'Invalid sigma_noise value. Expected int, float or tuple[float | int, float | int] got {type(sigma_val)}')
-
-        # If validation mode, check image content first. Set sigma to zero for those entries before applying
-        if self.enable_img_validation_mode:
-
-            # Check threshold validity (auto-correct based on maximum value in images)
-            max_img_value = input.abs().max()
-            flat_input = input.abs().reshape(B, -1)
-
-            if self.validation_pixel_threshold >= max_img_value:
-
-                print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: validation_pixel_threshold ({self.validation_pixel_threshold}) is greater than or equal to the maximum image pixel value ({max_img_value}). Adjusting threshold it automatically to 0.05 * median of max per sample: {self.validation_pixel_threshold}.{colorama.Style.RESET_ALL}")
-
-                # Get max per sample
-                max_per_sample = flat_input.max(dim=1).values
-
-                # Compute as 0.05 of median of max image values
-                validation_pixel_threshold_ = 0.05 * max_per_sample
-            else:
-                # Use the configured scalar threshold for all samples
-                validation_pixel_threshold_ = torch.full((B,),
-                                                        float(
-                                                            self.validation_pixel_threshold),
-                                                        device=input.device,
-                                                        dtype=flat_input.dtype,
-                                                        )
-
-            # Count number of bright pixels per image in batch
-            is_pixel_bright_count_mask = flat_input.gt(validation_pixel_threshold_.view(B, 1)).sum(dim=1)  # Get count of bright pixels per image
-
-            # Determine valid images mask
-            # Get bool mask where >= min_bright pixels shapes as (B,)
-            is_valid_mask = is_pixel_bright_count_mask.ge(
-                self.validation_min_num_bright_pixels)
-
-            # Set sigma to zero for invalid images by multiplying with bool mask
-            sigma_array = sigma_array * is_valid_mask.to(sigma_array.dtype)
-
-        # Sample image noise and apply to input batch
-        sigma_array = sigma_array.view(B, 1, 1, 1)
-        noise = torch.randn_like(input) * sigma_array
-
-        return input + noise
-
-
-class RandomNoiseTexturePattern(IntensityAugmentationBase2D):
-    """
-    Randomly fills the masked region with structured noise. 
-    Expects input tensor of shape (B, C+1, H, W):
-      - first C channels: image
-      - last    1 channel: binary mask (0=keep, 1=replace)
-    Returns the same shape.
-    """
-
-    def __init__(self,
-                 noise_texture_aug_prob: float = 0.5,
-                 randomization_prob: float = 0.6,
-                 masking_quantile: float = 0.85) -> None:
-        super().__init__(p=noise_texture_aug_prob)
-
-        self.randomization_prob = randomization_prob
-        self.masking_quantile = masking_quantile
-
-    def apply_transform(self,
-                        input: torch.Tensor,
-                        params: dict[str, torch.Tensor],
-                        flags: dict[str, Any],
-                        transform: torch.Tensor | None = None) -> torch.Tensor:
-
-        img_batch = input[0]
-        B = input.shape[0]
-        device, dtype = img_batch.device, img_batch.dtype
-
-        # Compute masks to select target patches
-        brightness = img_batch.mean(dim=1, keepdim=True)  # B×1×H×W
-        brightness_thr = (brightness.view(
-            B, 1, -1)).quantile(self.masking_quantile, dim=2, keepdim=True)
-
-        img_mask = (brightness > brightness_thr).float()
-
-        # TODO implement noise patterns to apply to image patches
-
-        # Re-attach mask channel for downstream modules
-        return out_imgs
-
-
-# %% Geometric augmentations
-# TODO (PC) move translate_batch to this custom augmentation class, add rotation and extend for multiple points labels shift
-class RandomImageLabelsRotoTranslation(GeometricAugmentationBase2D):
-    """
-    RandomImageLabelsRotoTranslation _summary_
-
-    _extended_summary_
-
-    :param AugsBaseClass: _description_
-    :type AugsBaseClass: _type_
-    """
-
-    def __init__(self,
-                 angles: float | tuple[float, float] = (0.0, 360.0),
-                 distribution_type: Literal["uniform", "normal"] = "uniform"):
-        super().__init__()
-        self.angles = angles
-        self.distribution_type = distribution_type
-
-    def forward(self,
-                input: torch.Tensor,
-                params: dict[str, torch.Tensor] | None = None,
-                **kwargs: Any) -> torch.Tensor:
-
-        # TODO implement forward
-        if 1:
-            raise NotImplementedError("Implementation todo")
-
-        return x
-
-
-def Flip_coords_X(coords: torch.Tensor,
-                  image_width: int
-                  ) -> torch.Tensor:
-    """
-    Flip x-coordinates horizontally for a set of coordinates, given the image width.
-
-    This function flips the x-coordinates of points or batches of points horizontally,
-    such that the leftmost point becomes the rightmost and vice versa, relative to the image width.
-
-    Args:
-        coords (torch.Tensor): Tensor of shape (N, 2) or (B, N, 2) representing coordinates.
-        image_width (int): The width of the image.
-
-    Returns:
-        torch.Tensor: Tensor of the same shape as `coords` with x-coordinates flipped.
-
-    Raises:
-        ValueError: If `coords` does not have shape (N,2) or (B,N,2).
-    """
-
-    if coords.dim() == 2:
-        # Get x, y coordinates from (N,2)
-        x = coords[:, 0]
-        y = coords[:, 1]
-
-        # Compute new X coordinates
-        new_x = (image_width - 1) - x
-        return torch.stack([new_x, y], dim=1)
-
-    elif coords.dim() == 3:
-        # Get x, y coordinates from (B,N,2)
-        x = coords[..., 0]
-        y = coords[..., 1]
-
-        # Compute new X coordinates
-        new_x = (image_width - 1) - x
-        return torch.stack([new_x, y], dim=-1)
-
-    else:
-        raise ValueError("coords must have shape (N,2) or (B,N,2)")
-
-
-def Flip_coords_Y(coords: torch.Tensor,
-                  image_height: int
-                  ) -> torch.Tensor:
-    """
-    Flip y-coordinates vertically for a set of coordinates, given the image height.
-
-    This function flips the y-coordinates of points or batches of points vertically,
-    such that the topmost point becomes the bottommost and vice versa, relative to the image height.
-
-    Args:
-        coords (torch.Tensor): Tensor of shape (N, 2) or (B, N, 2) representing coordinates.
-        image_height (int): The height of the image.
-
-    Returns:
-        torch.Tensor: Tensor of the same shape as `coords` with y-coordinates flipped.
-
-    Raises:
-        ValueError: If `coords` does not have shape (N,2) or (B,N,2).
-    """
-    if coords.dim() == 2:
-        # Get x, y coordinates from (N,2)
-        x = coords[:, 0]
-        y = coords[:, 1]
-
-        # Compute new Y coords
-        new_y = (image_height - 1) - y
-        return torch.stack([x, new_y], dim=1)
-
-    elif coords.dim() == 3:
-        # Get x, y coordinates from (B,N,2)
-        x = coords[..., 0]
-        y = coords[..., 1]
-
-        # Compute new Y coords
-        new_y = (image_height - 1) - y
-        return torch.stack([x, new_y], dim=-1)
-
-    else:
-        raise ValueError("coords must have shape (N,2) or (B,N,2)")
-
-
-# %% Kornia augmentations module
-if has_kornia:
-    class CustomImageCoordsFlipHoriz(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self, apply_prob: float = 0.5) -> None:
-            super().__init__(apply_prob)
-
-        def forward(self,
-                    input: torch.Tensor,
-                    params: dict[str, torch.Tensor] | None = None,
-                    **kwargs: Any) -> torch.Tensor:
-            """
-            Uses Kornia to horizontally flip a batch of images (B,C,H,W), and adjusts coords.
-
-            Args:
-                image (torch.Tensor): shape = (B, C, H, W)
-                coords (torch.Tensor): shape = (B, N, 2) or (B, 2), each (x,y)
-            Returns:
-                flipped_image: (B, C, H, W)
-                flipped_coords: (B, N, 2)
-            """
-
-            raise NotImplementedError(
-                "Error: not updated and compatible with supertype")
-
-            # Flip the batch of images
-            flipped_image = kornia.geometry.transform.hflip(image)
-
-            # Flip coordinates
-            _, _, H, W = image.shape
-            flipped_coords = Flip_coords_X(coords, image_width=W)
-            return flipped_image, flipped_coords
-
-    class CustomImageCoordsFlipVert(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self, apply_prob: float = 0.5) -> None:
-            super().__init__(apply_prob)
-
-        def forward(self,
-                    input: torch.Tensor,
-                    params: dict[str, torch.Tensor] | None = None,
-                    **kwargs: Any) -> torch.Tensor:
-            """
-            Uses Kornia to vertically flip a batch of images (B,C,H,W), and adjusts coords.
-
-            Args:
-                image (torch.Tensor): shape = (B, C, H, W)
-                coords (torch.Tensor): shape = (B, N, 2) or (B, 2), each (x,y)
-            Returns:
-                flipped_image: (B, C, H, W)
-                flipped_coords: (B, N, 2)
-            """
-            raise NotImplementedError(
-                "Error: not updated and compatible with supertype")
-            flipped_image = kornia.geometry.transform.vflip(image)
-            _, _, H, W = image.shape
-            flipped_coords = Flip_coords_Y(coords, image_height=H)
-            return flipped_image, flipped_coords
-else:
-    class CustomImageCoordsFlipHoriz(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self) -> None:
-            raise ImportError(
-                "Kornia is not installed. Run `pip install kornia`.")
-
-    class CustomImageCoordsFlipVert(GeometricAugmentationBase2D):  # type: ignore
-        def __init__(self) -> None:
-            raise ImportError(
-                "Kornia is not installed. Run `pip install kornia`.")
-
 # %% Augmentation helper configuration dataclass
 
 
@@ -499,10 +69,11 @@ class AugmentationConfig:
     input_data_keys: list[DataKey]
     keepdim: bool = True
     same_on_batch: bool = False
+    random_apply_photometric: bool = False
     random_apply_minmax: tuple[int, int] = (1, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
 
-    # Affine roto-translation augmentation
+    # Affine roto-translation augmentation (border aware)
     affine_align_corners: bool = False
     affine_fill_value: int = 0  # Fill value for empty pixels after rotation
 
@@ -513,11 +84,6 @@ class AugmentationConfig:
     shift_aug_prob: float = 0.0
     max_shift_img_fraction: float | tuple[float, float] = (0.5, 0.5)
     translate_distribution_type: Literal["uniform", "normal"] = "uniform"
-
-    # Default is None = image centre
-    # rotation_centre: tuple[float, float] | None = None
-    # rotation_interp_mode: transforms.InterpolationMode = transforms.InterpolationMode.BILINEAR
-    # rotation_expand: bool = False  # If True, expands rotated image to fill size
 
     # Flip augmentation probability
     hflip_prob: float = 0.0
@@ -544,6 +110,12 @@ class AugmentationConfig:
     min_max_contrast_factor: tuple[float, float] = (0.8, 1.2)
     brightness_aug_prob: float = 0.0
     contrast_aug_prob: float = 0.0
+
+    # Random binarization
+    softbinarize_aug_prob: float = 0.0
+    softbinarize_thr_quantile: float = 0.01
+    softbinarize_blending_factor_minmax: None | tuple[float, float] = (
+        0.3, 0.7)
 
     # Scaling factors for labels
     label_scaling_factors: ndArrayOrTensor | None = None
@@ -607,11 +179,12 @@ class AugmentationConfig:
 
 # %% Augmentation helper class
 # TODO (PC) add capability to support custom augmentation module by appending it in the user-specified location ("append_custom_module_after = (module, <literal>)" that maps to a specified entry in the augs_ops list. The given module is then inserted into the list at the specified position)
-
 class ImageAugmentationsHelper(nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
         super().__init__()
         self.augs_cfg = augs_cfg
+        self.device = torch.device(
+            augs_cfg.device) if augs_cfg.device is not None else None
         self.num_aug_ops = 0
 
         # TODO add input_data_keys to AugmentationConfig
@@ -620,6 +193,13 @@ class ImageAugmentationsHelper(nn.Module):
         # Define kornia augmentation pipeline
         augs_ops: list[GeometricAugmentationBase2D |
                        IntensityAugmentationBase2D] = []
+
+        # TODO categorize augmentations
+        geometric_augs_ops: list[GeometricAugmentationBase2D] = []
+        photometric_augs_ops: list[IntensityAugmentationBase2D] = []
+        optics_augs_ops: list[IntensityAugmentationBase2D] = []
+        noise_augs_ops: list[IntensityAugmentationBase2D] = []
+
         torch_vision_ops = nn.ModuleList()
 
         # GEOMETRIC AUGMENTATIONS
@@ -647,12 +227,17 @@ class ImageAugmentationsHelper(nn.Module):
                 translate_shift = (0.0, 0.0)
 
             # Construct RandomAffine
-            augs_ops.append(K.RandomAffine(degrees=rotation_degrees,
-                                           translate=translate_shift,
-                                           p=augs_cfg.rotation_aug_prob,
-                                           keepdim=True,
-                                           align_corners=augs_cfg.affine_align_corners,
-                                           same_on_batch=False))
+            base_random_affine = K.RandomAffine(degrees=rotation_degrees,
+                                                translate=translate_shift,
+                                                p=augs_cfg.rotation_aug_prob,
+                                                keepdim=True,
+                                                align_corners=augs_cfg.affine_align_corners,
+                                                same_on_batch=False)
+            # Wrap into BorderAwareRandomAffine
+            augs_ops.append(BorderAwareRandomAffine(base_random_affine=base_random_affine,
+                                                    num_pix_crossing_detect=10,
+                                                    intensity_threshold_uint8=2.0)
+                            )
 
         # INTENSITY AUGMENTATIONS
         # Random brightness
@@ -670,6 +255,12 @@ class ImageAugmentationsHelper(nn.Module):
                                              p=augs_cfg.contrast_aug_prob,
                                              keepdim=True,
                                              clip_output=False))
+
+        # Random soft binarization
+        if augs_cfg.softbinarize_aug_prob > 0:
+            augs_ops.append(RandomSoftBinarizeImage(aug_prob=augs_cfg.softbinarize_aug_prob,
+                                                    masking_quantile=augs_cfg.softbinarize_thr_quantile,
+                                                    blending_factor_minmax=augs_cfg.softbinarize_blending_factor_minmax))
 
         # OPTICS AUGMENTATIONS
         # Random Gaussian blur
@@ -702,6 +293,7 @@ class ImageAugmentationsHelper(nn.Module):
         # Add placeholder if needed to prevent errors due to scalar augmentation count
         if len(augs_ops) == 0:
             print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops! Forward pass will not do anything if called.{colorama.Style.RESET_ALL}")
+
         elif len(augs_ops) == 1:
             # If len of augs_ops == 1 add placeholder augs for random_apply
             augs_ops.append(PlaceholderAugmentation())
@@ -710,33 +302,69 @@ class ImageAugmentationsHelper(nn.Module):
 
         # Build AugmentationSequential from nn.ModuleList
         # Use maximum number of augmentations if upper bound not provided
-        if augs_cfg.random_apply_minmax[1] == -1:
-            random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
-            random_apply_minmax_[1] = len(augs_ops) - 1
+        if augs_cfg.random_apply_photometric:
+            if augs_cfg.random_apply_minmax[1] == -1:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = len(augs_ops) - 1
+            else:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = tmp_random_apply_minmax_[1] - 1
+
+            random_apply_minmax_: tuple[int, int] | bool = (
+                tmp_random_apply_minmax_[0], tmp_random_apply_minmax_[1])
         else:
-            random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
-            random_apply_minmax_[1] = random_apply_minmax_[1] - 1
+            random_apply_minmax_ = False
 
         # Transfer all modules to device if specified
-        if augs_cfg.device is not None:
+        if self.device is not None:
 
             for aug_op in augs_ops:
-                aug_op.to(augs_cfg.device)
+                aug_op.to(self.device)
 
             for aug_op in torch_vision_ops:
-                aug_op.to(augs_cfg.device)
+                aug_op.to(self.device)
 
         self.kornia_augs_module = AugmentationSequential(*augs_ops,
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
                                                          keepdim=False,
-                                                         random_apply=(random_apply_minmax_[0], random_apply_minmax_[1])).to(augs_cfg.device)
+                                                         random_apply=random_apply_minmax_
+                                                         )
+        if self.device is not None:
+            self.kornia_augs_module.to(self.device)
 
         # if augs_cfg.append_custom_module_after_ is not None:
         #    pass
 
         self.torchvision_augs_module = nn.Sequential(
             *torch_vision_ops) if len(torch_vision_ops) > 0 else None
+        if self.device is not None and self.torchvision_augs_module is not None:
+            self.torchvision_augs_module.to(self.device)
+
+    def _resolve_device(self, *tensors: torch.Tensor) -> torch.device | None:
+        """Helper method to resolve device from input or configuration"""
+        if self.device is not None:
+            return self.device
+
+        for tensor in tensors:
+            if torch.is_tensor(tensor):
+                return tensor.device
+
+        return None
+
+    def _move_input_to_device(self, input: Any, device: torch.device | None) -> Any:
+        """Helper method to move inputs to device"""
+        if device is None:
+            return input
+
+        if torch.is_tensor(input):
+            return input.to(device)
+
+        if isinstance(input, (list, tuple)):
+            return type(input)(
+                self._move_input_to_device(item, device) for item in input)
+
+        return input
 
     # images: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
     # labels: ndArrayOrTensor
@@ -764,6 +392,10 @@ class ImageAugmentationsHelper(nn.Module):
             is_numpy = isinstance(images_, np.ndarray)
             img_tensor, to_numpy, scale_factor = self.preprocess_images_(
                 images_)
+            
+            target_device = self._resolve_device(img_tensor)
+            if target_device is not None:
+                img_tensor = img_tensor.to(target_device)
 
             # Undo scaling before adding augs if is_normalized
             if scale_factor is not None and self.augs_cfg.is_normalized:
@@ -771,26 +403,28 @@ class ImageAugmentationsHelper(nn.Module):
 
             # Apply torchvision augmentation module
             if self.torchvision_augs_module is not None:
-                # TODO any way to modify the rotation centre at runtime? --> No way, need to switch to kornia custom with warp_affine
+                warn(
+                    "WARNING: torchvision augmentations module is currently not implemented. Interface will likely be deprecated.",
+                    UserWarning,
+                )
                 # TODO how to do labels update in torchvision?
-                img_tensor = self.torchvision_augs_module(img_tensor)
-
-            # Apply translation
-            # if self.augs_cfg.shift_aug_prob > 0:
-            #    img_shifted, lbl_shifted = self.translate_batch_(
-            #        img_tensor, labels)
-            # else:
-            #    img_shifted = img_tensor
-            #    lbl_shifted = numpy_to_torch(labels).float()
+                # img_tensor = self.torchvision_augs_module(img_tensor)
 
             # Recompose inputs replacing image
             inputs = list(inputs)
             inputs[img_index] = img_tensor
 
+            # Ensure that inputs are on the correct device
+            if target_device is not None:
+                inputs = [
+                    self._move_input_to_device(input, target_device)
+                    for input in inputs
+                ]
+
             ##########
             # Unsqueeze keypoints if input is [B, 2], must be [N, 2]
-            # DEVNOTE temporary code that requires extension to be more general!
-            # TODO find a way to actually get keypoints and other entries without to index those manually!
+            # DEVNOTE temporary code that requires extension to be more general
+            # TODO find a way to actually get keypoints and other entries without to index those manually
 
             lbl_to_unsqueeze = inputs[1].dim() == 2
             if lbl_to_unsqueeze:
@@ -803,11 +437,11 @@ class ImageAugmentationsHelper(nn.Module):
             inputs[1] = keypoints
             ##########
 
-            # Apply augmentations module
             if self.num_aug_ops > 0:
+                # %% Apply augmentations module
                 aug_inputs = self.kornia_augs_module(*inputs)
 
-                # Transformed image validator and fixer
+                # %% Validate and fix augmentations
                 if self.augs_cfg.enable_batch_validation_check:
                     aug_inputs = self.validate_fix_input_img_(
                         *aug_inputs, original_inputs=inputs)
@@ -855,11 +489,11 @@ class ImageAugmentationsHelper(nn.Module):
                     aug_inputs[img_index].permute(0, 2, 3, 1))
                 aug_inputs[lbl_index] = torch_to_numpy(aug_inputs[lbl_index])
 
-        # DEVNOTE: image appears to be transferred to cpu for no reason. To investigate.
-        ###
-        aug_inputs[0] = aug_inputs[0].to(keypoints.device)
-        aug_inputs[1].to(keypoints.device)
-        ###
+        if target_device is not None:
+            aug_inputs = type(aug_inputs)(
+                self._move_input_to_device(input, target_device)
+                for input in aug_inputs
+            )
 
         return aug_inputs
 
@@ -1096,7 +730,9 @@ class ImageAugmentationsHelper(nn.Module):
         # mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
 
         # Move all inputs to the same device
-        inputs = tuple(input.to(self.augs_cfg.device) for input in inputs)
+        target_device = self._resolve_device(inputs[img_index])
+        inputs = tuple(
+            self._move_input_to_device(input, target_device) for input in inputs)
 
         # A threshold to detect near-black images (tune if needed)
         # TODO remove hardcoded threshold. It also assumes that the value of intensity is NOT [0,1]!
@@ -1115,16 +751,31 @@ class ImageAugmentationsHelper(nn.Module):
         # Return validity mask and new invalid tensor samples (using index_select)
         return is_valid_mask, invalid_inputs
 
-    # TODO (PC) move method to dedicated custom augmentation class
-    # DEPRECATED, move outside for archive
+    # Overload "to" method
+    def to(self, *args, **kwargs):
+        """Overload to method to apply to all submodules."""
+        device, _, _, _ = torch._C._nn._parse_to(*args, **kwargs)
+        if device is not None:
+            self.device = device
+            self.augs_cfg.device = str(device)
 
-    def translate_batch_(self,
-                         images: torch.Tensor,
-                         labels: ndArrayOrTensor
-                         ) -> tuple[torch.Tensor, torch.Tensor]:
+        super().to(*args, **kwargs)
+        self.kornia_augs_module.to(*args, **kwargs)
+
+        if self.torchvision_augs_module is not None:
+            self.torchvision_augs_module.to(*args, **kwargs)
+
+        return self
+
+    # STATIC METHODS
+    @staticmethod
+    def Shift_image_point_batch(augs_cfg: AugmentationConfig,
+                                images: torch.Tensor,
+                                labels: ndArrayOrTensor
+                                ) -> tuple[torch.Tensor, torch.Tensor]:
         """
             images: [B,C,H,W]
-            labels: torch.Tensor[B,N] or np.ndarray
+            labels: torch.Tensor[B,2] or np.ndarray
             returns: shifted images & labels in torch.Tensor
         """
 
@@ -1141,27 +792,28 @@ class ImageAugmentationsHelper(nn.Module):
             lbl.shape[0] == B), f"Label batch size {lbl.shape[0]} does not match image batch size {B}."
 
         # Sample shifts for each batch: dx ∈ [-max_x, max_x], same for dy
-        if isinstance(self.augs_cfg.max_shift_img_fraction, (tuple, list)):
-            max_x, max_y = self.augs_cfg.max_shift_img_fraction
+        if isinstance(augs_cfg.max_shift_img_fraction, (tuple, list)):
+            max_x, max_y = augs_cfg.max_shift_img_fraction
         else:
-            max_x, max_y = (self.augs_cfg.max_shift_img_fraction,
-                            self.augs_cfg.max_shift_img_fraction)
+            max_x, max_y = (augs_cfg.max_shift_img_fraction,
+                            augs_cfg.max_shift_img_fraction)
 
-        if self.augs_cfg.translate_distribution_type == "uniform":
+        if augs_cfg.translate_distribution_type == "uniform":
             # Sample shifts by applying 0.99 margin
             dx = torch.randint(-int(max_x), int(max_x)+1, (B,))
             dy = torch.randint(-int(max_y), int(max_y)+1, (B,))
-        elif self.augs_cfg.translate_distribution_type == "normal":
+
+        elif augs_cfg.translate_distribution_type == "normal":
             # Sample shifts from normal distribution
             dx = torch.normal(mean=0.0, std=max_x, size=(B,))
             dy = torch.normal(mean=0.0, std=max_y, size=(B,))
         else:
             raise ValueError(
-                f"Unsupported distribution type: {self.translate_distribution_type}. Supported types are 'uniform' and 'normal'.")
+                f"Unsupported distribution type: {augs_cfg.translate_distribution_type}. Supported types are 'uniform' and 'normal'.")
 
         shifted_imgs = images.new_zeros(images.shape)
 
-        # TODO improve this method, currently not capable of preventing the object to exit the plane
+        # TODO improve this method, currently not capable of preventing the object to exit the plane. Also, can be optimized with tensor ops
         for i in range(B):
             ox, oy = int(dx[i]), int(dy[i])
 
@@ -1186,17 +838,6 @@ class ImageAugmentationsHelper(nn.Module):
                 torch.tensor([ox, oy], dtype=lbl.dtype, device=lbl.device)
 
         return shifted_imgs, lbl
-
-    # Overload "to" method
-    def to(self, *args, **kwargs):
-        """Overload to method to apply to all submodules."""
-        super().to(*args, **kwargs)
-        self.kornia_augs_module.to(*args, **kwargs)
-
-        if self.torchvision_augs_module is not None:
-            self.torchvision_augs_module.to(*args, **kwargs)
-
-        return self
 
 # %% Prototypes TODO
 
@@ -1250,169 +891,159 @@ class ImageNormalization():
         return image / self.normalization_type.value
 
 
-# TODO GeometryAugsModule TBD may be unneeded
-class GeometryAugsModule(AugsBaseClass):
-    def __init__(self):
-        super(GeometryAugsModule, self).__init__()
-
-        # Example usage
-        self.augmentations = AugmentationSequential(
-            kornia_aug.RandomRotation(degrees=30.0, p=1.0),
-            kornia_aug.RandomAffine(degrees=0, translate=(0.1, 0.1), p=1.0),
-            data_keys=["input", "mask"]
-        )  # Define the keys: image is "input", mask is "mask"
-
-    def forward(self, x: torch.Tensor, labels: torch.Tensor | tuple[torch.Tensor]) -> torch.Tensor:
-        # TODO define interface (input, output format and return type)
-        x, labels = self.augmentations(x, labels)
-
-        return x, labels
-
-
 ############################################################################################################################
-# %% DEPRECATED functions (legacy code)
+# Standalone factory function for AugmentationSequential
 def build_kornia_augs(sigma_noise: float, sigma_gaussian_blur: tuple | float = (0.0001, 1.0),
                       brightness_factor: tuple | float = (0.0001, 0.01),
-                      contrast_factor: tuple | float = (0.0001, 0.01)) -> torch.nn.Sequential:
+                      contrast_factor: tuple | float = (0.0001, 0.01),
+                      use_cfg_factory: bool = True,
+                      augs_cfg: AugmentationConfig | None = None) -> nn.Module:
+    """Deprecated: prefer AugmentationConfig/ImageAugmentationsHelper; legacy path kept for reference."""
 
-    # Define kornia augmentation pipeline
-
-    # Random brightness
     brightness_min, brightness_max = brightness_factor if isinstance(
         brightness_factor, tuple) else (brightness_factor, brightness_factor)
-
-    random_brightness = kornia_aug.RandomBrightness(brightness=(
-        brightness_min, brightness_max), clip_output=False, same_on_batch=False, p=1.0, keepdim=True)
-
-    # Random contrast
     contrast_min, contrast_max = contrast_factor if isinstance(
         contrast_factor, tuple) else (contrast_factor, contrast_factor)
-
-    random_contrast = kornia_aug.RandomContrast(contrast=(
-        contrast_min, contrast_max), clip_output=False, same_on_batch=False, p=1.0, keepdim=True)
-
-    # Gaussian Blur
     sigma_gaussian_blur_min, sigma_gaussian_blur_max = sigma_gaussian_blur if isinstance(
         sigma_gaussian_blur, tuple) else (sigma_gaussian_blur, sigma_gaussian_blur)
+
+    if use_cfg_factory:
+        if augs_cfg is None:
+            augs_cfg = AugmentationConfig(
+                input_data_keys=[DataKey.IMAGE],
+                min_max_brightness_factor=(brightness_min, brightness_max),
+                brightness_aug_prob=1.0,
+                min_max_contrast_factor=(contrast_min, contrast_max),
+                contrast_aug_prob=1.0,
+                kernel_size=(5, 5),
+                sigma_gaussian_blur=(sigma_gaussian_blur_min,
+                                     sigma_gaussian_blur_max),
+                gaussian_blur_aug_prob=0.75,
+                sigma_gaussian_noise_dn=sigma_noise,
+                gaussian_noise_aug_prob=0.75,
+            )
+
+        augs_ops: list[GeometricAugmentationBase2D |
+                       IntensityAugmentationBase2D] = []
+
+        if augs_cfg.hflip_prob > 0:
+            augs_ops.append(K.RandomHorizontalFlip(p=augs_cfg.hflip_prob))
+
+        if augs_cfg.vflip_prob > 0:
+            augs_ops.append(K.RandomVerticalFlip(p=augs_cfg.vflip_prob))
+
+        if augs_cfg.shift_aug_prob > 0 or augs_cfg.rotation_aug_prob:
+
+            if augs_cfg.rotation_aug_prob > 0:
+                rotation_degrees = augs_cfg.rotation_angle
+            else:
+                rotation_degrees = 0.0
+
+            if augs_cfg.shift_aug_prob > 0:
+                translate_shift = augs_cfg.max_shift_img_fraction if isinstance(augs_cfg.max_shift_img_fraction, tuple) else (
+                    augs_cfg.max_shift_img_fraction, augs_cfg.max_shift_img_fraction)
+            else:
+                translate_shift = (0.0, 0.0)
+
+            base_random_affine = K.RandomAffine(degrees=rotation_degrees,
+                                                translate=translate_shift,
+                                                p=augs_cfg.rotation_aug_prob,
+                                                keepdim=True,
+                                                align_corners=augs_cfg.affine_align_corners,
+                                                same_on_batch=False)
+            augs_ops.append(BorderAwareRandomAffine(base_random_affine=base_random_affine,
+                                                    num_pix_crossing_detect=10,
+                                                    intensity_threshold_uint8=2.0)
+                            )
+
+        if augs_cfg.brightness_aug_prob > 0:
+            augs_ops.append(K.RandomBrightness(brightness=augs_cfg.min_max_brightness_factor,
+                                               p=augs_cfg.brightness_aug_prob,
+                                               keepdim=True,
+                                               clip_output=False))
+
+        if augs_cfg.contrast_aug_prob > 0:
+            augs_ops.append(K.RandomContrast(contrast=augs_cfg.min_max_contrast_factor,
+                                             p=augs_cfg.contrast_aug_prob,
+                                             keepdim=True,
+                                             clip_output=False))
+
+        if augs_cfg.softbinarize_aug_prob > 0:
+            augs_ops.append(RandomSoftBinarizeImage(aug_prob=augs_cfg.softbinarize_aug_prob,
+                                                    masking_quantile=augs_cfg.softbinarize_thr_quantile,
+                                                    blending_factor_minmax=augs_cfg.softbinarize_blending_factor_minmax))
+
+        if augs_cfg.gaussian_blur_aug_prob > 0:
+            augs_ops.append(K.RandomGaussianBlur(kernel_size=augs_cfg.kernel_size,
+                                                 sigma=augs_cfg.sigma_gaussian_blur,
+                                                 p=augs_cfg.gaussian_blur_aug_prob,
+                                                 keepdim=True))
+
+        if augs_cfg.poisson_shot_noise_aug_prob > 0:
+            augs_ops.append(PoissonShotNoise(
+                probability=augs_cfg.poisson_shot_noise_aug_prob))
+
+        if augs_cfg.gaussian_noise_aug_prob > 0:
+            augs_ops.append(RandomGaussianNoiseVariableSigma(sigma_noise=augs_cfg.sigma_gaussian_noise_dn,
+                                                             gaussian_noise_aug_prob=augs_cfg.gaussian_noise_aug_prob,
+                                                             keep_scalar_sigma_fixed=False,
+                                                             enable_img_validation_mode=augs_cfg.enable_batch_validation_check,
+                                                             validation_min_num_bright_pixels=50,
+                                                             validation_pixel_threshold=5.0
+                                                             ))
+
+        if len(augs_ops) == 0:
+            print(f"{colorama.Fore.LIGHTYELLOW_EX}WARNING: No augmentations defined in augs_ops! Forward pass will not do anything if called.{colorama.Style.RESET_ALL}")
+        elif len(augs_ops) == 1:
+            augs_ops.append(PlaceholderAugmentation())
+
+        if augs_cfg.random_apply_photometric:
+            if augs_cfg.random_apply_minmax[1] == -1:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = len(augs_ops) - 1
+            else:
+                tmp_random_apply_minmax_ = list(augs_cfg.random_apply_minmax)
+                tmp_random_apply_minmax_[1] = tmp_random_apply_minmax_[1] - 1
+
+            random_apply_minmax_: tuple[int, int] | bool = (
+                tmp_random_apply_minmax_[0], tmp_random_apply_minmax_[1])
+        else:
+            random_apply_minmax_ = False
+
+        if augs_cfg.device is not None:
+            for aug_op in augs_ops:
+                aug_op.to(augs_cfg.device)
+
+        return AugmentationSequential(*augs_ops,
+                                      data_keys=augs_cfg.input_data_keys,
+                                      same_on_batch=False,
+                                      keepdim=False,
+                                      random_apply=random_apply_minmax_
+                                      ).to(augs_cfg.device)
+
+    random_brightness = kornia_aug.RandomBrightness(brightness=(
+        brightness_min, brightness_max),
+        clip_output=False,
+        same_on_batch=False,
+        p=1.0,
+        keepdim=True)
+
+    random_contrast = kornia_aug.RandomContrast(contrast=(
+        contrast_min, contrast_max),
+        clip_output=False,
+        same_on_batch=False,
+        p=1.0,
+        keepdim=True)
+
     gaussian_blur = kornia_aug.RandomGaussianBlur(
         (5, 5), (sigma_gaussian_blur_min, sigma_gaussian_blur_max), p=0.75, keepdim=True)
 
-    # Gaussian noise
     gaussian_noise = kornia_aug.RandomGaussianNoise(
         mean=0.0, std=sigma_noise, p=0.75, keepdim=True)
-
-    # Motion blur
-    # direction_min, direction_max = -1.0, 1.0
-    # motion_blur = kornia_aug.RandomMotionBlur((3, 3), (0, 360), direction=(direction_min, direction_max), p=0.75, keepdim=True)
 
     return torch.nn.Sequential(random_brightness, random_contrast, gaussian_blur, gaussian_noise)
 
 
-def TranslateObjectImgAndPoints(image: torch.Tensor,
-                                label: torch.Tensor,
-                                max_size_in_pix: float | torch.Tensor | list[float]) -> tuple:
-
-    if not (isinstance(max_size_in_pix, torch.Tensor)):
-        max_size_in_pix = torch.Tensor([max_size_in_pix, max_size_in_pix])
-
-    num_entries = 1  # TODO update to support multiple images
-
-    # Get image size
-    image_size = image.shape
-
-    # Get max shift coefficients (how many times the size enters half image with margin)
-    # TODO validate computation
-    max_vertical = 0.99 * (0.5 * image_size[1] / max_size_in_pix[1] - 1)
-    max_horizontal = 0.99 * (0.5 * image_size[2] / max_size_in_pix[0] - 1)
-
-    raise NotImplementedError("TODO")
-
-    # Sample shift interval uniformly --> TODO for batch processing: this has to generate uniformly sampled array
-    shift_horizontal = torch.randint(-max_horizontal,
-                                     max_horizontal, (num_entries,))
-    shift_vertical = torch.randint(-max_vertical, max_vertical, (num_entries,))
-
-    # Shift vector --> TODO for batch processing: becomes a matrix
-    origin_shift_vector = torch.round(torch.Tensor(
-        [shift_horizontal, shift_vertical]) * max_size_in_pix)
-
-    # print("Origin shift vector: ", originShiftVector)
-
-    # Determine index for image cropping
-    # Vertical
-    idv1 = int(np.floor(np.max([0, origin_shift_vector[1]])))
-    idv2 = int(
-        np.floor(np.min([image_size[1], origin_shift_vector[1] + image_size[1]])))
-
-    # Horizontal
-    idu1 = int(np.floor(np.max([0, origin_shift_vector[0]])))
-    idu2 = int(
-        np.floor(np.min([image_size[2], origin_shift_vector[0] + image_size[2]])))
-
-    croppedImg = image[:, idv1:idv2, idu1:idu2]
-
-    # print("Cropped image shape: ", croppedImg.shape)
-
-    # Create new image and store crop
-    shiftedImage = torch.zeros(
-        image_size[0], image_size[1], image_size[2], dtype=torch.float32)
-
-    # Determine index for pasting
-    # Vertical
-    idv1 = int(abs(origin_shift_vector[1])
-               ) if origin_shift_vector[1] < 0 else 0
-    idv2 = idv1 + croppedImg.shape[1]
-    # Horizontal
-    idu1 = int(abs(origin_shift_vector[0])
-               ) if origin_shift_vector[0] < 0 else 0
-    idu2 = idu1 + croppedImg.shape[2]
-
-    shiftedImage[:, idv1:idv2, idu1:idu2] = croppedImg
-
-    # Shift labels (note that coordinate of centroid are modified in the opposite direction as of the origin)
-    shiftedLabel = label - \
-        torch.Tensor(
-            [origin_shift_vector[0], origin_shift_vector[1], 0], dtype=torch.float32)
-
-    return shiftedImage, shiftedLabel
-
-
-# %% DEVELOPMENT CODE
+# %% Code for development
 if __name__ == "__main__":
     pass
-
-"""
-    # For possible later development: translation on batch, tensorized
-    def _translate_batch(self,
-                         images: torch.Tensor,
-                         labels: ArrayOrTensor
-                        ) -> Tuple[torch.Tensor, torch.Tensor]:
-        B,C,H,W = images.shape
-        # convert labels
-        lbl = torch.from_numpy(labels).float() if isinstance(labels, np.ndarray) else labels.float()
-        if lbl.dim()==2:
-            lbl = lbl.unsqueeze(0)
-        # prepare per-sample max shifts
-        if isinstance(self.cfg.max_shift, torch.Tensor):
-            ms = self.cfg.max_shift.to(images.device).long()
-        elif isinstance(self.cfg.max_shift, list):
-            ms = torch.tensor(self.cfg.max_shift, device=images.device).long()
-        else:
-            fx,fy = self.cfg.max_shift if isinstance(self.cfg.max_shift,tuple) else (self.cfg.max_shift,self.cfg.max_shift)
-            ms = torch.tensor([[int(fx),int(fy)]]*B, device=images.device)
-        # random shifts uniform integer in [-max, max]
-        dx = torch.randint(-ms[:,0], ms[:,0]+1, (B,), device=images.device)
-        dy = torch.randint(-ms[:,1], ms[:,1]+1, (B,), device=images.device)
-        # normalized translation for affine: tx = dx/(W/2), ty = dy/(H/2)
-        tx = dx.float()/(W/2)
-        ty = dy.float()/(H/2)
-        # build theta for each sample: [[1,0,tx],[0,1,ty]]
-        theta = torch.zeros((B,2,3), device=images.device, dtype=images.dtype)
-        theta[:,0,0] = 1; theta[:,1,1] = 1
-        theta[:,0,2] = tx; theta[:,1,2] = ty
-        # grid and sample
-        grid = F.affine_grid(theta, images.size(), align_corners=False)
-        shifted = F.grid_sample(images, grid, padding_mode='zeros', align_corners=False)
-        # shift labels in pixel space
-        lbl_t = lbl - torch.stack([dx,dy], dim=1).unsqueeze(1).float()
-"""

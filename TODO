@@ -32,16 +32,25 @@
   - [x] Add automatic mixed precision support from torch
   - [x] Add optional validation check in Augmentation helper to ensure all inputs are valid ones with remedy action
   - [x] Improve handling of training errors (stop and kill run if nan or Inf)
+  - [x] Implement prototype usage of AMP for mixed precision training
 
-- Patches of v0.2.X
+- Minor versions and patches of v0.2.X
   - [x] Major fixes in v0.2.1 (bugs introduced in v0.2.0)
+  - [x] Fix bugs in augmentation module (validation module)
+  - [ ] [MAJOR] Restructure and expand augmentations module to correctly handle images and 1D vectors jointly
+  - [ ] Implement 1d vector error models (from selected distributions)
+  - [ ] Change random apply and structure of augs module for images (split based on type)
+  - [x] Implement "binarize" augmentation for images (EDIT: soft-binarize in the final version)
+  - [ ] Review and unit test selection criteria implementation
+  - [ ] Extend augs-trainer integration to allow "discard" option in validation module
+  - [x] Implement tailoring of RandomAffine to make it border crossing aware
 
 - [ ] v0.3.X
   - [x] Implement custom adaptive pooling layers for ONNx static export
   - [x] Implement tests for *onnxability* of models provided by model_building module of PTAF
   - [ ] Modify implementation of trainer to use static or cls methods instead of instance methods for increased flexibility
   - [ ] Add capability to trainer/new class helper: transfer learning from checkpoint instead of replacing model!
-  - [ ] Fix unit tests
+  - [ ] Fix all unit tests for up-to-date modules
   - [ ] Implement export method (traced, onnx, model pth) in ModelTrainingManager
   - [ ] Add abstract meta class for loss functions to enforce interface
   - [ ] Review checkpoint resuming code (ensure the checkpoint is loaded correctly) and add evaluation before training (baseline score)
@@ -50,7 +59,6 @@
   - [ ] Modify DataLoaderIndex to accept datasets directly and a combination of datasets and dataloaders. If dataset is input, use default specifications for dataloader
   - [ ] Implement new training mode: SWA_MODE
   - [ ] Add pruning strategy in NORMAL MODE using "delta loss" over patience interval to check for pruning (like OPTUNA)
-  - [ ] Implement prototype usage of AMP for mixed precision training
   - [ ] Add configurable dataclasses from template yml files for training manager and extensible prototype (see pySR configuration in nav-frontend)
   - [ ] Add pySR conveniency module
   - [ ] Explore Hydra for configuration management from yml files
