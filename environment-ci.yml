@@ -1,0 +1,11 @@
+name: autoforge
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - flake8
+  - pip
+  - setuptools
+  - wheel
+  - pytest

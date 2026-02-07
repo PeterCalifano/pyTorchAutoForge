@@ -123,7 +123,12 @@ def test_labels_containers_instantiation() -> None:
 
     # Serialize to YAML string
     yaml_str = container.to_yaml()
-    print("YAML Output:\n", yaml_str)
+    yaml_dict = yaml.safe_load(yaml_str)
+    assert "geometric" in yaml_dict
+    assert "auxiliary" in yaml_dict
+    assert "kpts_heatmaps" in yaml_dict
+    assert yaml_dict["geometric"]["ui32ImageSize"] == [1296, 966]
+    assert yaml_dict["geometric"]["charBBoxCoordsOrder"] == "xywh"
 
 
 def test_lbl_containers_loading_from_yaml():
@@ -140,9 +145,13 @@ def test_lbl_containers_loading_from_yaml():
     # Load from YAML file
     container = LabelsContainer.load_from_yaml(filepath)
 
-    import pprint
-    print("Loaded Container:")
-    pprint.pprint(container, indent=2)
+    assert container.geometric.ui32_image_size == (1296, 966)
+    assert container.geometric.bbox_coords_order == "xywh"
+    assert container.geometric.centre_of_figure == pytest.approx(
+        (522.6458119377869, 590.409585241252)
+    )
+    assert container.geometric.distance_to_obj_centre == pytest.approx(1.3174400439758018e8)
+    assert container.auxiliary.phase_angle_in_deg == pytest.approx(73.39248871205007)
 
 
 def test_parse_ptaf_datakeys_valid_input():
@@ -199,7 +208,113 @@ def test_parse_ptaf_datakeys_partial_invalid():
     assert "Unknown PTAF_Datakey: INVALID" in str(exc_info.value)
 
 
+def test_to_yaml_uses_yaml_aliases():
+    geom = GeometricLabels(
+        ui32_image_size=(10, 20),
+        centre_of_figure=(1.0, 2.0),
+        distance_to_obj_centre=3.0,
+        length_units="m",
+        bound_box_coordinates=(4.0, 5.0, 6.0, 7.0),
+        bbox_coords_order="xywh",
+        obj_apparent_size_in_pix=8.0,
+        object_reference_size=9.0,
+        object_ref_size_units="m",
+        obj_projected_ellipsoid_matrix=[[1.0, 0.0, 0.0]],
+    )
+    aux = AuxiliaryLabels(
+        phase_angle_in_deg=15.0,
+        light_direction_rad_angle_from_x=0.5,
+        object_shape_matrix_cam_frame=[[1.0, 0.0, 0.0]],
+    )
+    kpts = KptsHeatmapsLabels(
+        num_of_kpts=3,
+        heatmap_size=(32, 32),
+        heatmap_datatype="single",
+    )
+    container = LabelsContainer(geometric=geom, auxiliary=aux, kpts_heatmaps=kpts)
+
+    yaml_dict = yaml.safe_load(container.to_yaml())
+    assert "geometric" in yaml_dict
+    assert "ui32ImageSize" in yaml_dict["geometric"]
+    assert "dCentreOfFigure" in yaml_dict["geometric"]
+    assert "auxiliary" in yaml_dict
+    assert "dPhaseAngleInDeg" in yaml_dict["auxiliary"]
+    assert "kpts_heatmaps" in yaml_dict
+    assert "ui32HeatmapSize" in yaml_dict["kpts_heatmaps"]
+
+
+def test_from_dict_with_yaml_aliases_converts_types():
+    data = {
+        "geometric": {
+            "ui32ImageSize": [10, 20],
+            "dCentreOfFigure": [1.0, 2.0],
+            "dDistanceToObjCentre": "3.5",
+            "charLengthUnits": "m",
+            "dBoundBoxCoordinates": [4.0, 5.0, 6.0, 7.0],
+            "charBBoxCoordsOrder": "xywh",
+            "dObjApparentSizeInPix": "8.25",
+            "dObjectReferenceSize": "9.0",
+            "dObjectRefSizeUnits": "m",
+            "dObjProjectedEllipsoidMatrix": [[1.0, 0.0, 0.0]],
+        },
+        "auxiliary": {
+            "dPhaseAngleInDeg": "10.0",
+            "dLightDirectionRadAngleFromX": "0.5",
+            "dObjectShapeMatrix_CamFrame": [[1.0, 0.0, 0.0]],
+        },
+        "kpts_heatmaps": {
+            "ui32NumOfKpts": 2,
+            "ui32HeatmapSize": [16, 24],
+            "charHeatMapDatatype": "double",
+        },
+    }
+
+    container = LabelsContainer.from_dict(data, yaml_aliases=True)
+
+    assert container.geometric.ui32_image_size == (10, 20)
+    assert isinstance(container.geometric.ui32_image_size, tuple)
+    assert container.geometric.distance_to_obj_centre == 3.5
+    assert isinstance(container.geometric.distance_to_obj_centre, float)
+    assert container.geometric.bound_box_coordinates == (4.0, 5.0, 6.0, 7.0)
+    assert container.kpts_heatmaps.heatmap_size == (16, 24)
+
+
+def test_bbox_order_getattr_guard():
+    geom = GeometricLabels(
+        bound_box_coordinates=(1.0, 2.0, 3.0, 4.0),
+        bbox_coords_order="xywh",
+    )
+    container = LabelsContainer(geometric=geom)
+
+    assert getattr(container, "BBOX_XYWH") == geom.bound_box_coordinates
+    with pytest.raises(AssertionError):
+        _ = getattr(container, "BBOX_XYXY")
+
+
+def test_get_lbl_1d_vector_size():
+    size, sizes_dict = LabelsContainer.get_lbl_1d_vector_size(
+        (PTAF_Datakey.CENTRE_OF_FIGURE, PTAF_Datakey.BBOX_XYWH)
+    )
+    assert size == 6
+    assert sizes_dict == {"CENTRE_OF_FIGURE": 2, "BBOX_XYWH": 4}
+
+
+def test_get_labels_with_datakeys():
+    geom = GeometricLabels(
+        centre_of_figure=(1.0, 2.0),
+        distance_to_obj_centre=3.0,
+        bound_box_coordinates=(4.0, 5.0, 6.0, 7.0),
+    )
+    container = LabelsContainer(geometric=geom)
+
+    labels = container.get_labels(
+        (PTAF_Datakey.CENTRE_OF_FIGURE, PTAF_Datakey.RANGE_TO_COM)
+    )
+    assert labels.tolist() == [1.0, 2.0, 3.0]
+
+
 if __name__ == "__main__":
     #test_labels_containers_instantiation()
     #test_lbl_containers_loading_from_yaml()
     test_to_dict_and_from_dict()
+    pass
