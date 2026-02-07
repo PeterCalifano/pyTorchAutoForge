@@ -1,0 +1,3 @@
+# Ignore all, requiring force add of specific files if needed for testing
+*
+!.gitignore
