@@ -56,7 +56,6 @@ classifiers=[
 [project.optional-dependencies]
 cuda_all = [
     "pynvml; platform_machine == 'x86_64'", 
-    "pycuda; platform_machine == 'x86_64'", 
 ]
 
 [tool.setuptools.packages.find]

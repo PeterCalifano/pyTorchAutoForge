@@ -2,7 +2,6 @@ import tensorrt as trt
 import torch 
 import numpy as np
 import sys, os, shutil
-import pycuda as cuda
 import subprocess
 from enum import Enum
 from pyTorchAutoForge.api.onnx import ModelHandlerONNx
