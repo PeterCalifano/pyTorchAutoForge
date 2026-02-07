@@ -38,27 +38,38 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Cache conda packages
-      id: conda-cache
-      uses: actions/cache@v4
-      with:
-        path: /home/runner/miniconda3/pkgs
-        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-conda-
     - name: Set up conda
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-variant: Miniforge3
         miniforge-version: latest
-        environment-file: environment-ci.yml
-        activate-environment: autoforge
         installation-dir: /home/runner/miniconda3
         auto-activate-base: false
         pkgs-dirs: /home/runner/miniconda3/pkgs
         use-mamba: true
         use-only-tar-bz2: true
+    - name: Cache conda packages
+      id: conda-pkgs-cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/miniconda3/pkgs
+        key: ${{ runner.os }}-conda-pkgs-${{ hashFiles('environment-ci.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-pkgs-
+    - name: Cache conda environment
+      id: conda-env-cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/miniconda3/envs/autoforge
+        key: ${{ runner.os }}-conda-env-${{ hashFiles('environment-ci.yml', 'pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-env-
+    - name: Create conda environment
+      if: steps.conda-env-cache.outputs.cache-hit != 'true'
+      run: |
+        "${CONDA}/bin/mamba" env create -f environment-ci.yml
     - name: Install dependencies
+      if: steps.conda-env-cache.outputs.cache-hit != 'true'
       run: |
         "${CONDA}/bin/conda" run -n autoforge python -m pip install .
   verify-lint:
@@ -66,29 +77,42 @@ jobs:
     needs: build-package
     steps:
     - uses: actions/checkout@v4
-    - name: Cache conda packages
-      id: conda-cache
-      uses: actions/cache@v4
-      with:
-        path: /home/runner/miniconda3/pkgs
-        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-conda-
     - name: Set up conda
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-variant: Miniforge3
         miniforge-version: latest
-        environment-file: environment-ci.yml
-        activate-environment: autoforge
         installation-dir: /home/runner/miniconda3
         auto-activate-base: false
         pkgs-dirs: /home/runner/miniconda3/pkgs
         use-mamba: true
         use-only-tar-bz2: true
+    - name: Cache conda packages
+      id: conda-pkgs-cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/miniconda3/pkgs
+        key: ${{ runner.os }}-conda-pkgs-${{ hashFiles('environment-ci.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-pkgs-
+    - name: Cache conda environment
+      id: conda-env-cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/miniconda3/envs/autoforge
+        key: ${{ runner.os }}-conda-env-${{ hashFiles('environment-ci.yml', 'pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-env-
+    - name: Create conda environment
+      if: steps.conda-env-cache.outputs.cache-hit != 'true'
+      run: |
+        "${CONDA}/bin/mamba" env create -f environment-ci.yml
+    - name: Install dependencies
+      if: steps.conda-env-cache.outputs.cache-hit != 'true'
+      run: |
+        "${CONDA}/bin/conda" run -n autoforge python -m pip install .
     - name: Lint with flake8
       run: |
-        "${CONDA}/bin/conda" run -n autoforge python -m pip install flake8
         # stop the build if there are Python syntax errors or undefined names
         "${CONDA}/bin/conda" run -n autoforge flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
@@ -98,26 +122,40 @@ jobs:
     needs: build-package
     steps:
     - uses: actions/checkout@v4
-    - name: Cache conda packages
-      id: conda-cache
-      uses: actions/cache@v4
-      with:
-        path: /home/runner/miniconda3/pkgs
-        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-conda-
     - name: Set up conda
       uses: conda-incubator/setup-miniconda@v3
       with:
         miniforge-variant: Miniforge3
         miniforge-version: latest
-        environment-file: environment-ci.yml
-        activate-environment: autoforge
         installation-dir: /home/runner/miniconda3
         auto-activate-base: false
         pkgs-dirs: /home/runner/miniconda3/pkgs
         use-mamba: true
         use-only-tar-bz2: true
+    - name: Cache conda packages
+      id: conda-pkgs-cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/miniconda3/pkgs
+        key: ${{ runner.os }}-conda-pkgs-${{ hashFiles('environment-ci.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-pkgs-
+    - name: Cache conda environment
+      id: conda-env-cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/miniconda3/envs/autoforge
+        key: ${{ runner.os }}-conda-env-${{ hashFiles('environment-ci.yml', 'pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-env-
+    - name: Create conda environment
+      if: steps.conda-env-cache.outputs.cache-hit != 'true'
+      run: |
+        "${CONDA}/bin/mamba" env create -f environment-ci.yml
+    - name: Install dependencies
+      if: steps.conda-env-cache.outputs.cache-hit != 'true'
+      run: |
+        "${CONDA}/bin/conda" run -n autoforge python -m pip install .
     - name: Test with pytest
       run: |
         "${CONDA}/bin/conda" run -n autoforge python -m pytest # TODO add specifications of test
