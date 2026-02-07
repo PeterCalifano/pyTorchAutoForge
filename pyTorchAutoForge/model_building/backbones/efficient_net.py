@@ -5,6 +5,7 @@ from .base_backbones import EfficientNetConfig, FeatureExtractorFactory
 
 import torch
 import torch.nn.functional as F
+import warnings
 from pyTorchAutoForge.model_building.backbones.spatial_features_operators import SpatialKptFeatureSoftmaxLocator
 from pyTorchAutoForge.model_building.poolingBlocks import CustomAdaptiveMaxPool2d
 
@@ -22,7 +23,13 @@ class EfficientNetBackbone(nn.Module):
 
         # Extract the “features” part all children except the final classifier/sequential
         modules = list(model.children())[:-1]
+
         if cfg.output_type == 'last':
+
+            if hasattr(cfg, 'remove_gap_layer'):
+                # Remove the final global average pooling layer (AdaptiveAvgPool2d) if specified in config
+                modules = modules[0] if isinstance(modules[-1], nn.AdaptiveAvgPool2d) and cfg.remove_gap_layer else modules
+
             # Wrap as a single ModuleList so that forward is simple
             self.feature_extractor = nn.ModuleList([nn.Sequential(*modules)])
 
@@ -35,8 +42,10 @@ class EfficientNetBackbone(nn.Module):
             self.feature_extractor = nn.ModuleList(
                 list(feature_extractor_modules.children()))
 
-            # Add last layer (global adaptive pooling) from modules
-            self.feature_extractor.append(modules[1])
+            # Add last layer (global adaptive pooling) from modules if not removed
+            if hasattr(cfg, 'remove_gap_layer'):
+                if isinstance(modules[-1], nn.AdaptiveAvgPool2d) and not(cfg.remove_gap_layer):
+                    self.feature_extractor.append(modules[-1])
 
             # Build average pooling layer
             self.feature_spill_preprocessor = nn.ModuleDict()
