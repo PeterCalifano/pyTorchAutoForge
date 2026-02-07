@@ -42,7 +42,7 @@ jobs:
       id: conda-cache
       uses: actions/cache@v4
       with:
-        path: ~/miniconda3/pkgs
+        path: /home/runner/miniconda3/pkgs
         key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
         restore-keys: |
           ${{ runner.os }}-conda-
@@ -53,9 +53,9 @@ jobs:
         miniforge-version: latest
         environment-file: environment-ci.yml
         activate-environment: autoforge
-        installation-dir: ~/miniconda3
+        installation-dir: /home/runner/miniconda3
         auto-activate-base: false
-        pkgs-dirs: ~/miniconda3/pkgs
+        pkgs-dirs: /home/runner/miniconda3/pkgs
         use-mamba: true
         use-only-tar-bz2: true
     - name: Install dependencies
@@ -70,7 +70,7 @@ jobs:
       id: conda-cache
       uses: actions/cache@v4
       with:
-        path: ~/miniconda3/pkgs
+        path: /home/runner/miniconda3/pkgs
         key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
         restore-keys: |
           ${{ runner.os }}-conda-
@@ -81,9 +81,9 @@ jobs:
         miniforge-version: latest
         environment-file: environment-ci.yml
         activate-environment: autoforge
-        installation-dir: ~/miniconda3
+        installation-dir: /home/runner/miniconda3
         auto-activate-base: false
-        pkgs-dirs: ~/miniconda3/pkgs
+        pkgs-dirs: /home/runner/miniconda3/pkgs
         use-mamba: true
         use-only-tar-bz2: true
     - name: Lint with flake8
@@ -102,7 +102,7 @@ jobs:
       id: conda-cache
       uses: actions/cache@v4
       with:
-        path: ~/miniconda3/pkgs
+        path: /home/runner/miniconda3/pkgs
         key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
         restore-keys: |
           ${{ runner.os }}-conda-
@@ -113,9 +113,9 @@ jobs:
         miniforge-version: latest
         environment-file: environment-ci.yml
         activate-environment: autoforge
-        installation-dir: ~/miniconda3
+        installation-dir: /home/runner/miniconda3
         auto-activate-base: false
-        pkgs-dirs: ~/miniconda3/pkgs
+        pkgs-dirs: /home/runner/miniconda3/pkgs
         use-mamba: true
         use-only-tar-bz2: true
     - name: Test with pytest
