@@ -44,6 +44,7 @@
   - [ ] Review and unit test selection criteria implementation
   - [ ] Extend augs-trainer integration to allow "discard" option in validation module
   - [x] Implement tailoring of RandomAffine to make it border crossing aware
+  - [ ] Migrate documentation from Read The Docs to something more controllable and less restrictive
 
 - [ ] v0.3.X
   - [x] Implement custom adaptive pooling layers for ONNx static export

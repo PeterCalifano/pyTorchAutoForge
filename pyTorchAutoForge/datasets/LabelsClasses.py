@@ -30,6 +30,8 @@ class PTAF_Datakey(enum.Enum):
     PHASE_ANGLE = 9  # Phase angle of the scene
     CENTRE_OF_FIGURE = 10  # Centre of figure of the object
     APPARENT_SIZE = 11  # Apparent size of the object in pixels
+    SUN_DIRECTION_ANGLE_FROM_X = 12  # Angle of the sun direction from the x-axis in radians
+
 
     def get_lbl_vector_size(self):
         # Define sizes for data keys
@@ -49,7 +51,8 @@ class PTAF_Datakey(enum.Enum):
             PTAF_Datakey.REFERENCE_SIZE: 1,
             PTAF_Datakey.PHASE_ANGLE: 1,
             PTAF_Datakey.CENTRE_OF_FIGURE: 2,  # x, y coordinates of the centre of figure
-            PTAF_Datakey.APPARENT_SIZE: 1  # Apparent size in pixels
+            PTAF_Datakey.APPARENT_SIZE: 1,  # Apparent size in pixels
+            PTAF_Datakey.SUN_DIRECTION_ANGLE_FROM_X: 1  # Angle of the sun direction from the x-axis in radians
         }
 
         return sizes.get(self, None)
@@ -235,7 +238,7 @@ class AuxiliaryLabels(BaseLabelsContainer):
         default=-1.0, metadata={'yaml': 'dPhaseAngleInDeg'})
     
     light_direction_rad_angle_from_x: float = field(
-        default=0.0, metadata={'yaml': 'dLightDirectionRadAngleFromX'})
+        default=-1.0, metadata={'yaml': 'dLightDirectionRadAngleFromX'})
     
     object_shape_matrix_cam_frame: list[list[float]] = field(
         default_factory=list, metadata={'yaml': 'dObjectShapeMatrix_CamFrame'})
@@ -311,6 +314,9 @@ class LabelsContainer(BaseLabelsContainer):
 
         elif item == PTAF_Datakey.APPARENT_SIZE:
             return float(self.geometric.obj_apparent_size_in_pix)
+        
+        elif item == PTAF_Datakey.SUN_DIRECTION_ANGLE_FROM_X:
+            return float(self.auxiliary.light_direction_rad_angle_from_x)
 
         else:
             # Raise AttributeError to maintain standard behavior

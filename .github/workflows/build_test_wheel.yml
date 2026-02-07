@@ -38,42 +38,88 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
+    - name: Cache conda packages
+      id: conda-cache
+      uses: actions/cache@v4
       with:
-        python-version: '3.11'
-    - name: Add conda to system path
-      run: |
-        # $CONDA is an environment variable pointing to the root of the miniconda directory
-        echo $CONDA/bin >> $GITHUB_PATH
+        path: /home/runner/miniconda3/pkgs
+        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-variant: Miniforge3
+        miniforge-version: latest
+        environment-file: environment-ci.yml
+        activate-environment: autoforge
+        installation-dir: /home/runner/miniconda3
+        auto-activate-base: false
+        pkgs-dirs: /home/runner/miniconda3/pkgs
+        use-mamba: true
+        use-only-tar-bz2: true
     - name: Install dependencies
       run: |
-        #conda env update --file environment.yml --name base
-        pip install .
+        "${CONDA}/bin/conda" run -n autoforge python -m pip install .
   verify-lint:
     runs-on: ubuntu-latest
     needs: build-package
     steps:
     - uses: actions/checkout@v4
+    - name: Cache conda packages
+      id: conda-cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/miniconda3/pkgs
+        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-variant: Miniforge3
+        miniforge-version: latest
+        environment-file: environment-ci.yml
+        activate-environment: autoforge
+        installation-dir: /home/runner/miniconda3
+        auto-activate-base: false
+        pkgs-dirs: /home/runner/miniconda3/pkgs
+        use-mamba: true
+        use-only-tar-bz2: true
     - name: Lint with flake8
       run: |
-        conda install flake8
-        conda init
-        conda activate base
+        "${CONDA}/bin/conda" run -n autoforge python -m pip install flake8
         # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        "${CONDA}/bin/conda" run -n autoforge flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        "${CONDA}/bin/conda" run -n autoforge flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
   test-package:
     runs-on: ubuntu-latest
     needs: build-package
     steps:
     - uses: actions/checkout@v4
+    - name: Cache conda packages
+      id: conda-cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/miniconda3/pkgs
+        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-variant: Miniforge3
+        miniforge-version: latest
+        environment-file: environment-ci.yml
+        activate-environment: autoforge
+        installation-dir: /home/runner/miniconda3
+        auto-activate-base: false
+        pkgs-dirs: /home/runner/miniconda3/pkgs
+        use-mamba: true
+        use-only-tar-bz2: true
     - name: Test with pytest
       run: |
-        conda install pytest
-        conda init
-        conda activate base
-        pytest # TODO add specifications of test
+        "${CONDA}/bin/conda" run -n autoforge python -m pytest # TODO add specifications of test
 
     

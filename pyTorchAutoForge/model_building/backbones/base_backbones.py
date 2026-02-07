@@ -25,6 +25,7 @@ class FeatureExtractorConfig(BaseConfigClass):
     # Dimension of the final linear layer (if you want to add a linear layer)
     output_size: int | None = None
     remove_classifier: bool = True
+    remove_gap_layer: bool = False
     device: torch.device | str | None = None
     input_channels: int = 3 # Placeholder value
 
