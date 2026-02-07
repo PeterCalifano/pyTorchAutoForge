@@ -43,7 +43,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/miniconda3/pkgs
-        key: ${{ runner.os }}-conda-${{ hashFiles('environment.yml') }}
+        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
         restore-keys: |
           ${{ runner.os }}-conda-
     - name: Set up conda
@@ -51,7 +51,7 @@ jobs:
       with:
         miniforge-variant: Miniforge3
         miniforge-version: latest
-        environment-file: environment.yml
+        environment-file: environment-ci.yml
         activate-environment: autoforge
         installation-dir: ~/miniconda3
         auto-activate-base: false
@@ -71,7 +71,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/miniconda3/pkgs
-        key: ${{ runner.os }}-conda-${{ hashFiles('environment.yml') }}
+        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
         restore-keys: |
           ${{ runner.os }}-conda-
     - name: Set up conda
@@ -79,7 +79,7 @@ jobs:
       with:
         miniforge-variant: Miniforge3
         miniforge-version: latest
-        environment-file: environment.yml
+        environment-file: environment-ci.yml
         activate-environment: autoforge
         installation-dir: ~/miniconda3
         auto-activate-base: false
@@ -103,7 +103,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/miniconda3/pkgs
-        key: ${{ runner.os }}-conda-${{ hashFiles('environment.yml') }}
+        key: ${{ runner.os }}-conda-${{ hashFiles('environment-ci.yml') }}
         restore-keys: |
           ${{ runner.os }}-conda-
     - name: Set up conda
@@ -111,7 +111,7 @@ jobs:
       with:
         miniforge-variant: Miniforge3
         miniforge-version: latest
-        environment-file: environment.yml
+        environment-file: environment-ci.yml
         activate-environment: autoforge
         installation-dir: ~/miniconda3
         auto-activate-base: false
