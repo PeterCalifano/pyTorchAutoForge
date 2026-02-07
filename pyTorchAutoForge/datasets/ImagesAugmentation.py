@@ -30,7 +30,7 @@ from enum import Enum
 import colorama
 from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
-from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
+from pyTorchAutoForge.datasets.AugmentationsBaseClasses import AugsBaseClass
 
 from pyTorchAutoForge.datasets.noise_models.IntensityAugs import RandomSoftBinarizeImage, RandomConvertTextureToShadingLaw, RandomNoiseTexturePattern
 from pyTorchAutoForge.datasets.noise_models.NoiseErrorsAugs import RandomGaussianNoiseVariableSigma, PoissonShotNoise
@@ -840,7 +840,7 @@ class ImageAugmentationsHelper(nn.Module):
         return shifted_imgs, lbl
 
 # %% Prototypes TODO
-
+# Reference for implementation: Gow, 2007, "A Comprehensive tools for modeling CMOS image sensor-noise performance", IEEE Transactions on Electron Devices, Vol. 54, No. 6
 
 class ImageNormalizationCoeff(Enum):
     """Enum for image normalization types."""

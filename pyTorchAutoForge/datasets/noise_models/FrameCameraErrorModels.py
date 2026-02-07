@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 from enum import Enum
 
-from pyTorchAutoForge.datasets.DataAugmentation import EnumComputeBackend
+from pyTorchAutoForge.datasets.AugmentationsBaseClasses import EnumComputeBackend
 
 
 # %% Error models classes implementations
@@ -169,21 +169,6 @@ class ReadoutNoiseModel(BaseAddErrorModel):
         Returns:
             _type_: _description_
         """
-        if self.enumModelFidelity == EnumModelFidelity.LOW:
-            self.realizedError_low()
-            # Add Gaussian noise
-            # For ranges (std and mean not equal for all pixels):
-            # torch.normal(mean=torch.arange(1., 11.),
-            #             std=torch.arange(1, 0, -0.1))
-        elif self.enumModelFidelity == EnumModelFidelity.MEDIUM:
-            raise NotImplementedError("Compute operation not implemented")
-            self.realizedError_medium()
-        elif self.enumModelFidelity == EnumModelFidelity.HIGH:
-            raise NotImplementedError("Compute operation not implemented")
-            self.realizedError_high()
-        else:
-            raise ValueError(
-                "Invalid fidelity level for ReadoutNoiseModel")
 
     def realizedError_low(self):
         """
