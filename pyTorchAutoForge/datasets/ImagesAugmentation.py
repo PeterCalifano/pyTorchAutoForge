@@ -73,7 +73,7 @@ class AugmentationConfig:
     random_apply_photometric: bool = False
     random_apply_minmax: tuple[int, int] = (1, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
-    enable_cache_transforms: bool = True
+    enable_cache_transforms: bool = False
 
     # Affine roto-translation augmentation (border aware)
     affine_align_corners: bool = False
