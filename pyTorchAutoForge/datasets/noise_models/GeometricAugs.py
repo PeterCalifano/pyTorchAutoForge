@@ -177,6 +177,9 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
             raise TypeError(
                 f"Expected the `transform` be a Tensor. Got {type(transform)}.")
 
+        # Cache latest homogeneous transform for external retrieval/debug.
+        self.last_transform_matrix_3x3 = transform
+
         # Apply affine warp
         return KG.warp_affine(input,
                               transform[:, :2, :],

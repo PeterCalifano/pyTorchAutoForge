@@ -250,6 +250,7 @@ def test_synthetic_mask_augmentation():
     out_imgs, out_lbls = augs_helper(
         numpy_to_torch(imgs), numpy_to_torch(lbls))
     out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
+    out_lbls = torch_to_numpy(out_lbls)
 
     # Plot inputs and outputs in a 2×batch_size grid
     fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
@@ -348,6 +349,7 @@ def test_sample_images_augmentation():
         out_imgs, out_lbls = augs_helper(numpy_to_torch(
             imgs, dtype=torch.float32), numpy_to_torch(lbls, dtype=torch.float32))
         out_imgs = torch_to_numpy(out_imgs.permute(0, 2, 3, 1))
+        out_lbls = torch_to_numpy(out_lbls)
 
         # Plot inputs and outputs in a 2×batch_size grid
         fig, axs = plt.subplots(2, batch_size, figsize=(4*batch_size, 8))
@@ -689,6 +691,115 @@ def test_zero_augs_input_unchanged():
         out_img, x), "Output image should be the same as input"
     assert torch.allclose(
         out_lbl, lbl), "Output labels should be the same as input labels"
+
+
+def test_transform_metadata_identity_when_no_geom_aug():
+    cfg = AugmentationConfig(
+        input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
+        shift_aug_prob=0.0,
+        rotation_aug_prob=0.0,
+        hflip_prob=0.0,
+        vflip_prob=0.0,
+        brightness_aug_prob=0.0,
+        contrast_aug_prob=0.0,
+        gaussian_blur_aug_prob=0.0,
+        gaussian_noise_aug_prob=0.0,
+        is_torch_layout=True,
+        is_normalized=True,
+        input_normalization_factor=1.0,
+        enable_auto_input_normalization=False,
+        device="cpu",
+    )
+
+    helper = ImageAugmentationsHelper(cfg)
+    x = torch.rand(3, 1, 32, 32, dtype=torch.float32)
+    lbl = torch.tensor([[10.0, 15.0], [12.0, 8.0], [4.0, 18.0]], dtype=torch.float32)
+
+    (out_img, out_lbl), metadata = helper(x, lbl, return_transform_metadata=True)
+
+    assert out_img.shape == x.shape
+    assert out_lbl.shape == lbl.shape
+    assert metadata is not None
+    assert metadata.batch_size == x.shape[0]
+    assert metadata.per_op_matrices_3x3 == {}
+    assert metadata.geometric_ops_order == ()
+    expected = torch.eye(3, dtype=out_img.dtype).unsqueeze(0).repeat(x.shape[0], 1, 1)
+    assert torch.allclose(metadata.combined_matrix_3x3.cpu(), expected, atol=1e-6)
+
+
+def test_transform_metadata_affine_composition_and_getter():
+    cfg = AugmentationConfig(
+        input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
+        shift_aug_prob=1.0,
+        max_shift_img_fraction=(0.2, 0.2),
+        rotation_aug_prob=1.0,
+        rotation_angle=(-30.0, 30.0),
+        hflip_prob=1.0,
+        vflip_prob=0.0,
+        brightness_aug_prob=0.0,
+        contrast_aug_prob=0.0,
+        gaussian_blur_aug_prob=0.0,
+        gaussian_noise_aug_prob=0.0,
+        is_torch_layout=True,
+        is_normalized=True,
+        input_normalization_factor=1.0,
+        enable_auto_input_normalization=False,
+        device="cpu",
+    )
+
+    helper = ImageAugmentationsHelper(cfg)
+    x = torch.rand(2, 1, 64, 64, dtype=torch.float32)
+    lbl = torch.tensor([[20.0, 12.0], [40.0, 39.0]], dtype=torch.float32)
+
+    (_, _), metadata = helper(x, lbl, return_transform_metadata=True)
+
+    assert metadata is not None
+    assert len(metadata.geometric_ops_order) >= 2
+    assert metadata.combined_matrix_3x3.shape == (x.shape[0], 3, 3)
+
+    composed = torch.eye(3, dtype=metadata.combined_matrix_3x3.dtype).unsqueeze(0).repeat(x.shape[0], 1, 1)
+    for op_key in metadata.geometric_ops_order:
+        assert op_key in metadata.per_op_matrices_3x3
+        op_matrix = metadata.per_op_matrices_3x3[op_key]
+        assert op_matrix.shape == (x.shape[0], 3, 3)
+        composed = op_matrix @ composed
+
+    assert torch.allclose(metadata.combined_matrix_3x3, composed, atol=1e-5)
+
+    cached_metadata = helper.Get_last_batch_transform_metadata()
+    assert cached_metadata is not None
+    assert torch.allclose(cached_metadata.combined_matrix_3x3, metadata.combined_matrix_3x3, atol=1e-6)
+
+    cached_matrix = helper.Get_last_batch_transform_matrix_3x3()
+    assert cached_matrix is not None
+    assert torch.allclose(cached_matrix, metadata.combined_matrix_3x3, atol=1e-6)
+
+
+def test_forward_default_signature_remains_compatible():
+    cfg = AugmentationConfig(
+        input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
+        shift_aug_prob=0.0,
+        rotation_aug_prob=0.0,
+        brightness_aug_prob=0.0,
+        contrast_aug_prob=0.0,
+        gaussian_blur_aug_prob=0.0,
+        gaussian_noise_aug_prob=0.0,
+        is_torch_layout=True,
+        is_normalized=True,
+        input_normalization_factor=1.0,
+        enable_auto_input_normalization=False,
+        device="cpu",
+    )
+
+    helper = ImageAugmentationsHelper(cfg)
+    x = torch.rand(1, 1, 16, 16, dtype=torch.float32)
+    lbl = torch.tensor([[5.0, 8.0]], dtype=torch.float32)
+
+    out = helper(x, lbl)
+    assert isinstance(out, (tuple, list))
+    assert len(out) == 2
+    assert torch.is_tensor(out[0])
+    assert torch.is_tensor(out[1])
 
 
 # %% MANUAL TEST CALLS

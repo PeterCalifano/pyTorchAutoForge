@@ -2,7 +2,7 @@ from .DataloaderIndex import DataloaderIndex
 from .AugmentationsBaseClasses import EnumComputeBackend, BaseErrorModel, BaseAddErrorModel, BaseGainErrorModel
 from .DatasetClasses import NormalizationType, ImagesLabelsCachedDataset, NormalizeDataMatrix
 from .LabelsClasses import LabelsContainer
-from .ImagesAugmentation import AugmentationConfig, ImageAugmentationsHelper, ImageNormalization, RandomGaussianNoiseVariableSigma
+from .ImagesAugmentation import AugmentationConfig, GeometricTransformMetadata, ImageAugmentationsHelper, ImageNormalization, RandomGaussianNoiseVariableSigma
 
 __all__ = [
     'DataloaderIndex', 
@@ -14,6 +14,7 @@ __all__ = [
     'ImagesLabelsCachedDataset',
     'NormalizeDataMatrix',
     'AugmentationConfig',
+    'GeometricTransformMetadata',
     'ImageAugmentationsHelper',
     'ImageNormalization',
     'RandomGaussianNoiseVariableSigma',

@@ -40,6 +40,7 @@ from pyTorchAutoForge.datasets.noise_models.GeometricAugs import BorderAwareRand
 
 # %% Type aliases
 ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
+GeometricAugmentationKey: TypeAlias = tuple[type[GeometricAugmentationBase2D], int]
 
 # %% Custom augmentation modules
 # TODO modify to be usable by AugmentationSequential? Inherint from _AugmentationBase. Search how to define custom augmentations in Kornia
@@ -177,6 +178,17 @@ class AugmentationConfig:
                     "max_shift_img_fraction values must be in the range (0, 1) as fraction of the input image size.")
 
 
+@dataclass
+class GeometricTransformMetadata:
+    """Stores geometric transform metadata computed for one augmented batch."""
+
+    combined_matrix_3x3: torch.Tensor
+    per_op_matrices_3x3: dict[GeometricAugmentationKey, torch.Tensor]
+    geometric_ops_order: tuple[GeometricAugmentationKey, ...]
+    batch_size: int
+    device: str
+
+
 # %% Augmentation helper class
 # TODO (PC) add capability to support custom augmentation module by appending it in the user-specified location ("append_custom_module_after = (module, <literal>)" that maps to a specified entry in the augs_ops list. The given module is then inserted into the list at the specified position)
 class ImageAugmentationsHelper(nn.Module):
@@ -186,6 +198,8 @@ class ImageAugmentationsHelper(nn.Module):
         self.device = torch.device(
             augs_cfg.device) if augs_cfg.device is not None else None
         self.num_aug_ops = 0
+        self._geometric_aug_modules: list[tuple[GeometricAugmentationKey, GeometricAugmentationBase2D]] = []
+        self._last_batch_transform_metadata: GeometricTransformMetadata | None = None
 
         # TODO add input_data_keys to AugmentationConfig
         # ImageSequential seems not importable from kornia
@@ -324,6 +338,12 @@ class ImageAugmentationsHelper(nn.Module):
             for aug_op in torch_vision_ops:
                 aug_op.to(self.device)
 
+        self._geometric_aug_modules = [
+            ((type(aug_op), idx), aug_op)
+            for idx, aug_op in enumerate(augs_ops)
+            if isinstance(aug_op, GeometricAugmentationBase2D)
+        ]
+
         self.kornia_augs_module = AugmentationSequential(*augs_ops,
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
@@ -366,12 +386,110 @@ class ImageAugmentationsHelper(nn.Module):
 
         return input
 
+    @staticmethod
+    def _build_identity_transform_matrix(batch_size: int,
+                                         device: torch.device,
+                                         dtype: torch.dtype) -> torch.Tensor:
+        """Build a batch of identity 3x3 homogeneous transforms."""
+        return torch.eye(3, device=device, dtype=dtype).unsqueeze(0).repeat(batch_size, 1, 1)
+
+    def _to_homogeneous_transform_matrix(self,
+                                         matrix: torch.Tensor | None,
+                                         batch_size: int,
+                                         device: torch.device,
+                                         dtype: torch.dtype) -> torch.Tensor:
+        """Normalize a transform matrix into batched homogeneous [B, 3, 3] format."""
+        if matrix is None or not torch.is_tensor(matrix):
+            return self._build_identity_transform_matrix(batch_size, device, dtype)
+
+        matrix = matrix.to(device=device, dtype=dtype)
+
+        if matrix.ndim == 2 and matrix.shape == (2, 3):
+            matrix = matrix.unsqueeze(0)
+        elif matrix.ndim == 2 and matrix.shape == (3, 3):
+            matrix = matrix.unsqueeze(0)
+        elif matrix.ndim != 3:
+            warn(
+                f"Unexpected transform matrix rank {matrix.ndim}; expected 2D/3D. Falling back to identity.",
+                UserWarning,
+            )
+            return self._build_identity_transform_matrix(batch_size, device, dtype)
+
+        if matrix.shape[-2:] == (2, 3):
+            last_row = torch.tensor([0.0, 0.0, 1.0],
+                                    device=device,
+                                    dtype=dtype).view(1, 1, 3).repeat(matrix.shape[0], 1, 1)
+            matrix = torch.cat((matrix, last_row), dim=1)
+        elif matrix.shape[-2:] != (3, 3):
+            warn(
+                f"Unexpected transform matrix shape {tuple(matrix.shape)}; expected [B,2,3] or [B,3,3]. Falling back to identity.",
+                UserWarning,
+            )
+            return self._build_identity_transform_matrix(batch_size, device, dtype)
+
+        if matrix.shape[0] == batch_size:
+            return matrix
+
+        if matrix.shape[0] == 1:
+            return matrix.repeat(batch_size, 1, 1)
+
+        warn(
+            f"Unexpected transform batch dimension {matrix.shape[0]} (expected {batch_size}). Using first transform for all samples.",
+            UserWarning,
+        )
+        return matrix[:1].repeat(batch_size, 1, 1)
+
+    @staticmethod
+    def _extract_module_transform_matrix(module: nn.Module) -> torch.Tensor | None:
+        """Try extracting the latest transform matrix from a geometric augmentation module."""
+        transform = getattr(module, "transform_matrix", None)
+        if torch.is_tensor(transform):
+            return transform
+
+        transform = getattr(module, "_transform_matrix", None)
+        if torch.is_tensor(transform):
+            return transform
+
+        transform = getattr(module, "last_transform_matrix_3x3", None)
+        if torch.is_tensor(transform):
+            return transform
+
+        return None
+
+    def _build_geometric_transform_metadata(self,
+                                            batch_size: int,
+                                            device: torch.device,
+                                            dtype: torch.dtype) -> GeometricTransformMetadata:
+        """Build combined and per-op geometric transform metadata for the current batch."""
+        per_op_matrices: dict[GeometricAugmentationKey, torch.Tensor] = {}
+        geometric_ops_order: list[GeometricAugmentationKey] = []
+        combined = self._build_identity_transform_matrix(batch_size, device, dtype)
+
+        for op_key, op_module in self._geometric_aug_modules:
+            matrix_raw = self._extract_module_transform_matrix(op_module)
+            matrix_h = self._to_homogeneous_transform_matrix(
+                matrix_raw, batch_size, device, dtype)
+            per_op_matrices[op_key] = matrix_h
+            geometric_ops_order.append(op_key)
+            combined = matrix_h @ combined
+
+        return GeometricTransformMetadata(
+            combined_matrix_3x3=combined,
+            per_op_matrices_3x3=per_op_matrices,
+            geometric_ops_order=tuple(geometric_ops_order),
+            batch_size=batch_size,
+            device=str(device),
+        )
+
     # images: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
     # labels: ndArrayOrTensor
 
     def forward(self,
                 *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
-                ) -> tuple[ndArrayOrTensor | tuple[ndArrayOrTensor, ...], ndArrayOrTensor]:
+                return_transform_metadata: bool = False,
+                ) -> tuple[ndArrayOrTensor | tuple[ndArrayOrTensor, ...], ndArrayOrTensor] | tuple[
+                    tuple[ndArrayOrTensor | tuple[ndArrayOrTensor, ...], ndArrayOrTensor],
+                    GeometricTransformMetadata]:
         """
         images: Tensor[B,H,W,C] or [B,C,H,W], or np.ndarray [...,H,W,C]
         labels: Tensor[B, num_points, 2] or np.ndarray matching batch
@@ -387,6 +505,7 @@ class ImageAugmentationsHelper(nn.Module):
 
         # Processing batches
         with torch.no_grad():
+            self._last_batch_transform_metadata = None
 
             # Detect type, convert to torch Tensor [B,C,H,W], determine scaling factor
             is_numpy = isinstance(images_, np.ndarray)
@@ -483,6 +602,14 @@ class ImageAugmentationsHelper(nn.Module):
                 aug_inputs[lbl_index] = lbl_tensor / \
                     self.augs_cfg.label_scaling_factors.to(lbl_tensor.device)
 
+            if torch.is_tensor(aug_inputs[img_index]):
+                batch_size = int(aug_inputs[img_index].shape[0])
+                self._last_batch_transform_metadata = self._build_geometric_transform_metadata(
+                    batch_size=batch_size,
+                    device=aug_inputs[img_index].device,
+                    dtype=aug_inputs[img_index].dtype,
+                )
+
             # Convert back to numpy if was ndarray
             if to_numpy is True:
                 aug_inputs[img_index] = torch_to_numpy(
@@ -495,7 +622,27 @@ class ImageAugmentationsHelper(nn.Module):
                 for input in aug_inputs
             )
 
+        if return_transform_metadata:
+            if self._last_batch_transform_metadata is None and torch.is_tensor(aug_inputs[img_index]):
+                batch_size = int(aug_inputs[img_index].shape[0])
+                self._last_batch_transform_metadata = self._build_geometric_transform_metadata(
+                    batch_size=batch_size,
+                    device=aug_inputs[img_index].device,
+                    dtype=aug_inputs[img_index].dtype,
+                )
+            return aug_inputs, self._last_batch_transform_metadata
+
         return aug_inputs
+
+    def Get_last_batch_transform_metadata(self) -> GeometricTransformMetadata | None:
+        """Return transform metadata for the latest forward pass."""
+        return self._last_batch_transform_metadata
+
+    def Get_last_batch_transform_matrix_3x3(self) -> torch.Tensor | None:
+        """Return only the combined geometric transform matrix for the latest batch."""
+        if self._last_batch_transform_metadata is None:
+            return None
+        return self._last_batch_transform_metadata.combined_matrix_3x3
 
     def preprocess_images_(self,
                            images: ndArrayOrTensor
