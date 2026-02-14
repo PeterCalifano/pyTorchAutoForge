@@ -802,6 +802,242 @@ def test_forward_default_signature_remains_compatible():
     assert torch.is_tensor(out[1])
 
 
+def test_update_clockwise_angle_identity_transform():
+    input_clockwise_angle_from_positive_x_rad_batch = torch.tensor(
+        [0.0, torch.pi / 2, torch.pi, 1.25], dtype=torch.float32
+    )
+    geometric_transform_matrix_batch_3x3 = torch.eye(3, dtype=torch.float32).unsqueeze(0).repeat(4, 1, 1)
+
+    updated_clockwise_angle_from_positive_x_rad_batch = (
+        ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+            clockwise_angle_from_positive_x_rad_batch=input_clockwise_angle_from_positive_x_rad_batch,
+            geometric_transform_matrix_batch=geometric_transform_matrix_batch_3x3,
+            wrap_output_to_0_2pi=True,
+        )
+    )
+
+    expected_clockwise_angle_from_positive_x_rad_batch = torch.remainder(
+        input_clockwise_angle_from_positive_x_rad_batch, 2 * torch.pi
+    )
+    assert torch.allclose(
+        updated_clockwise_angle_from_positive_x_rad_batch,
+        expected_clockwise_angle_from_positive_x_rad_batch,
+        atol=1e-6,
+    )
+
+
+def test_update_clockwise_angle_rotation_transform():
+    rotation_delta_rad = torch.tensor(0.35, dtype=torch.float32)
+    input_clockwise_angle_from_positive_x_rad_batch = torch.tensor(
+        [0.25, 1.1, 2.4], dtype=torch.float32
+    )
+
+    cos_delta = torch.cos(rotation_delta_rad)
+    sin_delta = torch.sin(rotation_delta_rad)
+    geometric_transform_matrix_batch_3x3 = torch.tensor(
+        [[
+            [cos_delta.item(), -sin_delta.item(), 0.0],
+            [sin_delta.item(), cos_delta.item(), 0.0],
+            [0.0, 0.0, 1.0],
+        ]],
+        dtype=torch.float32,
+    ).repeat(input_clockwise_angle_from_positive_x_rad_batch.shape[0], 1, 1)
+
+    updated_clockwise_angle_from_positive_x_rad_batch = (
+        ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+            clockwise_angle_from_positive_x_rad_batch=input_clockwise_angle_from_positive_x_rad_batch,
+            geometric_transform_matrix_batch=geometric_transform_matrix_batch_3x3,
+            wrap_output_to_0_2pi=True,
+        )
+    )
+
+    expected_clockwise_angle_from_positive_x_rad_batch = torch.remainder(
+        input_clockwise_angle_from_positive_x_rad_batch + rotation_delta_rad,
+        2 * torch.pi,
+    )
+    assert torch.allclose(
+        updated_clockwise_angle_from_positive_x_rad_batch,
+        expected_clockwise_angle_from_positive_x_rad_batch,
+        atol=1e-5,
+    )
+
+
+def test_update_clockwise_angle_horizontal_flip_transform():
+    input_clockwise_angle_from_positive_x_rad_batch = torch.tensor(
+        [0.2, 0.9, 2.7], dtype=torch.float32
+    )
+    geometric_transform_matrix_batch_3x3 = torch.tensor(
+        [[[-1.0, 0.0, 0.0],
+          [0.0, 1.0, 0.0],
+          [0.0, 0.0, 1.0]]],
+        dtype=torch.float32,
+    ).repeat(input_clockwise_angle_from_positive_x_rad_batch.shape[0], 1, 1)
+
+    updated_clockwise_angle_from_positive_x_rad_batch = (
+        ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+            clockwise_angle_from_positive_x_rad_batch=input_clockwise_angle_from_positive_x_rad_batch,
+            geometric_transform_matrix_batch=geometric_transform_matrix_batch_3x3,
+            wrap_output_to_0_2pi=True,
+        )
+    )
+
+    expected_clockwise_angle_from_positive_x_rad_batch = torch.remainder(
+        torch.pi - input_clockwise_angle_from_positive_x_rad_batch,
+        2 * torch.pi,
+    )
+    assert torch.allclose(
+        updated_clockwise_angle_from_positive_x_rad_batch,
+        expected_clockwise_angle_from_positive_x_rad_batch,
+        atol=1e-5,
+    )
+
+
+def test_update_clockwise_angle_degenerate_transform_preserves_input_and_supports_2x3():
+    input_clockwise_angle_from_positive_x_rad_batch = torch.tensor(
+        [[0.5], [1.4], [2.2]], dtype=torch.float32
+    )
+    geometric_transform_matrix_2x3 = torch.tensor(
+        [[0.0, 0.0, 0.0],
+         [0.0, 0.0, 0.0]],
+        dtype=torch.float32,
+    )
+
+    updated_clockwise_angle_from_positive_x_rad_batch = (
+        ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+            clockwise_angle_from_positive_x_rad_batch=input_clockwise_angle_from_positive_x_rad_batch,
+            geometric_transform_matrix_batch=geometric_transform_matrix_2x3,
+            wrap_output_to_0_2pi=False,
+        )
+    )
+
+    assert updated_clockwise_angle_from_positive_x_rad_batch.shape == input_clockwise_angle_from_positive_x_rad_batch.shape
+    assert torch.allclose(
+        updated_clockwise_angle_from_positive_x_rad_batch,
+        input_clockwise_angle_from_positive_x_rad_batch,
+        atol=1e-6,
+    )
+
+
+def test_update_clockwise_angle_full_composed_affine_transform_matches_sequential_application():
+    input_clockwise_angle_from_positive_x_rad_batch = torch.tensor(
+        [0.15, 0.85, 1.65, 2.55], dtype=torch.float32
+    )
+
+    horizontal_flip_matrix_3x3 = torch.tensor(
+        [[-1.0, 0.0, 0.0],
+         [0.0, 1.0, 0.0],
+         [0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+    vertical_flip_matrix_3x3 = torch.tensor(
+        [[1.0, 0.0, 0.0],
+         [0.0, -1.0, 0.0],
+         [0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+    rotation_angle_rad = torch.tensor(0.43, dtype=torch.float32)
+    rotation_matrix_3x3 = torch.tensor(
+        [[torch.cos(rotation_angle_rad).item(), -torch.sin(rotation_angle_rad).item(), 0.0],
+         [torch.sin(rotation_angle_rad).item(), torch.cos(rotation_angle_rad).item(), 0.0],
+         [0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+    scale_shear_matrix_3x3 = torch.tensor(
+        [[1.20, 0.18, 0.0],
+         [-0.07, 0.92, 0.0],
+         [0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+    translation_matrix_3x3 = torch.tensor(
+        [[1.0, 0.0, 13.0],
+         [0.0, 1.0, -9.0],
+         [0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+
+    composed_geometric_transform_matrix_3x3 = (
+        translation_matrix_3x3
+        @ scale_shear_matrix_3x3
+        @ rotation_matrix_3x3
+        @ vertical_flip_matrix_3x3
+        @ horizontal_flip_matrix_3x3
+    )
+
+    updated_angles_from_composed_transform_rad_batch = (
+        ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+            clockwise_angle_from_positive_x_rad_batch=input_clockwise_angle_from_positive_x_rad_batch,
+            geometric_transform_matrix_batch=composed_geometric_transform_matrix_3x3,
+            wrap_output_to_0_2pi=True,
+        )
+    )
+
+    updated_angles_from_sequential_transforms_rad_batch = input_clockwise_angle_from_positive_x_rad_batch.clone()
+    for geometric_transform_matrix_3x3 in (
+        horizontal_flip_matrix_3x3,
+        vertical_flip_matrix_3x3,
+        rotation_matrix_3x3,
+        scale_shear_matrix_3x3,
+        translation_matrix_3x3,
+    ):
+        updated_angles_from_sequential_transforms_rad_batch = (
+            ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+                clockwise_angle_from_positive_x_rad_batch=updated_angles_from_sequential_transforms_rad_batch,
+                geometric_transform_matrix_batch=geometric_transform_matrix_3x3,
+                wrap_output_to_0_2pi=True,
+            )
+        )
+
+    assert torch.allclose(
+        updated_angles_from_composed_transform_rad_batch,
+        updated_angles_from_sequential_transforms_rad_batch,
+        atol=1e-5,
+    )
+
+
+def test_update_clockwise_angle_different_transform_orders_produce_different_results():
+    input_clockwise_angle_from_positive_x_rad_batch = torch.tensor(
+        [0.35, 1.45, 2.75], dtype=torch.float32
+    )
+
+    horizontal_flip_matrix_3x3 = torch.tensor(
+        [[-1.0, 0.0, 0.0],
+         [0.0, 1.0, 0.0],
+         [0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+    rotation_angle_rad = torch.tensor(0.61, dtype=torch.float32)
+    rotation_matrix_3x3 = torch.tensor(
+        [[torch.cos(rotation_angle_rad).item(), -torch.sin(rotation_angle_rad).item(), 0.0],
+         [torch.sin(rotation_angle_rad).item(), torch.cos(rotation_angle_rad).item(), 0.0],
+         [0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+
+    composed_transform_rotate_then_flip_3x3 = horizontal_flip_matrix_3x3 @ rotation_matrix_3x3
+    composed_transform_flip_then_rotate_3x3 = rotation_matrix_3x3 @ horizontal_flip_matrix_3x3
+
+    updated_angles_rotate_then_flip_rad_batch = (
+        ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+            clockwise_angle_from_positive_x_rad_batch=input_clockwise_angle_from_positive_x_rad_batch,
+            geometric_transform_matrix_batch=composed_transform_rotate_then_flip_3x3,
+            wrap_output_to_0_2pi=True,
+        )
+    )
+    updated_angles_flip_then_rotate_rad_batch = (
+        ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+            clockwise_angle_from_positive_x_rad_batch=input_clockwise_angle_from_positive_x_rad_batch,
+            geometric_transform_matrix_batch=composed_transform_flip_then_rotate_3x3,
+            wrap_output_to_0_2pi=True,
+        )
+    )
+
+    assert not torch.allclose(
+        updated_angles_rotate_then_flip_rad_batch,
+        updated_angles_flip_then_rotate_rad_batch,
+        atol=1e-6,
+    )
+
+
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
 
