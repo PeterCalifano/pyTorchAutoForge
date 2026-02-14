@@ -200,7 +200,7 @@ class ImageAugmentationsHelper(nn.Module):
         self.device = torch.device(
             augs_cfg.device) if augs_cfg.device is not None else None
         self.num_aug_ops = 0
-        self.enable_cache_transforms = augs_cfg.enable_batch_validation_check or augs_cfg.enable_cache_transforms
+        self.enable_cache_transforms = augs_cfg.enable_cache_transforms
 
         # Cache variables
         self._geometric_aug_modules: list[tuple[GeometricAugmentationKey,
@@ -611,7 +611,7 @@ class ImageAugmentationsHelper(nn.Module):
                     self.augs_cfg.label_scaling_factors.to(lbl_tensor.device)
 
             # Cache geometric transform metadata for the latest batch if geometric augmentations were applied
-            if self.enable_cache_transforms and torch.is_tensor(aug_inputs[img_index]):
+            if (return_transform_metadata or self.enable_cache_transforms) and torch.is_tensor(aug_inputs[img_index]):
 
                 batch_size = int(aug_inputs[img_index].shape[0])
                 self._last_batch_transform_metadata = self._build_geometric_transform_metadata(batch_size=batch_size,
@@ -796,7 +796,7 @@ class ImageAugmentationsHelper(nn.Module):
             DataKey.KEYPOINTS)  # TODO (PC) absolutely requires extension!
 
         # Scan for invalid samples
-        is_valid_mask, invalid_samples = self._is_valid_image(*inputs)
+        is_valid_mask = self._is_valid_image(*inputs)
         invalid_indices = (~is_valid_mask).nonzero(as_tuple=True)[0]
 
         if not is_valid_mask.all():
@@ -827,8 +827,7 @@ class ImageAugmentationsHelper(nn.Module):
                         *invalid_original)
 
                     # Check new validity mask
-                    is_valid_mask_tmp, _ = self._is_valid_image(
-                        *new_aug_inputs_)
+                    is_valid_mask_tmp = self._is_valid_image(*new_aug_inputs_)
 
                     not_all_valid = not (is_valid_mask_tmp.all())
 
@@ -860,7 +859,7 @@ class ImageAugmentationsHelper(nn.Module):
 
         return list(new_inputs)
 
-    def _is_valid_image(self, *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...]):
+    def _is_valid_image(self, *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...]) -> torch.Tensor:
         """
         Check validity of augmented images in a batch.
 
@@ -875,36 +874,24 @@ class ImageAugmentationsHelper(nn.Module):
 
         Returns:
             is_valid_mask (torch.Tensor): Boolean tensor of shape (B,) indicating validity per image.
-            invalid_inputs (tuple): Tuple of tensors containing only the invalid samples.
         """
 
         # Compute mean across channels and spatial dims
         img_index = self.augs_cfg.input_data_keys.index(DataKey.IMAGE)
 
-        B = inputs[img_index].shape[0]
-        # mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
-
-        # Move all inputs to the same device
-        target_device = self._resolve_device(inputs[img_index])
-        inputs = tuple(
-            self._move_input_to_device(input, target_device) for input in inputs)
+        image_tensor = inputs[img_index]
+        if not torch.is_tensor(image_tensor):
+            raise TypeError("Expected image input to be a torch.Tensor during validation.")
+        B = image_tensor.shape[0]
 
         # A threshold to detect near-black images (tune if needed)
         # TODO remove hardcoded threshold. It also assumes that the value of intensity is NOT [0,1]!
 
         is_pixel_bright_count_mask = (
-            torch.abs(inputs[img_index]) > 1).view(B, -1).sum(dim=1)
+            torch.abs(image_tensor) > 1).view(B, -1).sum(dim=1)
         is_valid_mask = is_pixel_bright_count_mask >= self.augs_cfg.min_num_bright_pixels
 
-        # Indices of invalid images
-        invalid_indices = (~is_valid_mask).nonzero(as_tuple=True)[0]
-
-        # Select invalid samples
-        invalid_inputs = tuple(torch.index_select(
-            input, dim=0, index=invalid_indices) for input in inputs)
-
-        # Return validity mask and new invalid tensor samples (using index_select)
-        return is_valid_mask, invalid_inputs
+        return is_valid_mask
 
     # Overload "to" method
     def to(self, *args, **kwargs):
