@@ -1038,6 +1038,76 @@ def test_update_clockwise_angle_different_transform_orders_produce_different_res
     )
 
 
+def test_helper_metadata_supports_external_sun_direction_label_update():
+    torch.manual_seed(11)
+
+    batch_size = 4
+    input_image_batch = torch.rand(batch_size, 1, 48, 48, dtype=torch.float32)
+    input_label_batch = torch.tensor(
+        [
+            [24.0, 20.0, 45.0, 0.25],
+            [12.0, 10.0, 60.0, 1.00],
+            [36.0, 30.0, 90.0, 2.20],
+            [18.0, 28.0, 15.0, 5.60],
+        ],
+        dtype=torch.float32,
+    )
+
+    augmentation_config = AugmentationConfig(
+        input_data_keys=[DataKey.IMAGE, DataKey.KEYPOINTS],
+        is_torch_layout=True,
+        is_normalized=True,
+        input_normalization_factor=1.0,
+        enable_auto_input_normalization=False,
+        # deterministic geometric transform for expected-angle check
+        hflip_prob=1.0,
+        vflip_prob=0.0,
+        shift_aug_prob=0.0,
+        rotation_aug_prob=0.0,
+        brightness_aug_prob=0.0,
+        contrast_aug_prob=0.0,
+        gaussian_blur_aug_prob=0.0,
+        gaussian_noise_aug_prob=0.0,
+        device="cpu",
+    )
+
+    augmentation_helper = ImageAugmentationsHelper(augmentation_config)
+    augmented_image_batch, augmented_label_batch = augmentation_helper(
+        input_image_batch, input_label_batch
+    )
+
+    batch_geometric_transform_metadata = augmentation_helper.Get_last_batch_transform_metadata()
+    assert batch_geometric_transform_metadata is not None
+    assert batch_geometric_transform_metadata.combined_matrix_3x3.shape == (batch_size, 3, 3)
+
+    # The helper updates only KEYPOINTS (x, y); extra label entries remain unchanged.
+    assert torch.allclose(augmented_label_batch[:, 3], input_label_batch[:, 3], atol=1e-6)
+
+    updated_sun_direction_angle_from_positive_x_rad_batch = (
+        ImageAugmentationsHelper.Update_clockwise_angle_from_positive_x_using_geometric_transform(
+            clockwise_angle_from_positive_x_rad_batch=input_label_batch[:, 3],
+            geometric_transform_matrix_batch=batch_geometric_transform_metadata.combined_matrix_3x3,
+            wrap_output_to_0_2pi=True,
+        )
+    )
+
+    expected_updated_sun_direction_angle_from_positive_x_rad_batch = torch.remainder(
+        torch.pi - input_label_batch[:, 3],
+        2 * torch.pi,
+    )
+
+    assert torch.allclose(
+        updated_sun_direction_angle_from_positive_x_rad_batch,
+        expected_updated_sun_direction_angle_from_positive_x_rad_batch,
+        atol=1e-5,
+    )
+
+    # This is the angle update that external training code should apply.
+    externally_updated_label_batch = augmented_label_batch.clone()
+    externally_updated_label_batch[:, 3] = updated_sun_direction_angle_from_positive_x_rad_batch
+    assert not torch.allclose(externally_updated_label_batch[:, 3], input_label_batch[:, 3], atol=1e-6)
+
+
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
 
