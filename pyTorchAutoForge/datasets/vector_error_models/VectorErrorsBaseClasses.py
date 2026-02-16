@@ -192,8 +192,8 @@ class Vector1dErrorModel:
         params = cast(NegExponentialParams, self.parameters)
         rate = _as_tensor(params.rate, device=device,
                           dtype=dtype).expand(sample_shape)
-        dist = torch.distributions.NegExponential(rate)
-        return dist.sample()
+        dist = torch.distributions.Exponential(rate)
+        return -dist.sample()
 
 
 @dataclass(frozen=True, slots=True)
