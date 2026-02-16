@@ -9,7 +9,7 @@ from pyTorchAutoForge.datasets.vector_error_models.VectorErrorsBaseClasses impor
     GaussianParams,
     PoissonParams,
     UniformParams,
-    ExponentialParams,
+    NegExponentialParams,
 )
 
 
