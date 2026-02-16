@@ -368,9 +368,21 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         label_folder.append(os.path.join(
             datasets_root_folder_, _dataset_name, "labels"))
 
+        # Read image/label file names directly from disk instead of inferring templates.
+        supported_image_exts = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'}
+        image_filenames = sorted(
+            f for f in os.listdir(image_folder[dset_count])
+            if os.path.isfile(os.path.join(image_folder[dset_count], f))
+            and os.path.splitext(f)[1].lower() in supported_image_exts
+        )
+        label_filenames = sorted(
+            f for f in os.listdir(label_folder[dset_count])
+            if os.path.isfile(os.path.join(label_folder[dset_count], f))
+            and os.path.splitext(f)[1].lower() in {'.yml', '.yaml'}
+        )
+
         # Check size of names in the folder
-        sample_file = next((f for f in os.listdir(image_folder[dset_count]) if os.path.isfile(
-            os.path.join(image_folder[dset_count], f))), None)
+        sample_file = image_filenames[0] if image_filenames else None
 
         if sample_file:
             name_size = len(os.path.splitext(sample_file)[0])
@@ -380,22 +392,22 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
             continue
 
         # Append number of images in the set
-        num_of_imags_in_set.append(len(os.listdir(image_folder[dset_count])))
+        num_of_imags_in_set.append(len(image_filenames))
 
-        # Build filepath template
-        if name_size == 6:
-            filepath_template = lambda id: f"{id+1:06d}"
+        # Keep informational print for existing naming schemes
+        if not (name_size == 6 or name_size == 8):
+            print(
+                "\033[38;5;208mWARNING: image stem is not 6/8 digits. Continuing by direct filename matching.\033[0m")
 
-        elif name_size == 8:
-            filepath_template = lambda id: f"{id*150:08d}"
+        if len(label_filenames) == 0:
+            raise FileNotFoundError(
+                f"No .yml/.yaml labels found in folder: {label_folder[dset_count]}")
 
-        else:
-            raise ValueError(
-                "Image/labels names are assumed to have 6 or 8 numbers. Please check the dataset format.")
-
-        # Get labels folder extensions
-        file_ext = os.path.splitext(
-            os.listdir(label_folder[dset_count])[0])[1]
+        file_ext = os.path.splitext(label_filenames[0])[1]
+        label_paths_by_stem = {
+            os.path.splitext(lbl_name)[0]: os.path.join(label_folder[dset_count], lbl_name)
+            for lbl_name in label_filenames
+        }
 
         # Fetch sample paths and select if required
         if selection_criteria is not None:
@@ -403,11 +415,13 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
             tmp_img_count = num_of_imags_in_set[dset_count]
 
             # Build temporary numpy array of chars of size equal to num_of_imags_in_set[dset_count]
-            filenames = [filepath_template(id) + ".png" for id in range(tmp_img_count)]
-            tmp_img_filepaths = [os.path.join(image_folder[dset_count], path) for path in filenames]
+            tmp_img_filepaths = [os.path.join(image_folder[dset_count], name)
+                                 for name in image_filenames]
 
-            # Pick a safe fixed-width dtype to avoid object arrays
-            max_path_len = max(len(p) for p in tmp_img_filepaths)
+            # Pick a safe fixed-width dtype to avoid object arrays and truncation.
+            max_img_path_len = max(len(p) for p in tmp_img_filepaths)
+            max_lbl_path_len = max(len(p) for p in label_paths_by_stem.values())
+            max_path_len = max(max_img_path_len, max_lbl_path_len)
             tmp_img_filepaths = np.array(tmp_img_filepaths, dtype=f"U{max_path_len}")
 
             # Define lbl filepaths and mask arrays
@@ -416,9 +430,10 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
 
             # DEVNOTE: can be parallelized!
             for id in range(num_of_imags_in_set[dset_count]):
-                # Build image path
-                tmp_img_path = os.path.join(
-                    image_folder[dset_count], filepath_template(id) + '.png')
+                # Build image path from current discovered file name
+                image_filename = image_filenames[id]
+                image_stem = os.path.splitext(image_filename)[0]
+                tmp_img_path = os.path.join(image_folder[dset_count], image_filename)
 
                 # If any selection is requested based on image intensity, load the image
                 if selection_criteria.min_Q75_intensity is not None and hasOpenCV:
@@ -464,9 +479,8 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                     print(f"\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m", end='\r')
 
 
-                # Build lbl path
-                tmp_lbl_path = os.path.join(
-                    label_folder[dset_count], filepath_template(id) + file_ext)
+                # Build lbl path using matching stem
+                tmp_lbl_path = label_paths_by_stem.get(image_stem, "")
 
                 if os.path.exists(tmp_lbl_path):
                     if tmp_lbl_path.endswith('.yml') or tmp_lbl_path.endswith('.yaml'):
@@ -475,7 +489,8 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                         raise ValueError(
                             f"Unsupported label file format: {tmp_lbl_path}. Only .yml and .yaml are supported byt this implementation.")
                 else:
-                    raise FileNotFoundError(f"Label file not found: {tmp_lbl_path}")
+                    raise FileNotFoundError(
+                        f"Label file not found for image stem '{image_stem}' in {label_folder[dset_count]}")
                 
                 # Add in array
                 if selection_criteria.max_apparent_size is not None:
@@ -516,12 +531,18 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         else:
             # Build paths WITHOUT selection based on samples content
                       
-            # Get all paths as before
-            tmp_img_filepaths = [os.path.join(image_folder[dset_count], filepath_template(
-                id) + ".png") for id in range(num_of_imags_in_set[dset_count])]
+            # Get all paths from enumerated filenames
+            tmp_img_filepaths = [os.path.join(image_folder[dset_count], name)
+                                 for name in image_filenames]
+            tmp_lbl_filepaths = []
 
-            tmp_lbl_filepaths = [os.path.join(label_folder[dset_count], filepath_template(
-                id) + file_ext) for id in range(num_of_imags_in_set[dset_count])]
+            for image_filename in image_filenames:
+                image_stem = os.path.splitext(image_filename)[0]
+                tmp_lbl_path = label_paths_by_stem.get(image_stem, "")
+                if not os.path.exists(tmp_lbl_path):
+                    raise FileNotFoundError(
+                        f"Label file not found for image stem '{image_stem}' in {label_folder[dset_count]}")
+                tmp_lbl_filepaths.append(tmp_lbl_path)
 
             prev_size = num_of_imags_in_set[dset_count]
 
