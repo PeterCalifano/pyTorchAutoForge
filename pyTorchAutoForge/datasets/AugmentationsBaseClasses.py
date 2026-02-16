@@ -119,22 +119,15 @@ class BaseGainErrorModel(BaseErrorModel):
         error_sample = self.sample_realization(X)
         self._assert_sample_validity(error_sample)
 
-        # Determine operation based on size of error sample
-        if error_sample.shape == X.shape:
-            # Element-wise multiplication
-            return X * error_sample
-        
-        elif error_sample.shape[0] == X.shape[0] and error_sample.shape[1] == X.shape[1]:
-            # Batch-wise multiplication (broadcasting over spatial dimensions)
-            return X * error_sample[:, :, None, None]
-        
-        elif error_sample.shape[0] == X.shape[0] and error_sample.shape[1] == 1:
-        
-            # Batch-wise matrix multiplication
-            return torch.bmm(input=X, mat2=error_sample)
-        
-        else:
-            raise ValueError(f"Error sample shape {error_sample.shape} is not compatible with input tensor shape {X.shape} for gain error application.")    
+        # Ensure the sampled error has the same shape as the input tensor
+        if error_sample.shape != X.shape:
+            raise ValueError(
+                f"Error sample shape {error_sample.shape} is not compatible with input tensor shape {X.shape} "
+                f"for gain error application; expected matching shapes."
+            )
+
+        # Element-wise multiplication
+        return X * error_sample
     
 class BaseAddErrorModel(BaseErrorModel):
     """
