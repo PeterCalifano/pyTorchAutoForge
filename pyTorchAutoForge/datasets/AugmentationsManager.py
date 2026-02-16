@@ -1,17 +1,10 @@
 # TODO implement augmentations manager class, providing easy to use and flexible interface to consistently apply all augmentations in one call after config. Provides direct interface for ImagesAugmentations module and additional 1D vectors, as well as sequenced augmentations.
 
-from email.mime import image
-import kornia.augmentation as K
-from collections.abc import Sequence
-from typing import Literal, TypeAlias, Any
+from typing import TypeAlias
 import torch
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import numpy as np
-from numpy.typing import NDArray
-from enum import Enum
 import colorama
-from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
 
 from pyTorchAutoForge.datasets.ImagesAugmentation import ImageAugmentationsHelper, AugmentationConfig
 
