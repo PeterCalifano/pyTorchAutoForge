@@ -11,7 +11,13 @@ from dataclasses import dataclass
 import numpy as np
 from enum import Enum
 
-from pyTorchAutoForge.datasets.AugmentationsBaseClasses import EnumComputeBackend
+from pyTorchAutoForge.datasets.AugmentationsBaseClasses import (
+    EnumComputeBackend,
+    BaseAddErrorModel,
+    BaseGainErrorModel,
+    BaseErrorModel,
+    AugsBaseClass,
+)
 
 
 # %% Error models classes implementations
