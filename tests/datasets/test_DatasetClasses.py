@@ -1,12 +1,15 @@
-import sys
 import os
-from pyTorchAutoForge.datasets.DatasetClasses import ImagesLabelsContainer, NormalizeDataMatrix, NormalizationType, DatasetLoaderConfig, ImagesDatasetConfig, ImagesLabelsDatasetBase, PTAF_Datakey
+import tempfile
+from pyTorchAutoForge.datasets.DatasetClasses import ImagesLabelsContainer, NormalizeDataMatrix, NormalizationType, DatasetLoaderConfig, ImagesDatasetConfig, ImagesLabelsDatasetBase, PTAF_Datakey, DatasetPathsContainer
 
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import torch
 import numpy as np
+from torch.utils.data import DataLoader
+import pyTorchAutoForge.datasets.DatasetClasses as dataset_classes_module
+from pyTorchAutoForge.datasets.LabelsClasses import LabelsContainer
 
 # %% Auxiliary functions
 def _get_dataset_env_root():
@@ -212,6 +215,7 @@ def test_ImagesDatasetConfig_inheritance():
         assert config.image_format == "png"
         assert config.image_dtype == np.uint8
         assert config.image_backend == "cv2"
+        assert config.convert_rgb_to_grayscale is False
         assert config.intensity_scaling_mode == "dtype"
         assert config.intensity_scale_value is None
 
@@ -378,6 +382,160 @@ def test_ImagesLabelsCachedDataset():
     # The 3D images should have been unsqueezed to 4D [B, C, H, W]
     assert dataset_3d.tensors[0].dim() == 4
     assert dataset_3d.tensors[0].shape[1] == 1  # Channel dimension should be 1
+
+
+def _build_minimal_paths_container(image_paths: list[str], label_paths: list[str]) -> DatasetPathsContainer:
+    return DatasetPathsContainer(
+        img_filepaths=image_paths,
+        lbl_filepaths=label_paths,
+        num_of_entries_in_set=[len(image_paths)],
+        total_num_entries=len(image_paths),
+    )
+
+
+def _build_mocked_dataset(monkeypatch: pytest.MonkeyPatch,
+                          image_paths: list[str],
+                          convert_rgb_to_grayscale: bool,
+                          image_backend: str = "cv2",
+                          intensity_scaling_mode: str = "none",
+                          ) -> ImagesLabelsDatasetBase:
+    with patch('os.path.exists', return_value=True):
+        dset_cfg = ImagesDatasetConfig(
+            dataset_names_list="dummy_set",
+            datasets_root_folder="/dummy_root",
+            lbl_vector_data_keys=(PTAF_Datakey.PHASE_ANGLE,),
+            image_backend=image_backend,  # type:ignore[arg-type]
+            intensity_scaling_mode=intensity_scaling_mode,  # type:ignore[arg-type]
+            convert_rgb_to_grayscale=convert_rgb_to_grayscale,
+        )
+
+    container = _build_minimal_paths_container(
+        image_paths=image_paths,
+        label_paths=["dummy_lbl.yml"] * len(image_paths),
+    )
+    monkeypatch.setattr(dataset_classes_module, "FetchDatasetPaths",
+                        lambda *args, **kwargs: container)
+    monkeypatch.setattr(
+        dataset_classes_module.LabelsContainer,
+        "load_from_yaml",
+        lambda _path: LabelsContainer(),
+    )
+    return ImagesLabelsDatasetBase(dset_cfg=dset_cfg)
+
+
+@pytest.mark.skipif(not dataset_classes_module.hasOpenCV, reason="OpenCV is required for cv2 backend tests.")
+def test_ImagesLabelsDatasetBase_mixed_rgb_and_grayscale_to_grayscale(monkeypatch: pytest.MonkeyPatch):
+    dataset = _build_mocked_dataset(
+        monkeypatch=monkeypatch,
+        image_paths=["gray.png", "rgb.png"],
+        convert_rgb_to_grayscale=True,
+        image_backend="cv2",
+    )
+
+    image_map = {
+        "gray.png": np.random.randint(0, 255, (12, 12), dtype=np.uint8),
+        "rgb.png": np.random.randint(0, 255, (12, 12, 3), dtype=np.uint8),
+    }
+    dataset._load_img_from_file = lambda path: image_map[path]
+
+    img0, _ = dataset[0]
+    img1, _ = dataset[1]
+    assert img0.shape == (1, 12, 12)
+    assert img1.shape == (1, 12, 12)
+
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0)
+    batch_img, batch_lbl = next(iter(dataloader))
+    assert batch_img.shape == (2, 1, 12, 12)
+    assert batch_lbl.shape == (2, 1)
+
+
+@pytest.mark.skipif(not dataset_classes_module.hasOpenCV, reason="OpenCV is required for cv2 backend tests.")
+def test_ImagesLabelsDatasetBase_rgba_to_grayscale(monkeypatch: pytest.MonkeyPatch):
+    dataset = _build_mocked_dataset(
+        monkeypatch=monkeypatch,
+        image_paths=["rgba.png"],
+        convert_rgb_to_grayscale=True,
+        image_backend="cv2",
+    )
+    dataset._load_img_from_file = lambda _path: np.random.randint(
+        0, 255, (10, 10, 4), dtype=np.uint8
+    )
+
+    img, _ = dataset[0]
+    assert img.shape == (1, 10, 10)
+
+
+@pytest.mark.skipif(not dataset_classes_module.hasOpenCV, reason="OpenCV is required for cv2 backend tests.")
+def test_ImagesLabelsDatasetBase_unsupported_channels_raise(monkeypatch: pytest.MonkeyPatch):
+    dataset = _build_mocked_dataset(
+        monkeypatch=monkeypatch,
+        image_paths=["bad_channels.png"],
+        convert_rgb_to_grayscale=True,
+        image_backend="cv2",
+    )
+    dataset._load_img_from_file = lambda _path: np.random.randint(
+        0, 255, (10, 10, 5), dtype=np.uint8
+    )
+
+    with pytest.raises(ValueError, match="Unsupported image shape for grayscale conversion"):
+        _ = dataset[0]
+
+
+@pytest.mark.skipif(not dataset_classes_module.hasOpenCV, reason="OpenCV is required for cv2 backend tests.")
+def test_ImagesLabelsDatasetBase_disabled_conversion_keeps_rgb(monkeypatch: pytest.MonkeyPatch):
+    dataset = _build_mocked_dataset(
+        monkeypatch=monkeypatch,
+        image_paths=["rgb.png"],
+        convert_rgb_to_grayscale=False,
+        image_backend="cv2",
+    )
+    dataset._load_img_from_file = lambda _path: np.random.randint(
+        0, 255, (16, 16, 3), dtype=np.uint8
+    )
+
+    img, _ = dataset[0]
+    assert img.shape == (3, 16, 16)
+
+
+@pytest.mark.skipif(not dataset_classes_module.hasOpenCV, reason="OpenCV is required for multiprocessing cv2 test.")
+def test_ImagesLabelsDatasetBase_worker_collate_with_mixed_inputs():
+    import cv2
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        dataset_name = "dataset_mixed_inputs"
+        images_dir = Path(tmp_dir) / dataset_name / "images"
+        labels_dir = Path(tmp_dir) / dataset_name / "labels"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        labels_dir.mkdir(parents=True, exist_ok=True)
+
+        gray_img = np.random.randint(0, 255, (20, 20), dtype=np.uint8)
+        rgb_img = np.random.randint(0, 255, (20, 20, 3), dtype=np.uint8)
+        cv2.imwrite(str(images_dir / "000001.png"), gray_img)
+        cv2.imwrite(str(images_dir / "000002.png"), rgb_img)
+
+        LabelsContainer().save_to_yaml(str(labels_dir / "000001.yml"))
+        LabelsContainer().save_to_yaml(str(labels_dir / "000002.yml"))
+
+        dset_cfg = ImagesDatasetConfig(
+            dataset_names_list=dataset_name,
+            datasets_root_folder=(tmp_dir,),
+            lbl_vector_data_keys=(PTAF_Datakey.PHASE_ANGLE,),
+            image_backend="cv2",
+            intensity_scaling_mode="none",
+            convert_rgb_to_grayscale=True,
+        )
+        dataset = ImagesLabelsDatasetBase(dset_cfg=dset_cfg)
+        dataloader = DataLoader(dataset, batch_size=2,
+                                shuffle=False, num_workers=2)
+
+        try:
+            batch_img, batch_lbl = next(iter(dataloader))
+        except PermissionError as exc:
+            pytest.skip(
+                f"Multiprocessing semaphores are not available in this execution environment: {exc}"
+            )
+        assert batch_img.shape == (2, 1, 20, 20)
+        assert batch_lbl.shape == (2, 1)
             
 
 # %% MANUAL CALLS for debugging
@@ -387,4 +545,3 @@ if __name__ == "__main__":
     ##test_ImagesDatasetConfig()
     #test_ImagesLabelsDatasetBase()
     pass
-

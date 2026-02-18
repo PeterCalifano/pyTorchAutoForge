@@ -166,6 +166,7 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
     image_dtype: type | torch.dtype = torch.uint8
     image_backend: Literal['pil', 'cv2'] = 'cv2'
     load_as_tensor: bool = True
+    convert_rgb_to_grayscale: bool = False
 
     # Additional options
     intensity_scaling_mode: Literal['none', 'dtype', 'custom'] = 'dtype'
@@ -752,6 +753,48 @@ class ImagesLabelsDatasetBase(Dataset):
                 f"Failed to load image {img_path} with backend {self.dset_cfg.image_backend}"
             )
 
+        # Run time conversion to grayscale if requested
+        if self.dset_cfg.convert_rgb_to_grayscale:
+            if self.dset_cfg.image_backend == 'cv2':
+                # Conversion to grayscale using cv2 backend
+                if not isinstance(img, np.ndarray):
+                    raise TypeError(
+                        f"cv2 backend must return a numpy.ndarray, got {type(img)} for image {img_path}."
+                    )
+                if img.ndim == 2:
+                    pass
+
+                elif img.ndim == 3 and img.shape[2] == 1:
+                    img = img[:, :, 0]
+
+                elif img.ndim == 3 and img.shape[2] == 3:
+                    img = ocv.cvtColor(img, ocv.COLOR_BGR2GRAY)
+
+                elif img.ndim == 3 and img.shape[2] == 4:
+                    img = ocv.cvtColor(img, ocv.COLOR_BGRA2GRAY)
+
+                else:
+                    raise ValueError(
+                        f"Unsupported image shape for grayscale conversion at {img_path}: {img.shape}. "
+                        "Supported layouts are HxW, HxWx1, HxWx3, HxWx4."
+                    )
+                
+            elif self.dset_cfg.image_backend == 'pil':
+                # Conversion to grayscale using PIL backend
+                if isinstance(img, Image.Image):
+                    img = img.convert('L')
+                
+                img = np.asarray(img)
+                
+                if img.ndim == 3 and img.shape[2] == 1:
+                    img = img[:, :, 0]
+                
+                elif img.ndim != 2:
+                    raise ValueError(
+                        f"Unsupported PIL image shape for grayscale conversion at {img_path}: {img.shape}. "
+                        "Supported layouts are HxW or HxWx1 after conversion."
+                    )
+
         if self.dset_cfg.load_as_tensor:
             img = numpy_to_torch(img)
 
@@ -857,6 +900,9 @@ class ImagesLabelsDatasetBase(Dataset):
         if self.lbl_transform is not None:
             # Apply target transform to the label
             lbl = self.lbl_transform(lbl)
+
+        if isinstance(img, torch.Tensor):
+            img = img.contiguous().clone()
 
         # Slice lbl if output_size_limit is set
         if self.dset_cfg.output_size_limit > 0 and not (self.skip_output_slicing):
