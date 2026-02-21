@@ -446,10 +446,9 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
             if selection_criteria.min_Q75_intensity is not None and not hasOpenCV:
                 print(f"\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m")
 
-            # Pre-allocate to max possible size to avoid repeated dynamic resizing
-            max_samples = len(image_filenames)
-            tmp_img_filepaths = [None] * max_samples
-            tmp_lbl_filepaths = [None] * max_samples
+            # Build valid paths incrementally; this is fast in Python and avoids full preallocation.
+            tmp_img_filepaths = []
+            tmp_lbl_filepaths = []
             valid_count = 0
 
             # DEVNOTE: can be parallelized!
@@ -510,18 +509,14 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                         print(f" - Warning: Image {id+1} has 75th percentile intensity of illuminated pixels equal to {perc75_intensity} < {selection_criteria.min_Q75_intensity} in too many pixels, discarded as too dark.")
                         continue
 
-                # All checks passed --> sample is valid (allocate filepath)
-                tmp_img_filepaths[valid_count] = tmp_img_path
-                tmp_lbl_filepaths[valid_count] = tmp_lbl_path
+                # All checks passed --> sample is valid
+                tmp_img_filepaths.append(tmp_img_path)
+                tmp_lbl_filepaths.append(tmp_lbl_path)
                 valid_count += 1
 
                 # Early exit once limit is satisfied
                 if _limit > 0 and valid_count >= _limit:
                     break
-
-            # Trim to valid count
-            tmp_img_filepaths = tmp_img_filepaths[:valid_count]
-            tmp_lbl_filepaths = tmp_lbl_filepaths[:valid_count]
 
             # Update count of images
             prev_size = num_of_imags_in_set[dset_count]
