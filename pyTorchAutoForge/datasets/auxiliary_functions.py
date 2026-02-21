@@ -15,15 +15,16 @@ from pyTorchAutoForge.datasets.DatasetClasses import PTAF_Datakey, ImagesLabelsC
 try:
     from cv2 import imread
     def LoadDatasetToMem(dataset_name: str | list | tuple,
-                        datasets_root_folder: str | tuple[str, ...],
-                        dataset_origin_tag: tuple[Literal['legacy',
-                                                        'dataset_gen_lib', 'dataset_gen_lib_abram']],
-                        lbl_vector_data_keys: tuple[PTAF_Datakey | str, ...],
-                        samples_limit_per_dataset: int = 0,
-                        img_width_heigth: int | tuple[int, int] = (1024, 1024),
-                        label_vector_size: int | None = None,
-                        max_apparent_size: float | int | None = None,
-                        min_bbox_width_height: tuple[float, float] | float | None = None) -> ImagesLabelsContainer:
+                    datasets_root_folder: str | tuple[str, ...],
+                    dataset_origin_tag: tuple[Literal['legacy',
+                                                    'dataset_gen_lib', 'dataset_gen_lib_abram']],
+                    lbl_vector_data_keys: tuple[PTAF_Datakey | str, ...],
+                    samples_limit_per_dataset: int = 0,
+                    num_workers: int = 0,
+                    img_width_heigth: int | tuple[int, int] = (1024, 1024),
+                    label_vector_size: int | None = None,
+                    max_apparent_size: float | int | None = None,
+                    min_bbox_width_height: tuple[float, float] | float | None = None) -> ImagesLabelsContainer:
         """
         Loads a dataset of images and labels into memory as tensors.
 
@@ -33,6 +34,7 @@ try:
             dataset_origin_tag (tuple[Literal['legacy', 'dataset_gen_lib', 'dataset_gen_lib_abram']]): Tag indicating the dataset's origin.
             lbl_vector_data_keys (tuple[PTAF_Datakey | str, ...]): Keys specifying which label data to extract.
             samples_limit_per_dataset (int, optional): Maximum number of samples to load per dataset. Defaults to 0 (no limit).
+            num_workers (int, optional): Number of workers used while fetching dataset paths with selection criteria. Defaults to 0 (sequential).
             img_width_heigth (int | tuple[int, int], optional): Image width and height. Defaults to (1024, 1024).
             label_vector_size (int | None, optional): Size of the label vector. If None, inferred from data. Defaults to None.
 
@@ -63,7 +65,8 @@ try:
         # Fetch dataset paths
         dataset_paths_container = FetchDatasetPaths(dataset_name=dataset_names_array,
                                                     datasets_root_folder=datasets_root_folder,
-                                                    samples_limit_per_dataset=samples_limit_per_dataset)
+                                                    samples_limit_per_dataset=samples_limit_per_dataset,
+                                                    num_workers=num_workers)
 
         imgPaths, lblPaths, total_num_imgs = dataset_paths_container.dump_as_tuple()
 

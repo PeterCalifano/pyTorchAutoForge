@@ -1,10 +1,11 @@
 import os
 import tempfile
-from pyTorchAutoForge.datasets.DatasetClasses import ImagesLabelsContainer, NormalizeDataMatrix, NormalizationType, DatasetLoaderConfig, ImagesDatasetConfig, ImagesLabelsDatasetBase, PTAF_Datakey, DatasetPathsContainer
+from pyTorchAutoForge.datasets.DatasetClasses import ImagesLabelsContainer, NormalizeDataMatrix, NormalizationType, DatasetLoaderConfig, ImagesDatasetConfig, ImagesLabelsDatasetBase, PTAF_Datakey, DatasetPathsContainer, FetchDatasetPaths, SamplesSelectionCriteria
 
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+from typing import Any
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
@@ -113,6 +114,7 @@ def test_DatasetLoaderConfig_init_with_strings():
         assert config.labels_folder_name == "labels"
         assert config.lbl_dtype == torch.float32
         assert config.samples_limit_per_dataset == -1
+        assert config.num_workers == 0
 
 
 def test_DatasetLoaderConfig_init_with_lists_and_tuples():
@@ -195,6 +197,25 @@ def test_DatasetLoaderConfig_invalid_datakey_type():
             )
 
 
+def test_DatasetLoaderConfig_invalid_num_workers():
+    with patch('os.path.exists', return_value=True):
+        with pytest.raises(ValueError, match="num_workers must be >= 0"):
+            DatasetLoaderConfig(
+                dataset_names_list="dataset1",
+                datasets_root_folder="/fake/path",
+                lbl_vector_data_keys=(PTAF_Datakey.CENTRE_OF_FIGURE,),
+                num_workers=-1,
+            )
+
+        with pytest.raises(TypeError, match="num_workers must be an integer"):
+            DatasetLoaderConfig(
+                dataset_names_list="dataset1",
+                datasets_root_folder="/fake/path",
+                lbl_vector_data_keys=(PTAF_Datakey.CENTRE_OF_FIGURE,),
+                num_workers=1.5,  # type: ignore[arg-type]
+            )
+
+
 def test_ImagesDatasetConfig_inheritance():
     """Test that ImagesDatasetConfig inherits from DatasetLoaderConfig"""
     with patch('os.path.exists', return_value=True):
@@ -269,6 +290,175 @@ def test_ImagesDatasetConfig_intensity_scaling_validation():
                 lbl_vector_data_keys=(PTAF_Datakey.CENTRE_OF_FIGURE,),
                 intensity_scaling_mode="dtype",
                 intensity_scale_value=0.5)
+
+
+def _create_test_dataset(root_path: Path,
+                         dataset_name: str,
+                         stems: list[str],
+                         apparent_sizes: dict[str, float] | None = None,
+                         bbox_by_stem: dict[str, tuple[float, float, float, float]] | None = None) -> tuple[Path, Path]:
+    dataset_path = root_path / dataset_name
+    images_path = dataset_path / "images"
+    labels_path = dataset_path / "labels"
+    images_path.mkdir(parents=True, exist_ok=True)
+    labels_path.mkdir(parents=True, exist_ok=True)
+
+    for stem in stems:
+        (images_path / f"{stem}.png").write_bytes(b"")
+        label_container = LabelsContainer()
+        label_container.geometric.bbox_coords_order = "xywh"
+        label_container.geometric.bound_box_coordinates = (
+            bbox_by_stem.get(stem, (0.0, 0.0, 10.0, 10.0))
+            if bbox_by_stem is not None else (0.0, 0.0, 10.0, 10.0)
+        )
+        label_container.geometric.obj_apparent_size_in_pix = (
+            apparent_sizes.get(stem, 0.0) if apparent_sizes is not None else 0.0
+        )
+        label_container.save_to_yaml(str(labels_path / f"{stem}.yml"))
+
+    return images_path, labels_path
+
+
+def test_FetchDatasetPaths_basic_collects_all_pairs():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_basic"
+        stems = ["000001", "000002", "000003"]
+        _create_test_dataset(root_path, dataset_name, stems)
+
+        result = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+        )
+
+        assert result.total_num_entries == 3
+        assert len(result.img_filepaths) == 3
+        assert len(result.lbl_filepaths) == 3
+        assert [Path(path).stem for path in result.img_filepaths] == stems
+        assert [Path(path).stem for path in result.lbl_filepaths] == stems
+
+
+def test_FetchDatasetPaths_samples_limit_applies_to_single_dataset():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_limit"
+        stems = ["000001", "000002", "000003", "000004"]
+        _create_test_dataset(root_path, dataset_name, stems)
+
+        result = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            samples_limit_per_dataset=2,
+        )
+
+        assert result.total_num_entries == 2
+        assert len(result.img_filepaths) == 2
+        assert len(result.lbl_filepaths) == 2
+        assert [Path(path).stem for path in result.img_filepaths] == stems[:2]
+
+
+def test_FetchDatasetPaths_selection_criteria_filters_by_apparent_size():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_apparent_size"
+        stems = ["000001", "000002", "000003"]
+        apparent_sizes = {"000001": 1.0, "000002": 20.0, "000003": 5.0}
+        _create_test_dataset(root_path, dataset_name, stems, apparent_sizes=apparent_sizes)
+
+        result = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=SamplesSelectionCriteria(max_apparent_size=10.0),
+        )
+
+        assert [Path(path).stem for path in result.img_filepaths] == ["000001", "000003"]
+        assert result.total_num_entries == 2
+
+
+def test_FetchDatasetPaths_selection_criteria_filters_by_bbox():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_bbox"
+        stems = ["000001", "000002", "000003"]
+        bbox_by_stem = {
+            "000001": (0.0, 0.0, 2.0, 2.0),
+            "000002": (0.0, 0.0, 10.0, 1.0),
+            "000003": (0.0, 0.0, 6.0, 8.0),
+        }
+        _create_test_dataset(root_path, dataset_name, stems, bbox_by_stem=bbox_by_stem)
+
+        result = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=SamplesSelectionCriteria(min_bbox_width_height=(4.0, 4.0)),
+        )
+
+        assert [Path(path).stem for path in result.img_filepaths] == ["000002", "000003"]
+        assert result.total_num_entries == 2
+
+
+def test_FetchDatasetPaths_string_root_folder_supported():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_root_as_string"
+        stems = ["000001", "000002"]
+        _create_test_dataset(root_path, dataset_name, stems)
+
+        result = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=str(root_path),
+        )
+
+        assert [Path(path).stem for path in result.img_filepaths] == stems
+        assert result.total_num_entries == 2
+
+
+def test_FetchDatasetPaths_samples_limit_keeps_multiple_datasets():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_a = "dataset_A"
+        dataset_b = "dataset_B"
+        stems_a = ["000001", "000002", "000003"]
+        stems_b = ["000004", "000005", "000006"]
+        _create_test_dataset(root_path, dataset_a, stems_a)
+        _create_test_dataset(root_path, dataset_b, stems_b)
+
+        result = FetchDatasetPaths(
+            dataset_name=[dataset_a, dataset_b],
+            datasets_root_folder=(str(root_path),),
+            samples_limit_per_dataset=2,
+        )
+
+        assert result.total_num_entries == 4
+        assert result.num_of_entries_in_set == [2, 2]
+        assert [Path(path).stem for path in result.img_filepaths] == ["000001", "000002", "000004", "000005"]
+
+
+def test_FetchDatasetPaths_parallel_matches_sequential():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_parallel"
+        stems = [f"{i:06d}" for i in range(1, 41)]
+        apparent_sizes = {stem: float(i % 7) for i, stem in enumerate(stems)}
+        _create_test_dataset(root_path, dataset_name, stems, apparent_sizes=apparent_sizes)
+
+        criteria = SamplesSelectionCriteria(max_apparent_size=3.0)
+        result_seq = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=0,
+        )
+        result_par = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=4,
+        )
+
+        assert result_par.img_filepaths == result_seq.img_filepaths
+        assert result_par.lbl_filepaths == result_seq.lbl_filepaths
+        assert result_par.total_num_entries == result_seq.total_num_entries
 
 # %% Tests for dataset classes
 def test_ImagesLabelsDatasetBase():
@@ -421,6 +611,35 @@ def _build_mocked_dataset(monkeypatch: pytest.MonkeyPatch,
         lambda _path: LabelsContainer(),
     )
     return ImagesLabelsDatasetBase(dset_cfg=dset_cfg)
+
+
+def test_ImagesLabelsDatasetBase_passes_num_workers_to_fetch(monkeypatch: pytest.MonkeyPatch):
+    captured_kwargs: dict[str, Any] = {}
+
+    def _fetch_spy(*_args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _build_minimal_paths_container(
+            image_paths=["dummy_img.png"],
+            label_paths=["dummy_lbl.yml"],
+        )
+
+    with patch('os.path.exists', return_value=True):
+        dset_cfg = ImagesDatasetConfig(
+            dataset_names_list="dummy_set",
+            datasets_root_folder="/dummy_root",
+            lbl_vector_data_keys=(PTAF_Datakey.PHASE_ANGLE,),
+            num_workers=4,
+        )
+
+    monkeypatch.setattr(dataset_classes_module, "FetchDatasetPaths", _fetch_spy)
+    monkeypatch.setattr(
+        dataset_classes_module.LabelsContainer,
+        "load_from_yaml",
+        lambda _path: LabelsContainer(),
+    )
+
+    _ = ImagesLabelsDatasetBase(dset_cfg=dset_cfg)
+    assert captured_kwargs["num_workers"] == 4
 
 
 @pytest.mark.skipif(not dataset_classes_module.hasOpenCV, reason="OpenCV is required for cv2 backend tests.")
