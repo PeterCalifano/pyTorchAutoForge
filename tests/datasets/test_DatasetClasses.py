@@ -319,6 +319,36 @@ def _create_test_dataset(root_path: Path,
     return images_path, labels_path
 
 
+def _create_test_dataset_with_images(root_path: Path,
+                                     dataset_name: str,
+                                     images_by_stem: dict[str, np.ndarray],
+                                     apparent_sizes: dict[str, float] | None = None,
+                                     bbox_by_stem: dict[str, tuple[float, float, float, float]] | None = None) -> tuple[Path, Path]:
+    dataset_path = root_path / dataset_name
+    images_path = dataset_path / "images"
+    labels_path = dataset_path / "labels"
+    images_path.mkdir(parents=True, exist_ok=True)
+    labels_path.mkdir(parents=True, exist_ok=True)
+
+    for stem, image_data in images_by_stem.items():
+        saved_ok = dataset_classes_module.ocv.imwrite(str(images_path / f"{stem}.png"), image_data)
+        if not saved_ok:
+            raise RuntimeError(f"Failed to write synthetic image for stem '{stem}'.")
+
+        label_container = LabelsContainer()
+        label_container.geometric.bbox_coords_order = "xywh"
+        label_container.geometric.bound_box_coordinates = (
+            bbox_by_stem.get(stem, (0.0, 0.0, 10.0, 10.0))
+            if bbox_by_stem is not None else (0.0, 0.0, 10.0, 10.0)
+        )
+        label_container.geometric.obj_apparent_size_in_pix = (
+            apparent_sizes.get(stem, 0.0) if apparent_sizes is not None else 0.0
+        )
+        label_container.save_to_yaml(str(labels_path / f"{stem}.yml"))
+
+    return images_path, labels_path
+
+
 def test_FetchDatasetPaths_basic_collects_all_pairs():
     with tempfile.TemporaryDirectory() as tmp_dir:
         root_path = Path(tmp_dir)
@@ -452,6 +482,117 @@ def test_FetchDatasetPaths_parallel_matches_sequential():
         result_par = FetchDatasetPaths(
             dataset_name=dataset_name,
             datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=4,
+        )
+
+        assert result_par.img_filepaths == result_seq.img_filepaths
+        assert result_par.lbl_filepaths == result_seq.lbl_filepaths
+        assert result_par.total_num_entries == result_seq.total_num_entries
+
+
+def test_FetchDatasetPaths_parallel_respects_samples_limit_early_stop():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_parallel_limit"
+        stems = [f"{i:06d}" for i in range(1, 701)]
+        _create_test_dataset(root_path, dataset_name, stems)
+
+        criteria = SamplesSelectionCriteria(max_apparent_size=10.0)
+        result = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            samples_limit_per_dataset=300,
+            selection_criteria=criteria,
+            num_workers=4,
+        )
+
+        assert result.total_num_entries == 300
+        assert [Path(path).stem for path in result.img_filepaths] == stems[:300]
+
+
+@pytest.mark.skipif(not dataset_classes_module.hasOpenCV, reason="OpenCV is required for intensity-filter parity test.")
+def test_FetchDatasetPaths_parallel_and_sequential_match_with_intensity_filter():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_intensity_parallel"
+        stems = [f"{i:06d}" for i in range(1, 321)]
+
+        images_by_stem: dict[str, np.ndarray] = {}
+        for i, stem in enumerate(stems):
+            if i % 2 == 0:
+                images_by_stem[stem] = np.full((16, 16), 32, dtype=np.uint8)
+            else:
+                images_by_stem[stem] = np.zeros((16, 16), dtype=np.uint8)
+
+        _create_test_dataset_with_images(root_path, dataset_name, images_by_stem)
+        criteria = SamplesSelectionCriteria(min_Q75_intensity=10.0)
+
+        result_seq = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=0,
+        )
+        result_par = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=4,
+        )
+
+        assert result_par.img_filepaths == result_seq.img_filepaths
+        assert result_par.lbl_filepaths == result_seq.lbl_filepaths
+        assert result_par.total_num_entries == result_seq.total_num_entries
+
+
+def test_FetchDatasetPaths_auto_threshold_falls_back_to_sequential_for_small_workloads():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_auto_threshold_small"
+        stems = [f"{i:06d}" for i in range(1, 41)]
+        apparent_sizes = {stem: float(i % 5) for i, stem in enumerate(stems)}
+        _create_test_dataset(root_path, dataset_name, stems, apparent_sizes=apparent_sizes)
+
+        criteria = SamplesSelectionCriteria(max_apparent_size=2.0)
+        result_seq = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=0,
+        )
+        result_auto = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=4,
+        )
+
+        assert result_auto.img_filepaths == result_seq.img_filepaths
+        assert result_auto.lbl_filepaths == result_seq.lbl_filepaths
+        assert result_auto.total_num_entries == result_seq.total_num_entries
+
+
+def test_FetchDatasetPaths_parallel_deterministic_order_under_limit():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_parallel_sparse_order"
+        stems = [f"{i:06d}" for i in range(1, 801)]
+        apparent_sizes = {stem: (0.0 if (i % 3 == 0) else 5.0) for i, stem in enumerate(stems)}
+        _create_test_dataset(root_path, dataset_name, stems, apparent_sizes=apparent_sizes)
+
+        criteria = SamplesSelectionCriteria(max_apparent_size=1.0)
+        result_seq = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            samples_limit_per_dataset=260,
+            selection_criteria=criteria,
+            num_workers=0,
+        )
+        result_par = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            samples_limit_per_dataset=260,
             selection_criteria=criteria,
             num_workers=4,
         )
