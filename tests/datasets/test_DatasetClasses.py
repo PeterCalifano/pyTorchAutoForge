@@ -5,6 +5,7 @@ from pyTorchAutoForge.datasets.DatasetClasses import ImagesLabelsContainer, Norm
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+from typing import Any
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
@@ -113,6 +114,7 @@ def test_DatasetLoaderConfig_init_with_strings():
         assert config.labels_folder_name == "labels"
         assert config.lbl_dtype == torch.float32
         assert config.samples_limit_per_dataset == -1
+        assert config.num_workers == 0
 
 
 def test_DatasetLoaderConfig_init_with_lists_and_tuples():
@@ -192,6 +194,25 @@ def test_DatasetLoaderConfig_invalid_datakey_type():
                 dataset_names_list="dataset1",
                 datasets_root_folder="/fake/path",
                 lbl_vector_data_keys=(123,)  # Not a PTAF_Datakey or str
+            )
+
+
+def test_DatasetLoaderConfig_invalid_num_workers():
+    with patch('os.path.exists', return_value=True):
+        with pytest.raises(ValueError, match="num_workers must be >= 0"):
+            DatasetLoaderConfig(
+                dataset_names_list="dataset1",
+                datasets_root_folder="/fake/path",
+                lbl_vector_data_keys=(PTAF_Datakey.CENTRE_OF_FIGURE,),
+                num_workers=-1,
+            )
+
+        with pytest.raises(TypeError, match="num_workers must be an integer"):
+            DatasetLoaderConfig(
+                dataset_names_list="dataset1",
+                datasets_root_folder="/fake/path",
+                lbl_vector_data_keys=(PTAF_Datakey.CENTRE_OF_FIGURE,),
+                num_workers=1.5,  # type: ignore[arg-type]
             )
 
 
@@ -590,6 +611,35 @@ def _build_mocked_dataset(monkeypatch: pytest.MonkeyPatch,
         lambda _path: LabelsContainer(),
     )
     return ImagesLabelsDatasetBase(dset_cfg=dset_cfg)
+
+
+def test_ImagesLabelsDatasetBase_passes_num_workers_to_fetch(monkeypatch: pytest.MonkeyPatch):
+    captured_kwargs: dict[str, Any] = {}
+
+    def _fetch_spy(*_args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _build_minimal_paths_container(
+            image_paths=["dummy_img.png"],
+            label_paths=["dummy_lbl.yml"],
+        )
+
+    with patch('os.path.exists', return_value=True):
+        dset_cfg = ImagesDatasetConfig(
+            dataset_names_list="dummy_set",
+            datasets_root_folder="/dummy_root",
+            lbl_vector_data_keys=(PTAF_Datakey.PHASE_ANGLE,),
+            num_workers=4,
+        )
+
+    monkeypatch.setattr(dataset_classes_module, "FetchDatasetPaths", _fetch_spy)
+    monkeypatch.setattr(
+        dataset_classes_module.LabelsContainer,
+        "load_from_yaml",
+        lambda _path: LabelsContainer(),
+    )
+
+    _ = ImagesLabelsDatasetBase(dset_cfg=dset_cfg)
+    assert captured_kwargs["num_workers"] == 4
 
 
 @pytest.mark.skipif(not dataset_classes_module.hasOpenCV, reason="OpenCV is required for cv2 backend tests.")

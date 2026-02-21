@@ -117,6 +117,7 @@ class DatasetLoaderConfig():
 
     # Additional details/options
     samples_limit_per_dataset: int | tuple[int, ...] = -1
+    num_workers: int = 0
 
     def __post_init__(self):
         """
@@ -154,6 +155,12 @@ class DatasetLoaderConfig():
 
         # Reassign lbl_vector_data_keys to ensure they are PTAF_Datakey instances
         self.lbl_vector_data_keys = tuple(lbl_vector_data_keys_checked)
+
+        if not isinstance(self.num_workers, int):
+            raise TypeError(
+                f"num_workers must be an integer, got {type(self.num_workers)}")
+        if self.num_workers < 0:
+            raise ValueError("num_workers must be >= 0.")
 
 
 @dataclass
@@ -779,7 +786,8 @@ class ImagesLabelsDatasetBase(Dataset):
         self.dataset_paths_container = FetchDatasetPaths(dataset_name=self.dset_cfg.dataset_names_list,
                                                          datasets_root_folder=self.dset_cfg.datasets_root_folder,
                                                          samples_limit_per_dataset=self.dset_cfg.samples_limit_per_dataset,
-                                                         selection_criteria=self.selection_criteria)
+                                                         selection_criteria=self.selection_criteria,
+                                                         num_workers=self.dset_cfg.num_workers)
 
         self.dataset_size = len(self.dataset_paths_container)
 
