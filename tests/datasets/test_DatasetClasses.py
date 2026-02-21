@@ -412,6 +412,33 @@ def test_FetchDatasetPaths_samples_limit_keeps_multiple_datasets():
         assert result.num_of_entries_in_set == [2, 2]
         assert [Path(path).stem for path in result.img_filepaths] == ["000001", "000002", "000004", "000005"]
 
+
+def test_FetchDatasetPaths_parallel_matches_sequential():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root_path = Path(tmp_dir)
+        dataset_name = "dataset_parallel"
+        stems = [f"{i:06d}" for i in range(1, 41)]
+        apparent_sizes = {stem: float(i % 7) for i, stem in enumerate(stems)}
+        _create_test_dataset(root_path, dataset_name, stems, apparent_sizes=apparent_sizes)
+
+        criteria = SamplesSelectionCriteria(max_apparent_size=3.0)
+        result_seq = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=0,
+        )
+        result_par = FetchDatasetPaths(
+            dataset_name=dataset_name,
+            datasets_root_folder=(str(root_path),),
+            selection_criteria=criteria,
+            num_workers=4,
+        )
+
+        assert result_par.img_filepaths == result_seq.img_filepaths
+        assert result_par.lbl_filepaths == result_seq.lbl_filepaths
+        assert result_par.total_num_entries == result_seq.total_num_entries
+
 # %% Tests for dataset classes
 def test_ImagesLabelsDatasetBase():
     dset_config = test_ImagesDatasetConfig()

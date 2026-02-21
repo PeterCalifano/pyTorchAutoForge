@@ -24,6 +24,7 @@ from PIL import Image
 from functools import partial
 import json
 import yaml
+import concurrent.futures
 from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey, LabelsContainer
 
 try:
@@ -293,10 +294,114 @@ class SamplesSelectionCriteria():
         return False
 
 
+def _EvaluateSampleSelectionWorker(worker_args: tuple[int,
+                                                     str,
+                                                     str,
+                                                     str,
+                                                     dict[str, str],
+                                                     bool,
+                                                     bool,
+                                                     tuple[float, float] | None,
+                                                     float | int | None,
+                                                     bool,
+                                                     float,
+                                                     float | int | None]) -> tuple[int, str | None, str | None]:
+    """Evaluates whether a sample meets selection criteria for dataset inclusion.
+
+    Worker function evaluating a single image-label pair against the specified
+    selection criteria (e.g., apparent size, bounding box dimensions, image intensity).
+    Designed to be called by concurrent workers during dataset path fetching.
+
+    Args:
+        worker_args: Tuple containing:
+            - idx (int): Sample index.
+            - image_filename (str): Name of the image file.
+            - image_folder_path (str): Path to the folder containing the image.
+            - label_folder_path (str): Path to the folder containing labels.
+            - label_paths_by_stem (dict[str, str]): Mapping from label stem to label file path.
+            - has_label_filters (bool): Whether label-based filters are active.
+            - has_max_apparent_size_filter (bool): Whether apparent size filtering is enabled.
+            - min_bbox_wh (tuple[float, float] | None): Minimum bounding box width and height.
+            - max_apparent_size (float | int | None): Maximum allowed apparent size.
+            - has_intensity_filter (bool): Whether intensity-based filtering is enabled.
+            - uint16_to_uint8_scale (float): Scaling factor for uint16 to uint8 conversion.
+            - min_q75_intensity (float | int | None): Minimum 75th percentile intensity threshold.
+
+    Returns:
+        Tuple of (idx, image_path, label_path) where image_path and label_path are None
+        if the sample fails selection criteria, otherwise valid paths are returned.
+
+    Raises:
+        FileNotFoundError: If label file cannot be found for the image stem or if image
+            file cannot be read when intensity filtering is applied.
+        TypeError: If image data type is neither uint8 nor uint16 when applying intensity filters.
+    """
+    
+    # Unpack worker arguments
+    idx_, image_filename_, image_folder_path_, label_folder_path_, label_paths_by_stem_, has_label_filters_, \
+        has_max_apparent_size_filter_, min_bbox_wh_, max_apparent_size_, has_intensity_filter_, \
+        uint16_to_uint8_scale_, min_q75_intensity_ = worker_args
+
+    image_stem_ = os.path.splitext(image_filename_)[0]
+    tmp_img_path_ = os.path.join(image_folder_path_, image_filename_)
+    tmp_lbl_path_ = label_paths_by_stem_.get(image_stem_, "")
+
+    if not tmp_lbl_path_:
+        raise FileNotFoundError(
+            f"Label file not found for image stem '{image_stem_}' in {label_folder_path_}")
+
+    # Check label-based filters first to avoid unnecessary image loading
+    if has_label_filters_:
+        label_file_ = LabelsContainer.load_from_yaml(tmp_lbl_path_)
+
+        if has_max_apparent_size_filter_:
+            lbl_check_val_ = label_file_.get_labels(data_keys=PTAF_Datakey.APPARENT_SIZE)
+            if lbl_check_val_ is not None and lbl_check_val_[0] > max_apparent_size_:
+                return idx_, None, None
+
+        if min_bbox_wh_ is not None:
+            lbl_check_val_ = label_file_.get_labels(data_keys=PTAF_Datakey.BBOX_XYWH)
+            if lbl_check_val_ is not None and lbl_check_val_[2] < min_bbox_wh_[0] and \
+                    lbl_check_val_[3] < min_bbox_wh_[1]:
+                return idx_, None, None
+
+    # Apply intensity-based filtering if enabled
+    if has_intensity_filter_ and hasOpenCV:
+        img_ = ocv.imread(tmp_img_path_, ocv.IMREAD_UNCHANGED)
+        if img_ is None:
+            raise FileNotFoundError(
+                f"Could not read image '{tmp_img_path_}' while applying selection criteria.")
+
+        image_scaling_coeff_ = 1.0
+        if img_.dtype == 'uint8':
+            img_[img_ == 1.0] = 0.0
+        elif img_.dtype == 'uint16':
+            image_scaling_coeff_ = uint16_to_uint8_scale_
+            img_[img_ == 1.0] = 0.0
+        elif img_.dtype != 'uint8' and img_.dtype != 'uint16':
+            raise TypeError(
+                "Image data type is neither uint8 nor uint16. This dataset loader only supports these two data types.")
+
+        # Compute stats and apply intensity-based selection criteria
+        scaled_img_ = image_scaling_coeff_ * img_.astype(np.float32)
+        nonzero_pixels_ = scaled_img_[scaled_img_ > 0]
+        perc75_intensity_ = np.percentile(nonzero_pixels_, 75) if nonzero_pixels_.size > 0 else 0
+        nz_sum_ = nonzero_pixels_.sum()
+
+        # TODO generalize and allow user specification
+        if perc75_intensity_ < 5 or \
+            (perc75_intensity_ < min_q75_intensity_ and nz_sum_ < 2E3) or \
+                (perc75_intensity_ < 1.2 * min_q75_intensity_ and nz_sum_ < 5E3):
+            return idx_, None, None
+
+    return idx_, tmp_img_path_, tmp_lbl_path_
+
+
 def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | Path, ...],
                       datasets_root_folder: Path | str | tuple[str | Path, ...],
                       samples_limit_per_dataset: int | tuple[int, ...] = 0,
-                      selection_criteria: SamplesSelectionCriteria | None = None) -> DatasetPathsContainer:
+                      selection_criteria: SamplesSelectionCriteria | None = None,
+                      num_workers: int = 0) -> DatasetPathsContainer:
     """Fetches file paths for images and labels from specified datasets.
 
     Locates and builds paths to image and label files from one or more datasets,
@@ -446,77 +551,54 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
             if selection_criteria.min_Q75_intensity is not None and not hasOpenCV:
                 print(f"\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m")
 
-            # Build valid paths incrementally; this is fast in Python and avoids full preallocation.
             tmp_img_filepaths = []
             tmp_lbl_filepaths = []
-            valid_count = 0
+            max_apparent_size = selection_criteria.max_apparent_size if selection_criteria is not None else None
+            min_q75_intensity = selection_criteria.min_Q75_intensity if selection_criteria is not None else None
 
-            # DEVNOTE: can be parallelized!
-            for id, image_filename in enumerate(image_filenames):
-                image_stem = os.path.splitext(image_filename)[0]
-                tmp_img_path = os.path.join(image_folder[dset_count], image_filename)
+            # Compose worker arguments for concurrent execution
+            worker_args_iter = (
+                (
+                    sample_idx,
+                    image_filename,
+                    image_folder[dset_count],
+                    label_folder[dset_count],
+                    label_paths_by_stem,
+                    has_label_filters,
+                    has_max_apparent_size_filter,
+                    min_bbox_wh,
+                    max_apparent_size,
+                    has_intensity_filter,
+                    uint16_to_uint8_scale,
+                    min_q75_intensity,
+                )
+                for sample_idx, image_filename in enumerate(image_filenames)
+            )
 
-                # Cheap label-based checks first
-                tmp_lbl_path = label_paths_by_stem.get(image_stem, "")
-                if not tmp_lbl_path:
-                    raise FileNotFoundError(
-                        f"Label file not found for image stem '{image_stem}' in {label_folder[dset_count]}")
 
-                if has_label_filters:
-                    labelFile = LabelsContainer.load_from_yaml(tmp_lbl_path)
+            if num_workers > 1:
+                # Parallel process-based execution
+                with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+                    for _, tmp_img_path, tmp_lbl_path in executor.map(_EvaluateSampleSelectionWorker, worker_args_iter, chunksize=16):
+                        if tmp_img_path is not None and tmp_lbl_path is not None:
+                            tmp_img_filepaths.append(tmp_img_path)
+                            tmp_lbl_filepaths.append(tmp_lbl_path)
+            else:
+                # Serial execution
+                for worker_args in worker_args_iter:
+                    _, tmp_img_path, tmp_lbl_path = _EvaluateSampleSelectionWorker(worker_args)
+                    
+                    if tmp_img_path is not None and tmp_lbl_path is not None:
+                        tmp_img_filepaths.append(tmp_img_path)
+                        tmp_lbl_filepaths.append(tmp_lbl_path)
+                        if _limit > 0 and len(tmp_img_filepaths) >= _limit:
+                            break
 
-                if has_max_apparent_size_filter:
-                    lbl_check_val = labelFile.get_labels(data_keys=PTAF_Datakey.APPARENT_SIZE)
-                    if lbl_check_val is not None and lbl_check_val[0] > selection_criteria.max_apparent_size:
-                        print(f" - Warning: Image {id+1} has apparent size {lbl_check_val[0]} > {selection_criteria.max_apparent_size}, discarded as too large.")
-                        continue
+            if _limit > 0:
+                tmp_img_filepaths = tmp_img_filepaths[:_limit]
+                tmp_lbl_filepaths = tmp_lbl_filepaths[:_limit]
 
-                if has_bbox_filter:
-                    lbl_check_val = labelFile.get_labels(data_keys=PTAF_Datakey.BBOX_XYWH)
-                    if lbl_check_val is not None and lbl_check_val[2] < min_bbox_wh[0] and \
-                            lbl_check_val[3] < min_bbox_wh[1]:
-                        print(f" - Warning: Image {id+1} has bounding box width, height = {lbl_check_val[2:4]} < {min_bbox_wh}, discarded as too small.")
-                        continue
-
-                # Expensive image-based check last
-                if selection_criteria.min_Q75_intensity is not None and hasOpenCV:
-                    img = ocv.imread(tmp_img_path, ocv.IMREAD_UNCHANGED)
-                    if img is None:
-                        raise FileNotFoundError(
-                            f"Could not read image '{tmp_img_path}' while applying selection criteria.")
-                    image_scaling_coeff = 1.0
-
-                    if img.dtype == 'uint8':
-                        # Set all 1.0 to 0.0 to fix Blender images issue
-                        img[img == 1.0] = 0.0
-                    elif img.dtype == 'uint16':
-                        image_scaling_coeff = uint16_to_uint8_scale
-                        # Set all 1.0 to 0.0 to fix Blender images issue
-                        img[img == 1.0] = 0.0
-                    elif img.dtype != 'uint8' and img.dtype != 'uint16':
-                        raise TypeError(
-                            "Image data type is neither uint8 nor uint16. This dataset loader only supports these two data types.")
-
-                    # Compute percentile of intensity considering non-zero pixels
-                    scaled_img = image_scaling_coeff * img.astype(np.float32)
-                    nonzero_pixels = scaled_img[scaled_img > 0]
-                    perc75_intensity = np.percentile(nonzero_pixels, 75) if nonzero_pixels.size > 0 else 0
-
-                    nz_sum = nonzero_pixels.sum()
-                    if perc75_intensity < 5 or \
-                        (perc75_intensity < selection_criteria.min_Q75_intensity and nz_sum < 2E3) or \
-                            (perc75_intensity < 1.2 * selection_criteria.min_Q75_intensity and nz_sum < 5E3):
-                        print(f" - Warning: Image {id+1} has 75th percentile intensity of illuminated pixels equal to {perc75_intensity} < {selection_criteria.min_Q75_intensity} in too many pixels, discarded as too dark.")
-                        continue
-
-                # All checks passed --> sample is valid
-                tmp_img_filepaths.append(tmp_img_path)
-                tmp_lbl_filepaths.append(tmp_lbl_path)
-                valid_count += 1
-
-                # Early exit once limit is satisfied
-                if _limit > 0 and valid_count >= _limit:
-                    break
+            valid_count = len(tmp_img_filepaths)
 
             # Update count of images
             prev_size = num_of_imags_in_set[dset_count]
