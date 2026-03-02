@@ -16,7 +16,7 @@ class ModelHandlerONNx:
     # CONSTRUCTOR
     def __init__(self, 
                  model: torch.nn.Module | AutoForgeModule | onnx.ModelProto, 
-                 dummy_input_sample: torch.Tensor | numpy.ndarray, 
+                 dummy_input_sample: torch.Tensor | numpy.ndarray | tuple[torch.Tensor, ...], 
                  onnx_export_path: str = '.', 
                  opset_version: int = 13, 
                  run_export_validation: bool = True,
@@ -111,9 +111,8 @@ class ModelHandlerONNx:
 
         # Assign input tensor from init if not provided
         if input_tensor is None and self.dummy_input_sample is not None:
-            assert torch.is_tensor(self.dummy_input_sample), "Dummy input sample must be a torch tensor."
             input_tensor = self.dummy_input_sample
-        else:
+        elif input_tensor is None:
             raise ValueError("Input tensor must be provided or dummy input sample must be provided when constructing this class.")
 
         if dynamic_axes is None:
@@ -133,8 +132,14 @@ class ModelHandlerONNx:
         # 7) Model input name
         # 8) Model output name
 
+        # torch.onnx.export treats the `args` parameter as *args to forward().
+        # If input_tensor is a tuple, the exporter would unpack it into
+        # separate positional arguments. Wrap it in an outer tuple so the
+        # model receives a single tuple argument as expected by forward().
+        export_args = (input_tensor,) if isinstance(input_tensor, tuple) else input_tensor
+
         torch.onnx.export(self.torch_model,               
-                        input_tensor,                      
+                        export_args,                      
                         self.onnx_filepath,
                         export_params=True,                         
                         opset_version=self.opset_version,           
@@ -142,6 +147,7 @@ class ModelHandlerONNx:
                         input_names=IO_names['input'],              
                         output_names=IO_names['output'],            
                         dynamic_axes=dynamic_axes,
+                        dynamo=False,  # Use TorchScript backend (dynamic_axes not supported by dynamo)
                         verbose=enable_verbose, report=self.generate_report)
 
         print(f"Model exported to ONNx format: {self.onnx_filepath}")
@@ -149,9 +155,15 @@ class ModelHandlerONNx:
         if self.run_export_validation:
             # Reload the model from disk
             self.onnx_model = self.onnx_load(onnx_filepath=self.onnx_filepath)
-            
+
+            # Convert dummy input sample to torch tensors for validation
+            if isinstance(self.dummy_input_sample, (tuple, list)):
+                test_sample_ = tuple(numpy_to_torch(s) for s in self.dummy_input_sample)
+            else:
+                test_sample_ = numpy_to_torch(self.dummy_input_sample)
+
             self.onnx_validate(onnx_model=self.onnx_model,
-                               test_sample=numpy_to_torch(self.dummy_input_sample))
+                               test_sample=test_sample_)
 
         if self.run_onnx_simplify:
             self.onnx_filepath, model_simplified = self._run_onnx_simplify(self.onnx_model)
@@ -258,7 +270,7 @@ class ModelHandlerONNx:
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def onnx_validate(self, 
                       onnx_model: onnx.ModelProto | str, 
-                      test_sample : torch.Tensor | numpy.ndarray | None = None, 
+                      test_sample : torch.Tensor | numpy.ndarray | tuple[torch.Tensor, ...] | None = None, 
                       output_sample : torch.Tensor | numpy.ndarray | None = None) -> None:
         """Validate the ONNx model using onnx.checker.check_model."""
 
@@ -282,7 +294,13 @@ class ModelHandlerONNx:
             ort_session = InferenceSession(onnx_model.SerializeToString(), providers=["CPUExecutionProvider"])
 
             # Compute ONNX Runtime output prediction
-            ort_inputs = {ort_session.get_inputs()[0].name: torch_to_numpy(tensor=test_sample)} # Assumes input is only one tensor
+            if isinstance(test_sample, (tuple, list)):
+                ort_inputs = {
+                    ort_session.get_inputs()[i].name: torch_to_numpy(tensor=s)
+                    for i, s in enumerate(test_sample)
+                }
+            else:
+                ort_inputs = {ort_session.get_inputs()[0].name: torch_to_numpy(tensor=test_sample)}
             ort_outs = ort_session.run(None, ort_inputs)
             print('\033[92mPASSED.\033[0m')
 
