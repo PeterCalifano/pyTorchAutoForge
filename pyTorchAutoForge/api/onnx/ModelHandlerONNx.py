@@ -31,6 +31,7 @@ class ModelHandlerONNx:
         elif isinstance(model, onnx.ModelProto):
             #self.torch_model
             self.onnx_model = model
+            
         else:
             raise ValueError("Model must be of base type torch.nn.Module or onnx.ModelProto") 
 
@@ -98,8 +99,10 @@ class ModelHandlerONNx:
         
         return self.onnx_filepath, model_simplified
 
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # Export methods
     def torch_export(self, 
-                     input_tensor: torch.Tensor | None = None, 
+                     input_tensor: torch.Tensor | tuple[torch.Tensor, ...] |None = None, 
                      onnx_model_name: str | None = None, 
                      dynamic_axes: dict | None = None, 
                      IO_names: dict | None = None,
@@ -112,6 +115,7 @@ class ModelHandlerONNx:
         # Assign input tensor from init if not provided
         if input_tensor is None and self.dummy_input_sample is not None:
             input_tensor = self.dummy_input_sample
+
         elif input_tensor is None:
             raise ValueError("Input tensor must be provided or dummy input sample must be provided when constructing this class.")
 
@@ -148,7 +152,10 @@ class ModelHandlerONNx:
                         output_names=IO_names['output'],            
                         dynamic_axes=dynamic_axes,
                         dynamo=False,  # Use TorchScript backend (dynamic_axes not supported by dynamo)
-                        verbose=enable_verbose, report=self.generate_report)
+                        verbose=enable_verbose, 
+                        report=self.generate_report)
+
+        # TODO call function again if fails, writing generate_report. Then stop execution.
 
         print(f"Model exported to ONNx format: {self.onnx_filepath}")
 

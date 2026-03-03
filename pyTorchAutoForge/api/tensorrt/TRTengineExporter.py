@@ -138,6 +138,7 @@ class TRTengineExporter:
         input_onnx_model, output_engine_path = self.check_input_output_paths_(input_onnx_model, output_engine_path)
 
         if self.exporter_mode == TRTengineExporterMode.PYTHON:
+            # TODO Implement python API for engine building
             raise NotImplementedError("Engine building is not implemented for Python mode yet.")
         elif self.exporter_mode == TRTengineExporterMode.TRTEXEC: 
 
