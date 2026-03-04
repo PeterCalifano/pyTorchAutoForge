@@ -3,12 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 from types import SimpleNamespace
+import importlib
 import importlib.util
 import sys
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 TRT_EXPORTER_MODULE_PATH = REPO_ROOT / "pyTorchAutoForge/api/tensorrt/TRTengineExporter.py"
 SPEC = importlib.util.spec_from_file_location(
     "ptaf_trt_exporter_module", TRT_EXPORTER_MODULE_PATH
@@ -241,8 +245,16 @@ def test_build_with_trtexec_surfaces_subprocess_error_output(tmp_path: Path, mon
         exporter_._build_with_trtexec(str(onnx_path_), str(output_path_))
 
 
-def test_python_builder_raises_when_tensorrt_missing() -> None:
+def test_python_builder_raises_when_tensorrt_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     exporter_ = TRTengineExporter(exporter_mode=TRTengineExporterMode.PYTHON)
+    import_module_original_ = trt_exporter_module.importlib.import_module
+
+    def fake_import_module(module_name: str):
+        if module_name == "tensorrt":
+            raise ImportError("No module named 'tensorrt'")
+        return import_module_original_(module_name)
+
+    monkeypatch.setattr(trt_exporter_module.importlib, "import_module", fake_import_module)
 
     with pytest.raises(ImportError, match="TensorRT Python API is not available"):
         exporter_._build_with_python_api_from_onnx_bytes(b"onnx", "/tmp/model.engine")
@@ -433,3 +445,92 @@ def test_configuration_rejects_invalid_dynamic_profiles() -> None:
                 ),
             )
         )
+
+
+def test_package_path_import_exposes_tensorrt_symbols() -> None:
+    tensorrt_api_module_ = importlib.import_module("pyTorchAutoForge.api.tensorrt")
+
+    assert hasattr(tensorrt_api_module_, "TRTengineExporter")
+    assert hasattr(tensorrt_api_module_, "TRTengineExporterMode")
+    assert hasattr(tensorrt_api_module_, "TRTprecision")
+
+
+def test_import_onnx_raises_clear_error_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter()
+    import_module_original_ = trt_exporter_module.importlib.import_module
+
+    def fake_import_module(module_name: str):
+        if module_name == "onnx":
+            raise ImportError("No module named 'onnx'")
+        return import_module_original_(module_name)
+
+    monkeypatch.setattr(trt_exporter_module.importlib, "import_module", fake_import_module)
+
+    with pytest.raises(ImportError, match="ONNX package is required"):
+        exporter_._import_onnx()
+
+
+def test_serialize_onnx_model_to_bytes_success() -> None:
+    exporter_ = TRTengineExporter()
+
+    class FakeOnnxModel:
+        def SerializeToString(self) -> bytes:
+            return b"serialized_onnx"
+
+    out_bytes_ = exporter_._serialize_onnx_model_to_bytes(FakeOnnxModel())
+    assert out_bytes_ == b"serialized_onnx"
+
+
+def test_serialize_onnx_model_to_bytes_rejects_non_serializable_model() -> None:
+    exporter_ = TRTengineExporter()
+
+    with pytest.raises(TypeError, match="SerializeToString"):
+        exporter_._serialize_onnx_model_to_bytes(object())
+
+
+def test_build_dynamic_shapes_flag_rejects_invalid_shape_key() -> None:
+    profile_ = TRTDynamicShapeProfile(
+        input_name="input",
+        min_shape=(1, 3, 8, 8),
+        opt_shape=(2, 3, 8, 8),
+        max_shape=(4, 3, 8, 8),
+    )
+    exporter_ = TRTengineExporter(dynamic_shape_profiles=(profile_,))
+
+    with pytest.raises(AttributeError):
+        exporter_._build_dynamic_shapes_flag("invalid_shape_key")
+
+
+def test_dispatch_from_onnx_model_normalizes_non_onnx_temporary_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter(exporter_mode=TRTengineExporterMode.TRTEXEC)
+    observed_: dict[str, str] = {}
+
+    class FakeOnnxModel:
+        pass
+
+    def fake_save_onnx_model_to_path(onnx_model: object, onnx_path: str) -> None:
+        _ = onnx_model
+        observed_["save_path"] = onnx_path
+        Path(onnx_path).write_bytes(b"serialized")
+
+    def fake_build_with_trtexec(onnx_model_path: str, output_engine_path: str) -> str:
+        observed_["build_path"] = onnx_model_path
+        Path(output_engine_path).write_bytes(b"engine")
+        return output_engine_path
+
+    monkeypatch.setattr(exporter_, "_save_onnx_model_to_path", fake_save_onnx_model_to_path)
+    monkeypatch.setattr(exporter_, "_build_with_trtexec", fake_build_with_trtexec)
+
+    output_path_ = tmp_path / "model.engine"
+    temp_path_without_suffix_ = tmp_path / "nested" / "tmp_model"
+
+    built_path_ = exporter_._dispatch_build_from_onnx_model(
+        FakeOnnxModel(),
+        str(output_path_),
+        str(temp_path_without_suffix_),
+    )
+
+    assert built_path_ == str(output_path_)
+    assert observed_["save_path"].endswith(".onnx")
+    assert observed_["build_path"].endswith(".onnx")
+    assert Path(observed_["save_path"]).exists()
