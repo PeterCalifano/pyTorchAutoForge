@@ -24,6 +24,8 @@ from PIL import Image
 from functools import partial
 import json
 import yaml
+import concurrent.futures
+import time
 from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey, LabelsContainer
 
 try:
@@ -32,6 +34,9 @@ try:
 
 except ImportError:
     hasOpenCV: bool = False
+
+
+_SAMPLE_SELECTION_WORKER_CONTEXT: dict[str, Any] | None = None
 
 # DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
 
@@ -116,6 +121,7 @@ class DatasetLoaderConfig():
 
     # Additional details/options
     samples_limit_per_dataset: int | tuple[int, ...] = -1
+    num_workers: int = 0
 
     def __post_init__(self):
         """
@@ -154,6 +160,12 @@ class DatasetLoaderConfig():
         # Reassign lbl_vector_data_keys to ensure they are PTAF_Datakey instances
         self.lbl_vector_data_keys = tuple(lbl_vector_data_keys_checked)
 
+        if not isinstance(self.num_workers, int):
+            raise TypeError(
+                f"num_workers must be an integer, got {type(self.num_workers)}")
+        if self.num_workers < 0:
+            raise ValueError("num_workers must be >= 0.")
+
 
 @dataclass
 class ImagesDatasetConfig(DatasetLoaderConfig):
@@ -166,6 +178,7 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
     image_dtype: type | torch.dtype = torch.uint8
     image_backend: Literal['pil', 'cv2'] = 'cv2'
     load_as_tensor: bool = True
+    convert_rgb_to_grayscale: bool = False
 
     # Additional options
     intensity_scaling_mode: Literal['none', 'dtype', 'custom'] = 'dtype'
@@ -292,10 +305,134 @@ class SamplesSelectionCriteria():
         return False
 
 
+def _EvaluateSampleSelectionWorker(worker_args: tuple[int,
+                                                     str,
+                                                     str]) -> tuple[int, str | None, str | None]:
+    """Evaluates whether a sample meets selection criteria for dataset inclusion.
+
+    Worker function evaluating a single image-label pair against the specified
+    selection criteria (e.g., apparent size, bounding box dimensions, image intensity).
+    Designed to be called by concurrent workers during dataset path fetching.
+
+    Args:
+        worker_args: Tuple containing:
+            - idx (int): Sample index.
+            - image_path (str): Full path to the image file.
+            - label_path (str): Full path to the label file.
+
+    Returns:
+        Tuple of (idx, image_path, label_path) where image_path and label_path are None
+        if the sample fails selection criteria, otherwise valid paths are returned.
+
+    Raises:
+        FileNotFoundError: If label file cannot be found for the image stem or if image
+            file cannot be read when intensity filtering is applied.
+        TypeError: If image data type is neither uint8 nor uint16 when applying intensity filters.
+    """
+    
+    context_ = _SAMPLE_SELECTION_WORKER_CONTEXT
+    if context_ is None:
+        raise RuntimeError("Worker context is not initialized.")
+
+    # Unpack worker arguments
+    idx_, tmp_img_path_, tmp_lbl_path_ = worker_args
+
+    label_folder_path_ = context_["label_folder_path"]
+    has_label_filters_ = context_["has_label_filters"]
+    has_max_apparent_size_filter_ = context_["has_max_apparent_size_filter"]
+    min_bbox_wh_ = context_["min_bbox_wh"]
+    max_apparent_size_ = context_["max_apparent_size"]
+    has_intensity_filter_ = context_["has_intensity_filter"]
+    uint16_to_uint8_scale_ = context_["uint16_to_uint8_scale"]
+    min_q75_intensity_ = context_["min_q75_intensity"]
+
+    # Check label-based filters first to avoid unnecessary image loading
+    if has_label_filters_:
+        label_file_ = LabelsContainer.load_from_yaml(tmp_lbl_path_)
+
+        if has_max_apparent_size_filter_:
+            lbl_check_val_ = label_file_.get_labels(data_keys=PTAF_Datakey.APPARENT_SIZE)
+            if lbl_check_val_ is not None and lbl_check_val_[0] > max_apparent_size_:
+                return idx_, None, None
+
+        if min_bbox_wh_ is not None:
+            lbl_check_val_ = label_file_.get_labels(data_keys=PTAF_Datakey.BBOX_XYWH)
+            if lbl_check_val_ is not None and lbl_check_val_[2] < min_bbox_wh_[0] and \
+                    lbl_check_val_[3] < min_bbox_wh_[1]:
+                return idx_, None, None
+
+    # Apply intensity-based filtering if enabled
+    if has_intensity_filter_ and hasOpenCV:
+        img_ = ocv.imread(tmp_img_path_, ocv.IMREAD_UNCHANGED)
+        if img_ is None:
+            raise FileNotFoundError(
+                f"Could not read image '{tmp_img_path_}' while applying selection criteria.")
+
+        image_scaling_coeff_ = 1.0
+        if img_.dtype == 'uint8':
+            img_[img_ == 1.0] = 0.0
+        elif img_.dtype == 'uint16':
+            image_scaling_coeff_ = uint16_to_uint8_scale_
+            img_[img_ == 1.0] = 0.0
+        elif img_.dtype != 'uint8' and img_.dtype != 'uint16':
+            raise TypeError(
+                "Image data type is neither uint8 nor uint16. This dataset loader only supports these two data types.")
+
+        # Compute stats and apply intensity-based selection criteria
+        scaled_img_ = image_scaling_coeff_ * img_.astype(np.float32)
+        nonzero_pixels_ = scaled_img_[scaled_img_ > 0]
+        perc75_intensity_ = np.percentile(nonzero_pixels_, 75) if nonzero_pixels_.size > 0 else 0
+        nz_sum_ = nonzero_pixels_.sum()
+
+        # TODO generalize and allow user specification
+        if perc75_intensity_ < 5 or \
+            (perc75_intensity_ < min_q75_intensity_ and nz_sum_ < 2E3) or \
+                (perc75_intensity_ < 1.2 * min_q75_intensity_ and nz_sum_ < 5E3):
+            return idx_, None, None
+
+    return idx_, tmp_img_path_, tmp_lbl_path_
+
+
+def _InitializeSampleSelectionWorker(worker_context: dict[str, Any]) -> None:
+    global _SAMPLE_SELECTION_WORKER_CONTEXT
+    _SAMPLE_SELECTION_WORKER_CONTEXT = worker_context
+
+
+def _ShouldUseParallelSelection(num_workers: int,
+                                candidate_count: int,
+                                samples_limit: int,
+                                min_parallel_work_items: int = 256) -> bool:
+    if num_workers <= 1:
+        return False
+
+    effective_limit = samples_limit if samples_limit > 0 else candidate_count
+    return candidate_count >= min_parallel_work_items and effective_limit >= min_parallel_work_items
+
+
+def _MaybePrintSelectionProgress(dataset_name: str | Path,
+                                 processed_samples: int,
+                                 total_samples: int,
+                                 accepted_samples: int,
+                                 last_print_time: float,
+                                 update_period_s: float = 0.5,
+                                 force: bool = False) -> float:
+    now = time.monotonic()
+    if force or (now - last_print_time) >= update_period_s:
+        print(
+            f"\r[{dataset_name}] selection progress: {processed_samples}/{total_samples} processed, "
+            f"{accepted_samples} kept",
+            end='',
+            flush=True,
+        )
+        return now
+    return last_print_time
+
+
 def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | Path, ...],
                       datasets_root_folder: Path | str | tuple[str | Path, ...],
                       samples_limit_per_dataset: int | tuple[int, ...] = 0,
-                      selection_criteria: SamplesSelectionCriteria | None = None) -> DatasetPathsContainer:
+                      selection_criteria: SamplesSelectionCriteria | None = None,
+                      num_workers: int = 0) -> DatasetPathsContainer:
     """Fetches file paths for images and labels from specified datasets.
 
     Locates and builds paths to image and label files from one or more datasets,
@@ -330,6 +467,12 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         raise TypeError(
             "dataset_name must be a string or a list of strings")
 
+    if isinstance(datasets_root_folder, (str, Path)):
+        datasets_root_folder = (datasets_root_folder,)
+    elif not isinstance(datasets_root_folder, (list, tuple)):
+        raise TypeError(
+            "datasets_root_folder must be a string/Path or a list/tuple of strings/Paths")
+
     # Initialize list index of datasets to load
     image_folder = []
     label_folder = []
@@ -342,8 +485,6 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
     for dset_count, _dataset_name in enumerate(dataset_names_array):
 
         datasets_root_folder_ = None
-        current_total_of_imgs = 0
-
         # Resolve correct root by check folder existence
         for root_count, datasets_root_folder_ in enumerate(datasets_root_folder):
 
@@ -368,9 +509,21 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         label_folder.append(os.path.join(
             datasets_root_folder_, _dataset_name, "labels"))
 
+        # Read image/label file names directly from disk instead of inferring templates.
+        supported_image_exts = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'}
+        image_filenames = sorted(
+            f for f in os.listdir(image_folder[dset_count])
+            if os.path.isfile(os.path.join(image_folder[dset_count], f))
+            and os.path.splitext(f)[1].lower() in supported_image_exts
+        )
+        label_filenames = sorted(
+            f for f in os.listdir(label_folder[dset_count])
+            if os.path.isfile(os.path.join(label_folder[dset_count], f))
+            and os.path.splitext(f)[1].lower() in {'.yml', '.yaml'}
+        )
+
         # Check size of names in the folder
-        sample_file = next((f for f in os.listdir(image_folder[dset_count]) if os.path.isfile(
-            os.path.join(image_folder[dset_count], f))), None)
+        sample_file = image_filenames[0] if image_filenames else None
 
         if sample_file:
             name_size = len(os.path.splitext(sample_file)[0])
@@ -380,177 +533,231 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
             continue
 
         # Append number of images in the set
-        num_of_imags_in_set.append(len(os.listdir(image_folder[dset_count])))
+        num_of_imags_in_set.append(len(image_filenames))
 
-        # Build filepath template
-        if name_size == 6:
-            filepath_template = lambda id: f"{id+1:06d}"
+        # Keep informational print for existing naming schemes
+        if not (name_size == 6 or name_size == 8):
+            print(
+                "\033[38;5;208mWARNING: image stem is not 6/8 digits. Continuing by direct filename matching.\033[0m")
 
-        elif name_size == 8:
-            filepath_template = lambda id: f"{id*150:08d}"
+        if len(label_filenames) == 0:
+            raise FileNotFoundError(
+                f"No .yml/.yaml labels found in folder: {label_folder[dset_count]}")
 
+        file_ext = os.path.splitext(label_filenames[0])[1]
+        label_paths_by_stem = {
+            os.path.splitext(lbl_name)[0]: os.path.join(label_folder[dset_count], lbl_name)
+            for lbl_name in label_filenames
+        }
+
+        if isinstance(samples_limit_per_dataset, (list, tuple)):
+            _limit = samples_limit_per_dataset[dset_count]
         else:
-            raise ValueError(
-                "Image/labels names are assumed to have 6 or 8 numbers. Please check the dataset format.")
+            _limit = samples_limit_per_dataset
 
-        # Get labels folder extensions
-        file_ext = os.path.splitext(
-            os.listdir(label_folder[dset_count])[0])[1]
+        # Get selection criteria flags and parameters
+        has_max_apparent_size_filter = bool(
+            selection_criteria is not None and selection_criteria.max_apparent_size is not None)
+        has_intensity_filter = bool(
+            selection_criteria is not None and selection_criteria.min_Q75_intensity is not None)
+        
+        min_bbox_wh = selection_criteria.min_bbox_width_height if selection_criteria is not None else None
+
+        if isinstance(min_bbox_wh, (float, int)):
+            min_bbox_wh = (min_bbox_wh, min_bbox_wh)
+
+        has_bbox_filter = min_bbox_wh is not None
+        has_label_filters = has_max_apparent_size_filter or has_bbox_filter
+        has_active_selection = bool(
+            selection_criteria is not None and (has_label_filters or has_intensity_filter))
+        
+        # Precompute quantities for prepro
+        uint16_to_uint8_scale = 1.0 / 257.01
 
         # Fetch sample paths and select if required
-        if selection_criteria is not None:
-            # Build temporary path index and select samples
-            tmp_img_count = num_of_imags_in_set[dset_count]
+        # Align image and label paths once to avoid repeated dict serialization in workers
+        sample_path_triplets: list[tuple[int, str, str]] = []
+        for sample_idx, image_filename in enumerate(image_filenames):
+            image_stem = os.path.splitext(image_filename)[0]
+            tmp_lbl_path = label_paths_by_stem.get(image_stem, "")
+            if not tmp_lbl_path:
+                raise FileNotFoundError(
+                    f"Label file not found for image stem '{image_stem}' in {label_folder[dset_count]}")
 
-            # Build temporary numpy array of chars of size equal to num_of_imags_in_set[dset_count]
-            filenames = [filepath_template(id) + ".png" for id in range(tmp_img_count)]
-            tmp_img_filepaths = [os.path.join(image_folder[dset_count], path) for path in filenames]
+            tmp_img_path = os.path.join(image_folder[dset_count], image_filename)
+            sample_path_triplets.append((sample_idx, tmp_img_path, tmp_lbl_path))
 
-            # Pick a safe fixed-width dtype to avoid object arrays
-            max_path_len = max(len(p) for p in tmp_img_filepaths)
-            tmp_img_filepaths = np.array(tmp_img_filepaths, dtype=f"U{max_path_len}")
+        if has_active_selection:
+            # Determine limit early to allow early exit inside the loop
 
-            # Define lbl filepaths and mask arrays
-            tmp_lbl_filepaths = np.empty(tmp_img_count, dtype=f"U{max_path_len}") 
-            tmp_valid_mask = np.zeros(tmp_img_count, dtype=bool)
+            # Warn once outside the loop if OpenCV is unavailable
+            if selection_criteria.min_Q75_intensity is not None and not hasOpenCV:
+                print(f"\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m")
 
-            # DEVNOTE: can be parallelized!
-            for id in range(num_of_imags_in_set[dset_count]):
-                # Build image path
-                tmp_img_path = os.path.join(
-                    image_folder[dset_count], filepath_template(id) + '.png')
+            tmp_img_filepaths = []
+            tmp_lbl_filepaths = []
+            max_apparent_size = selection_criteria.max_apparent_size if selection_criteria is not None else None
+            min_q75_intensity = selection_criteria.min_Q75_intensity if selection_criteria is not None else None
 
-                # If any selection is requested based on image intensity, load the image
-                if selection_criteria.min_Q75_intensity is not None and hasOpenCV:
-                    # Load image
-                    img = ocv.imread(tmp_img_path, ocv.IMREAD_UNCHANGED)
-                    image_scaling_coeff = 1.0
+            run_parallel = _ShouldUseParallelSelection(
+                num_workers=num_workers,
+                candidate_count=len(sample_path_triplets),
+                samples_limit=_limit,
+            )
+            processed_samples_count = 0
+            total_samples_count = len(sample_path_triplets)
+            last_progress_print_time = time.monotonic()
+            mode_name = "parallel" if run_parallel else "serial"
+            print(f"\tSelection mode: {mode_name} ({num_workers=}, {total_samples_count=}, {_limit=})")
 
-                    if img.dtype == 'uint8':
-                        image_scaling_coeff = 1.0
+            if run_parallel:
+                worker_context = {
+                    "label_folder_path": label_folder[dset_count],
+                    "has_label_filters": has_label_filters,
+                    "has_max_apparent_size_filter": has_max_apparent_size_filter,
+                    "min_bbox_wh": min_bbox_wh,
+                    "max_apparent_size": max_apparent_size,
+                    "has_intensity_filter": has_intensity_filter,
+                    "uint16_to_uint8_scale": uint16_to_uint8_scale,
+                    "min_q75_intensity": min_q75_intensity,
+                }
 
-                        # Set all 1.0 to 0.0 to fix Blender images issue
-                        img[img == 1.0] = 0.0
+                max_inflight = max(num_workers * 2, 8)
+                selected_by_idx: dict[int, tuple[str, str]] = {}
+                triplets_iterator = iter(sample_path_triplets)
+                pending_futures: dict[concurrent.futures.Future[tuple[int, str | None, str | None]], None] = {}
+                early_stop_requested = False
+                executor = concurrent.futures.ProcessPoolExecutor(
+                    max_workers=num_workers,
+                    initializer=_InitializeSampleSelectionWorker,
+                    initargs=(worker_context,),
+                )
 
-                    elif img.dtype == 'uint16':
-                        image_scaling_coeff = 1.0/(257.01)
+                try:
+                    while len(pending_futures) < max_inflight:
+                        try:
+                            worker_args = next(triplets_iterator)
+                        except StopIteration:
+                            break
+                        pending_futures[executor.submit(_EvaluateSampleSelectionWorker, worker_args)] = None
 
-                        # Set all 1.0 to 0.0 to fix Blender images issue
-                        img[img == 1.0] = 0.0
+                    while pending_futures:
+                        done_futures, _ = concurrent.futures.wait(
+                            pending_futures,
+                            return_when=concurrent.futures.FIRST_COMPLETED,
+                        )
 
-                    elif img.dtype == 'uint8':
-                        # Images from ABRAM have 12-bit depth?
-                        image_scaling_coeff = 1.0
+                        for done_future in done_futures:
+                            pending_futures.pop(done_future, None)
+                            sample_idx, tmp_img_path, tmp_lbl_path = done_future.result()
+                            processed_samples_count += 1
 
-                    elif img.dtype != 'uint8' and img.dtype != 'uint16':
-                        raise TypeError(
-                            "Image data type is neither uint8 nor uint16. This dataset loader only supports these two data types.")
+                            if tmp_img_path is not None and tmp_lbl_path is not None:
+                                selected_by_idx[sample_idx] = (tmp_img_path, tmp_lbl_path)
+                                if _limit > 0 and len(selected_by_idx) >= _limit:
+                                    early_stop_requested = True
+                                    break
 
-                    # Compute percentile of intensity considering non-zero pixels
-                    scaled_img = image_scaling_coeff * img.astype(np.float32)
-                    nonzero_pixels = scaled_img[scaled_img > 0]
+                            last_progress_print_time = _MaybePrintSelectionProgress(
+                                dataset_name=_dataset_name,
+                                processed_samples=processed_samples_count,
+                                total_samples=total_samples_count,
+                                accepted_samples=len(selected_by_idx),
+                                last_print_time=last_progress_print_time,
+                            )
 
-                    perc75_intensity = np.percentile(
-                        nonzero_pixels, 75) if nonzero_pixels.size > 0 else 0
-                    if perc75_intensity < 5 or \
-                        (perc75_intensity < selection_criteria.min_Q75_intensity and
-                         sum(nonzero_pixels) < 2E3) or \
-                            (perc75_intensity < 1.2 * selection_criteria.min_Q75_intensity and \
-                             sum(nonzero_pixels) < 5E3):
-                        
-                        print(f" - Warning: Image {id+1} has 75th percentile intensity of illuminated pixels equal to {perc75_intensity} < {selection_criteria.min_Q75_intensity} in too many pixels, discarded as too dark.")
-                        continue
-                elif selection_criteria.min_Q75_intensity is not None and not hasOpenCV:
-                    print(f"\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m", end='\r')
+                        if early_stop_requested:
+                            for pending_future in pending_futures:
+                                pending_future.cancel()
+                            pending_futures.clear()
+                            break
 
+                        while len(pending_futures) < max_inflight:
+                            try:
+                                worker_args = next(triplets_iterator)
+                            except StopIteration:
+                                break
+                            pending_futures[executor.submit(_EvaluateSampleSelectionWorker, worker_args)] = None
+                finally:
+                    executor.shutdown(wait=not early_stop_requested, cancel_futures=early_stop_requested)
 
-                # Build lbl path
-                tmp_lbl_path = os.path.join(
-                    label_folder[dset_count], filepath_template(id) + file_ext)
+                selected_indexes = sorted(selected_by_idx.keys())
+                if _limit > 0:
+                    selected_indexes = selected_indexes[:_limit]
 
-                if os.path.exists(tmp_lbl_path):
-                    if tmp_lbl_path.endswith('.yml') or tmp_lbl_path.endswith('.yaml'):
-                        labelFile = LabelsContainer.load_from_yaml(tmp_lbl_path)
-                    else:
-                        raise ValueError(
-                            f"Unsupported label file format: {tmp_lbl_path}. Only .yml and .yaml are supported byt this implementation.")
-                else:
-                    raise FileNotFoundError(f"Label file not found: {tmp_lbl_path}")
-                
-                # Add in array
-                if selection_criteria.max_apparent_size is not None:
-                    lbl_check_val = labelFile.get_labels(
-                        data_keys=PTAF_Datakey.APPARENT_SIZE)
+                for selected_idx in selected_indexes:
+                    selected_img_path, selected_lbl_path = selected_by_idx[selected_idx]
+                    tmp_img_filepaths.append(selected_img_path)
+                    tmp_lbl_filepaths.append(selected_lbl_path)
+            else:
+                # Serial execution
+                _InitializeSampleSelectionWorker({
+                    "label_folder_path": label_folder[dset_count],
+                    "has_label_filters": has_label_filters,
+                    "has_max_apparent_size_filter": has_max_apparent_size_filter,
+                    "min_bbox_wh": min_bbox_wh,
+                    "max_apparent_size": max_apparent_size,
+                    "has_intensity_filter": has_intensity_filter,
+                    "uint16_to_uint8_scale": uint16_to_uint8_scale,
+                    "min_q75_intensity": min_q75_intensity,
+                })
 
-                    if lbl_check_val is not None and lbl_check_val[0] > selection_criteria.max_apparent_size:
-                        print(f" - Warning: Image {id+1} has apparent size {lbl_check_val[0]} > {selection_criteria.max_apparent_size}, discarded as too large.")
-                        continue
+                for worker_args in sample_path_triplets:
+                    _, tmp_img_path, tmp_lbl_path = _EvaluateSampleSelectionWorker(worker_args)
+                    processed_samples_count += 1
+                    
+                    if tmp_img_path is not None and tmp_lbl_path is not None:
+                        tmp_img_filepaths.append(tmp_img_path)
+                        tmp_lbl_filepaths.append(tmp_lbl_path)
+                        if _limit > 0 and len(tmp_img_filepaths) >= _limit:
+                            break
 
-                # If discard based on bounding box size is requested check it
-                if selection_criteria.min_bbox_width_height is not None:
-                    min_bbox_width_height = selection_criteria.min_bbox_width_height
-                    if isinstance(min_bbox_width_height, (float, int)):
-                        min_bbox_width_height = (min_bbox_width_height, min_bbox_width_height)
+                    last_progress_print_time = _MaybePrintSelectionProgress(
+                        dataset_name=_dataset_name,
+                        processed_samples=processed_samples_count,
+                        total_samples=total_samples_count,
+                        accepted_samples=len(tmp_img_filepaths),
+                        last_print_time=last_progress_print_time,
+                    )
 
-                    lbl_check_val = labelFile.get_labels(
-                        data_keys=PTAF_Datakey.BBOX_XYWH)
+            _MaybePrintSelectionProgress(
+                dataset_name=_dataset_name,
+                processed_samples=processed_samples_count,
+                total_samples=total_samples_count,
+                accepted_samples=len(tmp_img_filepaths),
+                last_print_time=last_progress_print_time,
+                force=True,
+            )
+            print()
 
-                    if lbl_check_val is not None and lbl_check_val[2] < min_bbox_width_height[0] and \
-                        lbl_check_val[3] < min_bbox_width_height[1]:
-                        print(f" - Warning: Image {id+1} has bounding box width, height = {lbl_check_val[2:4]} < {min_bbox_width_height}, discarded as too small.")
-                        continue
+            if _limit > 0:
+                tmp_img_filepaths = tmp_img_filepaths[:_limit]
+                tmp_lbl_filepaths = tmp_lbl_filepaths[:_limit]
 
-                # Mark sample as valid if all checks are GO
-                tmp_valid_mask[id] = True
-                tmp_lbl_filepaths[id] = tmp_lbl_path
-                tmp_img_filepaths[id] = tmp_img_path
-
-            # Extract valid samples
-            tmp_img_filepaths = tmp_img_filepaths[tmp_valid_mask].tolist()
-            tmp_lbl_filepaths = tmp_lbl_filepaths[tmp_valid_mask].tolist()
+            valid_count = len(tmp_img_filepaths)
 
             # Update count of images
             prev_size = num_of_imags_in_set[dset_count]
-            num_of_imags_in_set[dset_count] = len(tmp_img_filepaths)
+            num_of_imags_in_set[dset_count] = valid_count
 
         else:
             # Build paths WITHOUT selection based on samples content
-                      
-            # Get all paths as before
-            tmp_img_filepaths = [os.path.join(image_folder[dset_count], filepath_template(
-                id) + ".png") for id in range(num_of_imags_in_set[dset_count])]
 
-            tmp_lbl_filepaths = [os.path.join(label_folder[dset_count], filepath_template(
-                id) + file_ext) for id in range(num_of_imags_in_set[dset_count])]
+            tmp_img_filepaths = [tmp_img_path for _, tmp_img_path, _ in sample_path_triplets]
+            tmp_lbl_filepaths = [tmp_lbl_path for _, _, tmp_lbl_path in sample_path_triplets]
+
+            if _limit > 0:
+                tmp_img_filepaths = tmp_img_filepaths[:_limit]
+                tmp_lbl_filepaths = tmp_lbl_filepaths[:_limit]
 
             prev_size = num_of_imags_in_set[dset_count]
+            num_of_imags_in_set[dset_count] = len(tmp_img_filepaths)
 
         # Append paths to filepaths lists
         img_filepaths.extend(tmp_img_filepaths)
         lbl_filepaths.extend(tmp_lbl_filepaths)
 
-        current_total_of_imgs = sum(num_of_imags_in_set)  # Get current total
         print(f"Dataset '{_dataset_name}' contains {num_of_imags_in_set[dset_count]} valid images and labels in {file_ext} format. Removed by selection criteria: {prev_size - num_of_imags_in_set[dset_count]}.")
-
-        # Check if samples limit is set and apply it if it does
-        if isinstance(samples_limit_per_dataset, (list, tuple)):
-            samples_limit_per_dataset_ = samples_limit_per_dataset[dset_count]
-        else:
-            samples_limit_per_dataset_ = samples_limit_per_dataset
-
-        if samples_limit_per_dataset_ > 0:
-
-            # Prune paths of the current dataset only
-            img_filepaths = img_filepaths[current_total_of_imgs - num_of_imags_in_set[dset_count]:
-                                          current_total_of_imgs - num_of_imags_in_set[dset_count] + samples_limit_per_dataset_]
-            lbl_filepaths = lbl_filepaths[current_total_of_imgs - num_of_imags_in_set[dset_count]:
-                                          current_total_of_imgs - num_of_imags_in_set[dset_count] + samples_limit_per_dataset_]
-
-            print(
-                f"\tLIMITER: number of samples was limited to {samples_limit_per_dataset_}/{num_of_imags_in_set[dset_count]}")
-
-            # Set total number of images to the limit
-            num_of_imags_in_set[dset_count] = samples_limit_per_dataset_
 
     total_num_imgs = sum(num_of_imags_in_set)
 
@@ -698,7 +905,8 @@ class ImagesLabelsDatasetBase(Dataset):
         self.dataset_paths_container = FetchDatasetPaths(dataset_name=self.dset_cfg.dataset_names_list,
                                                          datasets_root_folder=self.dset_cfg.datasets_root_folder,
                                                          samples_limit_per_dataset=self.dset_cfg.samples_limit_per_dataset,
-                                                         selection_criteria=self.selection_criteria)
+                                                         selection_criteria=self.selection_criteria,
+                                                         num_workers=self.dset_cfg.num_workers)
 
         self.dataset_size = len(self.dataset_paths_container)
 
@@ -730,6 +938,48 @@ class ImagesLabelsDatasetBase(Dataset):
             raise FileNotFoundError(
                 f"Failed to load image {img_path} with backend {self.dset_cfg.image_backend}"
             )
+
+        # Run time conversion to grayscale if requested
+        if self.dset_cfg.convert_rgb_to_grayscale:
+            if self.dset_cfg.image_backend == 'cv2':
+                # Conversion to grayscale using cv2 backend
+                if not isinstance(img, np.ndarray):
+                    raise TypeError(
+                        f"cv2 backend must return a numpy.ndarray, got {type(img)} for image {img_path}."
+                    )
+                if img.ndim == 2:
+                    pass
+
+                elif img.ndim == 3 and img.shape[2] == 1:
+                    img = img[:, :, 0]
+
+                elif img.ndim == 3 and img.shape[2] == 3:
+                    img = ocv.cvtColor(img, ocv.COLOR_BGR2GRAY)
+
+                elif img.ndim == 3 and img.shape[2] == 4:
+                    img = ocv.cvtColor(img, ocv.COLOR_BGRA2GRAY)
+
+                else:
+                    raise ValueError(
+                        f"Unsupported image shape for grayscale conversion at {img_path}: {img.shape}. "
+                        "Supported layouts are HxW, HxWx1, HxWx3, HxWx4."
+                    )
+                
+            elif self.dset_cfg.image_backend == 'pil':
+                # Conversion to grayscale using PIL backend
+                if isinstance(img, Image.Image):
+                    img = img.convert('L')
+                
+                img = np.asarray(img)
+                
+                if img.ndim == 3 and img.shape[2] == 1:
+                    img = img[:, :, 0]
+                
+                elif img.ndim != 2:
+                    raise ValueError(
+                        f"Unsupported PIL image shape for grayscale conversion at {img_path}: {img.shape}. "
+                        "Supported layouts are HxW or HxWx1 after conversion."
+                    )
 
         if self.dset_cfg.load_as_tensor:
             img = numpy_to_torch(img)
@@ -836,6 +1086,9 @@ class ImagesLabelsDatasetBase(Dataset):
         if self.lbl_transform is not None:
             # Apply target transform to the label
             lbl = self.lbl_transform(lbl)
+
+        if isinstance(img, torch.Tensor):
+            img = img.contiguous().clone()
 
         # Slice lbl if output_size_limit is set
         if self.dset_cfg.output_size_limit > 0 and not (self.skip_output_slicing):

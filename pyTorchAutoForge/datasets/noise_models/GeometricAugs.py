@@ -30,7 +30,7 @@ from enum import Enum
 import colorama
 from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
-from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
+from pyTorchAutoForge.datasets.AugmentationsBaseClasses import AugsBaseClass
 
 # %% Geometric augmentations
 class BorderAwareRandomAffine(GeometricAugmentationBase2D):
@@ -176,6 +176,9 @@ class BorderAwareRandomAffine(GeometricAugmentationBase2D):
         if not isinstance(transform, torch.Tensor):
             raise TypeError(
                 f"Expected the `transform` be a Tensor. Got {type(transform)}.")
+
+        # Cache latest homogeneous transform for external retrieval/debug.
+        self.last_transform_matrix_3x3 = transform
 
         # Apply affine warp
         return KG.warp_affine(input,

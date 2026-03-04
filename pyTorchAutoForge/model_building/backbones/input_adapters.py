@@ -427,10 +427,11 @@ class ResizeCopyChannelsAdapter(BaseAdapter):
             x, self.output_size, interpolation=self.interp)
 
         # If more output channels are needed, repeat input along channel dim
-        if self.out_ch > self.in_ch:
+        current_ch = x.shape[1]
+        if current_ch != self.out_ch and self.out_ch > current_ch:
 
             # Determine how many times to repeat the channels
-            repeat_factor = self.out_ch // self.in_ch
+            repeat_factor = self.out_ch // current_ch
 
             # Repeat tensor along channel dimension
             x = x.repeat(1, repeat_factor, 1, 1)

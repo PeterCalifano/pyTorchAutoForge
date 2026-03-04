@@ -30,7 +30,7 @@ from enum import Enum
 import colorama
 from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
-from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
+from pyTorchAutoForge.datasets.AugmentationsBaseClasses import AugsBaseClass
 
 # %% Intensity augmentations
 

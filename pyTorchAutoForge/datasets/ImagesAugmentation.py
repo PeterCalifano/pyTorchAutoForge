@@ -30,7 +30,7 @@ from enum import Enum
 import colorama
 from torchvision import transforms
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
-from pyTorchAutoForge.datasets.DataAugmentation import AugsBaseClass
+from pyTorchAutoForge.datasets.AugmentationsBaseClasses import AugsBaseClass
 
 from pyTorchAutoForge.datasets.noise_models.IntensityAugs import RandomSoftBinarizeImage, RandomConvertTextureToShadingLaw, RandomNoiseTexturePattern
 from pyTorchAutoForge.datasets.noise_models.NoiseErrorsAugs import RandomGaussianNoiseVariableSigma, PoissonShotNoise
@@ -40,6 +40,7 @@ from pyTorchAutoForge.datasets.noise_models.GeometricAugs import BorderAwareRand
 
 # %% Type aliases
 ndArrayOrTensor: TypeAlias = np.ndarray | torch.Tensor
+GeometricAugmentationKey: TypeAlias = tuple[type[GeometricAugmentationBase2D], int]
 
 # %% Custom augmentation modules
 # TODO modify to be usable by AugmentationSequential? Inherint from _AugmentationBase. Search how to define custom augmentations in Kornia
@@ -72,6 +73,7 @@ class AugmentationConfig:
     random_apply_photometric: bool = False
     random_apply_minmax: tuple[int, int] = (1, -1)
     device: str | None = None  # Device to run augmentations on, if None, uses torch default
+    enable_cache_transforms: bool = False
 
     # Affine roto-translation augmentation (border aware)
     affine_align_corners: bool = False
@@ -177,15 +179,33 @@ class AugmentationConfig:
                     "max_shift_img_fraction values must be in the range (0, 1) as fraction of the input image size.")
 
 
+@dataclass
+class GeometricTransformMetadata:
+    """Stores geometric transform metadata computed for one augmented batch."""
+
+    combined_matrix_3x3: torch.Tensor
+    per_op_matrices_3x3: dict[GeometricAugmentationKey, torch.Tensor]
+    geometric_ops_order: tuple[GeometricAugmentationKey, ...]
+    batch_size: int
+    device: str
+
+
 # %% Augmentation helper class
 # TODO (PC) add capability to support custom augmentation module by appending it in the user-specified location ("append_custom_module_after = (module, <literal>)" that maps to a specified entry in the augs_ops list. The given module is then inserted into the list at the specified position)
 class ImageAugmentationsHelper(nn.Module):
     def __init__(self, augs_cfg: AugmentationConfig):
         super().__init__()
+
         self.augs_cfg = augs_cfg
         self.device = torch.device(
             augs_cfg.device) if augs_cfg.device is not None else None
         self.num_aug_ops = 0
+        self.enable_cache_transforms = augs_cfg.enable_cache_transforms
+
+        # Cache variables
+        self._geometric_aug_modules: list[tuple[GeometricAugmentationKey,
+                                                GeometricAugmentationBase2D]] = []
+        self._last_batch_transform_metadata: GeometricTransformMetadata | None = None
 
         # TODO add input_data_keys to AugmentationConfig
         # ImageSequential seems not importable from kornia
@@ -324,6 +344,12 @@ class ImageAugmentationsHelper(nn.Module):
             for aug_op in torch_vision_ops:
                 aug_op.to(self.device)
 
+        self._geometric_aug_modules = [
+            ((type(aug_op), idx), aug_op)
+            for idx, aug_op in enumerate(augs_ops)
+            if isinstance(aug_op, GeometricAugmentationBase2D)
+        ]
+
         self.kornia_augs_module = AugmentationSequential(*augs_ops,
                                                          data_keys=augs_cfg.input_data_keys,
                                                          same_on_batch=False,
@@ -366,12 +392,112 @@ class ImageAugmentationsHelper(nn.Module):
 
         return input
 
+    @staticmethod
+    def _build_identity_transform_matrix(batch_size: int,
+                                         device: torch.device,
+                                         dtype: torch.dtype) -> torch.Tensor:
+        """Build a batch of identity 3x3 homogeneous transforms."""
+        return torch.eye(3, device=device, dtype=dtype).unsqueeze(0).repeat(batch_size, 1, 1)
+
+    def _to_homogeneous_transform_matrix(self,
+                                         matrix: torch.Tensor | None,
+                                         batch_size: int,
+                                         device: torch.device,
+                                         dtype: torch.dtype) -> torch.Tensor:
+        """Normalize a transform matrix into batched homogeneous [B, 3, 3] format."""
+        if matrix is None or not torch.is_tensor(matrix):
+            return self._build_identity_transform_matrix(batch_size, device, dtype)
+
+        matrix = matrix.to(device=device, dtype=dtype)
+
+        if matrix.ndim == 2 and matrix.shape == (2, 3):
+            matrix = matrix.unsqueeze(0)
+        elif matrix.ndim == 2 and matrix.shape == (3, 3):
+            matrix = matrix.unsqueeze(0)
+        elif matrix.ndim != 3:
+            warn(
+                f"Unexpected transform matrix rank {matrix.ndim}; expected 2D/3D. Falling back to identity.",
+                UserWarning,
+            )
+            return self._build_identity_transform_matrix(batch_size, device, dtype)
+
+        if matrix.shape[-2:] == (2, 3):
+            last_row = torch.tensor([0.0, 0.0, 1.0],
+                                    device=device,
+                                    dtype=dtype).view(1, 1, 3).repeat(matrix.shape[0], 1, 1)
+            matrix = torch.cat((matrix, last_row), dim=1)
+        elif matrix.shape[-2:] != (3, 3):
+            warn(
+                f"Unexpected transform matrix shape {tuple(matrix.shape)}; expected [B,2,3] or [B,3,3]. Falling back to identity.",
+                UserWarning,
+            )
+            return self._build_identity_transform_matrix(batch_size, device, dtype)
+
+        if matrix.shape[0] == batch_size:
+            return matrix
+
+        if matrix.shape[0] == 1:
+            return matrix.repeat(batch_size, 1, 1)
+
+        warn(
+            f"Unexpected transform batch dimension {matrix.shape[0]} (expected {batch_size}). Using first transform for all samples.",
+            UserWarning,
+        )
+        return matrix[:1].repeat(batch_size, 1, 1)
+
+    @staticmethod
+    def _extract_module_transform_matrix(module: nn.Module) -> torch.Tensor | None:
+        """Try extracting the latest transform matrix from a geometric augmentation module."""
+        transform = getattr(module, "transform_matrix", None)
+        if torch.is_tensor(transform):
+            return transform
+
+        transform = getattr(module, "_transform_matrix", None)
+        if torch.is_tensor(transform):
+            return transform
+
+        transform = getattr(module, "last_transform_matrix_3x3", None)
+        if torch.is_tensor(transform):
+            return transform
+
+        return None
+
+    def _build_geometric_transform_metadata(self,
+                                            batch_size: int,
+                                            device: torch.device,
+                                            dtype: torch.dtype) -> GeometricTransformMetadata:
+        """Build combined and per-op geometric transform metadata for the current batch."""
+        per_op_matrices: dict[GeometricAugmentationKey, torch.Tensor] = {}
+        geometric_ops_order: list[GeometricAugmentationKey] = []
+        combined = self._build_identity_transform_matrix(
+            batch_size, device, dtype)
+
+        for op_key, op_module in self._geometric_aug_modules:
+            matrix_raw = self._extract_module_transform_matrix(op_module)
+            matrix_h = self._to_homogeneous_transform_matrix(
+                matrix_raw, batch_size, device, dtype)
+            per_op_matrices[op_key] = matrix_h
+            geometric_ops_order.append(op_key)
+            combined = matrix_h @ combined
+
+        return GeometricTransformMetadata(
+            combined_matrix_3x3=combined,
+            per_op_matrices_3x3=per_op_matrices,
+            geometric_ops_order=tuple(geometric_ops_order),
+            batch_size=batch_size,
+            device=str(device),
+        )
+
     # images: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
     # labels: ndArrayOrTensor
 
     def forward(self,
                 *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...],
-                ) -> tuple[ndArrayOrTensor | tuple[ndArrayOrTensor, ...], ndArrayOrTensor]:
+                return_transform_metadata: bool = False,
+                ) -> tuple[ndArrayOrTensor | tuple[ndArrayOrTensor, ...], ndArrayOrTensor] | tuple[
+                    tuple[ndArrayOrTensor |
+                          tuple[ndArrayOrTensor, ...], ndArrayOrTensor],
+                    GeometricTransformMetadata]:
         """
         images: Tensor[B,H,W,C] or [B,C,H,W], or np.ndarray [...,H,W,C]
         labels: Tensor[B, num_points, 2] or np.ndarray matching batch
@@ -387,12 +513,13 @@ class ImageAugmentationsHelper(nn.Module):
 
         # Processing batches
         with torch.no_grad():
+            self._last_batch_transform_metadata = None
 
             # Detect type, convert to torch Tensor [B,C,H,W], determine scaling factor
             is_numpy = isinstance(images_, np.ndarray)
-            img_tensor, to_numpy, scale_factor = self.preprocess_images_(
+            img_tensor, to_numpy, scale_factor = self._preprocess_images(
                 images_)
-            
+
             target_device = self._resolve_device(img_tensor)
             if target_device is not None:
                 img_tensor = img_tensor.to(target_device)
@@ -443,7 +570,7 @@ class ImageAugmentationsHelper(nn.Module):
 
                 # %% Validate and fix augmentations
                 if self.augs_cfg.enable_batch_validation_check:
-                    aug_inputs = self.validate_fix_input_img_(
+                    aug_inputs = self._validate_fix_input_img(
                         *aug_inputs, original_inputs=inputs)
 
             else:
@@ -483,6 +610,15 @@ class ImageAugmentationsHelper(nn.Module):
                 aug_inputs[lbl_index] = lbl_tensor / \
                     self.augs_cfg.label_scaling_factors.to(lbl_tensor.device)
 
+            # Cache geometric transform metadata for the latest batch if geometric augmentations were applied
+            if (return_transform_metadata or self.enable_cache_transforms) and torch.is_tensor(aug_inputs[img_index]):
+
+                batch_size = int(aug_inputs[img_index].shape[0])
+                self._last_batch_transform_metadata = self._build_geometric_transform_metadata(batch_size=batch_size,
+                                                                                               device=aug_inputs[img_index].device,
+                                                                                               dtype=aug_inputs[img_index].dtype,
+                                                                                               )
+
             # Convert back to numpy if was ndarray
             if to_numpy is True:
                 aug_inputs[img_index] = torch_to_numpy(
@@ -490,14 +626,33 @@ class ImageAugmentationsHelper(nn.Module):
                 aug_inputs[lbl_index] = torch_to_numpy(aug_inputs[lbl_index])
 
         if target_device is not None:
-            aug_inputs = type(aug_inputs)(
-                self._move_input_to_device(input, target_device)
-                for input in aug_inputs
-            )
+            aug_inputs = type(aug_inputs)(self._move_input_to_device(input, target_device)
+                                          for input in aug_inputs)
+
+        # Return augmented inputs and optionally transform metadata
+        if return_transform_metadata:
+            if self._last_batch_transform_metadata is None and torch.is_tensor(aug_inputs[img_index]):
+                # Build if not available
+                batch_size = int(aug_inputs[img_index].shape[0])
+                self._last_batch_transform_metadata = self._build_geometric_transform_metadata(batch_size=batch_size,
+                                                                                               device=aug_inputs[img_index].device,
+                                                                                               dtype=aug_inputs[img_index].dtype,
+                                                                                               )
+            return aug_inputs, self._last_batch_transform_metadata
 
         return aug_inputs
 
-    def preprocess_images_(self,
+    def Get_last_batch_transform_metadata(self) -> GeometricTransformMetadata | None:
+        """Return transform metadata for the latest forward pass."""
+        return self._last_batch_transform_metadata
+
+    def Get_last_batch_transform_matrix_3x3(self) -> torch.Tensor | None:
+        """Return only the combined geometric transform matrix for the latest batch."""
+        if self._last_batch_transform_metadata is None:
+            return None
+        return self._last_batch_transform_metadata.combined_matrix_3x3
+
+    def _preprocess_images(self,
                            images: ndArrayOrTensor
                            ) -> tuple[torch.Tensor, bool, float]:
         """
@@ -525,7 +680,7 @@ class ImageAugmentationsHelper(nn.Module):
             imgs_array = images.copy()
 
             # Determine scale factor
-            scale_factor = self.determine_scale_factor_(images)
+            scale_factor = self._determine_scale_factor(images)
 
             if imgs_array.ndim < 2 or imgs_array.ndim > 4:
                 raise ValueError(
@@ -574,7 +729,7 @@ class ImageAugmentationsHelper(nn.Module):
 
         elif isinstance(images, torch.Tensor):
             imgs_array = images.to(torch.float32)
-            scale_factor = self.determine_scale_factor_(images)
+            scale_factor = self._determine_scale_factor(images)
 
             if imgs_array.dim() == 4 and imgs_array.shape[-1] in (1, 3):
                 # Detect [B,H,W,C] vs [B,C,H,W]
@@ -600,7 +755,7 @@ class ImageAugmentationsHelper(nn.Module):
             raise TypeError(
                 f"Unsupported image array type. Expected np.ndarray or torch.Tensor, but found {type(images)}")
 
-    def determine_scale_factor_(self, imgs_array: ndArrayOrTensor) -> float:
+    def _determine_scale_factor(self, imgs_array: ndArrayOrTensor) -> float:
 
         dtype = imgs_array.dtype
         scale_factor = 1.0
@@ -624,7 +779,7 @@ class ImageAugmentationsHelper(nn.Module):
 
         return scale_factor
 
-    def validate_fix_input_img_(self,
+    def _validate_fix_input_img(self,
                                 *inputs: ndArrayOrTensor | Sequence[ndArrayOrTensor],
                                 original_inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...]) -> Sequence[ndArrayOrTensor]:
         """
@@ -641,7 +796,7 @@ class ImageAugmentationsHelper(nn.Module):
             DataKey.KEYPOINTS)  # TODO (PC) absolutely requires extension!
 
         # Scan for invalid samples
-        is_valid_mask, invalid_samples = self._is_valid_image(*inputs)
+        is_valid_mask = self._is_valid_image(*inputs)
         invalid_indices = (~is_valid_mask).nonzero(as_tuple=True)[0]
 
         if not is_valid_mask.all():
@@ -672,8 +827,7 @@ class ImageAugmentationsHelper(nn.Module):
                         *invalid_original)
 
                     # Check new validity mask
-                    is_valid_mask_tmp, _ = self._is_valid_image(
-                        *new_aug_inputs_)
+                    is_valid_mask_tmp = self._is_valid_image(*new_aug_inputs_)
 
                     not_all_valid = not (is_valid_mask_tmp.all())
 
@@ -705,7 +859,7 @@ class ImageAugmentationsHelper(nn.Module):
 
         return list(new_inputs)
 
-    def _is_valid_image(self, *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...]):
+    def _is_valid_image(self, *inputs: ndArrayOrTensor | tuple[ndArrayOrTensor, ...]) -> torch.Tensor:
         """
         Check validity of augmented images in a batch.
 
@@ -720,36 +874,24 @@ class ImageAugmentationsHelper(nn.Module):
 
         Returns:
             is_valid_mask (torch.Tensor): Boolean tensor of shape (B,) indicating validity per image.
-            invalid_inputs (tuple): Tuple of tensors containing only the invalid samples.
         """
 
         # Compute mean across channels and spatial dims
         img_index = self.augs_cfg.input_data_keys.index(DataKey.IMAGE)
 
-        B = inputs[img_index].shape[0]
-        # mean_per_image = torch.abs(inputs[img_index]).mean(dim=(1, 2, 3))  # (B,)
-
-        # Move all inputs to the same device
-        target_device = self._resolve_device(inputs[img_index])
-        inputs = tuple(
-            self._move_input_to_device(input, target_device) for input in inputs)
+        image_tensor = inputs[img_index]
+        if not torch.is_tensor(image_tensor):
+            raise TypeError("Expected image input to be a torch.Tensor during validation.")
+        B = image_tensor.shape[0]
 
         # A threshold to detect near-black images (tune if needed)
         # TODO remove hardcoded threshold. It also assumes that the value of intensity is NOT [0,1]!
 
         is_pixel_bright_count_mask = (
-            torch.abs(inputs[img_index]) > 1).view(B, -1).sum(dim=1)
+            torch.abs(image_tensor) > 1).view(B, -1).sum(dim=1)
         is_valid_mask = is_pixel_bright_count_mask >= self.augs_cfg.min_num_bright_pixels
 
-        # Indices of invalid images
-        invalid_indices = (~is_valid_mask).nonzero(as_tuple=True)[0]
-
-        # Select invalid samples
-        invalid_inputs = tuple(torch.index_select(
-            input, dim=0, index=invalid_indices) for input in inputs)
-
-        # Return validity mask and new invalid tensor samples (using index_select)
-        return is_valid_mask, invalid_inputs
+        return is_valid_mask
 
     # Overload "to" method
     def to(self, *args, **kwargs):
@@ -768,6 +910,125 @@ class ImageAugmentationsHelper(nn.Module):
         return self
 
     # STATIC METHODS
+    @staticmethod
+    def Update_clockwise_angle_from_positive_x_using_geometric_transform(
+        clockwise_angle_from_positive_x_rad_batch: torch.Tensor,
+        geometric_transform_matrix_batch: torch.Tensor,
+        wrap_output_to_0_2pi: bool = True,
+        eps: float = 1e-12,
+    ) -> torch.Tensor:
+        """Update clockwise angles from +X using the full geometric affine transform.
+
+        The affine translation component is ignored because directions are affected
+        only by the linear part of the transform.
+
+        Args:
+            clockwise_angle_from_positive_x_rad_batch: Angle tensor with shape
+                ``[B]`` or ``[B, 1]`` in radians.
+            geometric_transform_matrix_batch: Affine transform matrix with shape
+                ``[B, 3, 3]``, ``[B, 2, 3]``, ``[3, 3]`` or ``[2, 3]``.
+            wrap_output_to_0_2pi: If True, wrap output angles to ``[0, 2*pi)``.
+            eps: Threshold used to detect degenerate transformed direction vectors.
+
+        Returns:
+            Updated angle tensor with the same shape as input.
+        """
+
+        # Get label shape
+        original_angle_tensor_shape = clockwise_angle_from_positive_x_rad_batch.shape
+        clockwise_angle_from_positive_x_rad_batch = clockwise_angle_from_positive_x_rad_batch.reshape(
+            -1)
+
+        # Extract affine transform data
+        if geometric_transform_matrix_batch.ndim == 2:
+            geometric_transform_matrix_batch = geometric_transform_matrix_batch.unsqueeze(
+                0)
+
+        if geometric_transform_matrix_batch.ndim != 3:
+            raise ValueError(
+                "geometric_transform_matrix_batch must have shape [B,3,3], [B,2,3], [3,3] or [2,3]."
+            )
+
+        if geometric_transform_matrix_batch.shape[-2:] == (3, 3):
+            geometric_linear_component_batch_2x2 = geometric_transform_matrix_batch[:, :2, :2]
+        elif geometric_transform_matrix_batch.shape[-2:] == (2, 3):
+            geometric_linear_component_batch_2x2 = geometric_transform_matrix_batch[:, :2, :2]
+        else:
+            raise ValueError(
+                f"Unsupported transform matrix shape: {tuple(geometric_transform_matrix_batch.shape)}."
+            )
+
+        # Compose 2x2 rotation matrix from affine transform
+        num_angle_samples = clockwise_angle_from_positive_x_rad_batch.shape[0]
+        num_transform_samples = geometric_linear_component_batch_2x2.shape[0]
+
+        if num_transform_samples == 1 and num_angle_samples > 1:
+            geometric_linear_component_batch_2x2 = geometric_linear_component_batch_2x2.expand(
+                num_angle_samples, -1, -1
+            )
+        elif num_transform_samples != num_angle_samples:
+            raise ValueError(
+                f"Mismatch between number of angles ({num_angle_samples}) and transforms ({num_transform_samples})."
+            )
+
+        geometric_linear_component_batch_2x2 = geometric_linear_component_batch_2x2.to(
+            device=clockwise_angle_from_positive_x_rad_batch.device,
+            dtype=clockwise_angle_from_positive_x_rad_batch.dtype,
+        )
+
+        # Apply linear part of affine transform to input direction vectors
+        input_direction_x_component_batch = torch.cos(
+            clockwise_angle_from_positive_x_rad_batch)
+        input_direction_y_component_batch = torch.sin(
+            clockwise_angle_from_positive_x_rad_batch)
+
+        transformed_direction_x_component_batch = (
+            geometric_linear_component_batch_2x2[:, 0,
+                                                 0] * input_direction_x_component_batch
+            + geometric_linear_component_batch_2x2[:,
+                                                   0, 1] * input_direction_y_component_batch
+        )
+        transformed_direction_y_component_batch = (
+            geometric_linear_component_batch_2x2[:, 1,
+                                                 0] * input_direction_x_component_batch
+            + geometric_linear_component_batch_2x2[:,
+                                                   1, 1] * input_direction_y_component_batch
+        )
+
+        transformed_direction_squared_norm_batch = (
+            transformed_direction_x_component_batch.square()
+            + transformed_direction_y_component_batch.square()
+        )
+
+        # Check for degenerate transformed directions and replace with input direction if needed to avoid NaNs in angle computation
+        is_degenerate_transform_sample_batch = transformed_direction_squared_norm_batch <= eps
+
+        if torch.any(is_degenerate_transform_sample_batch):
+            transformed_direction_x_component_batch = torch.where(
+                is_degenerate_transform_sample_batch,
+                input_direction_x_component_batch,
+                transformed_direction_x_component_batch,
+            )
+            transformed_direction_y_component_batch = torch.where(
+                is_degenerate_transform_sample_batch,
+                input_direction_y_component_batch,
+                transformed_direction_y_component_batch,
+            )
+
+        updated_clockwise_angle_from_positive_x_rad_batch = torch.atan2(
+            transformed_direction_y_component_batch,
+            transformed_direction_x_component_batch,
+        )
+
+        # Wrap output angles to [0, 2*pi) if requested
+        if wrap_output_to_0_2pi:
+            updated_clockwise_angle_from_positive_x_rad_batch = torch.remainder(
+                updated_clockwise_angle_from_positive_x_rad_batch,
+                2 * torch.pi,
+            )
+
+        return updated_clockwise_angle_from_positive_x_rad_batch.reshape(original_angle_tensor_shape)
+
     @staticmethod
     def Shift_image_point_batch(augs_cfg: AugmentationConfig,
                                 images: torch.Tensor,
@@ -840,6 +1101,7 @@ class ImageAugmentationsHelper(nn.Module):
         return shifted_imgs, lbl
 
 # %% Prototypes TODO
+# Reference for implementation: Gow, 2007, "A Comprehensive tools for modeling CMOS image sensor-noise performance", IEEE Transactions on Electron Devices, Vol. 54, No. 6
 
 
 class ImageNormalizationCoeff(Enum):

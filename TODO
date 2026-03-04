@@ -37,18 +37,28 @@
 - Minor versions and patches of v0.2.X
   - [x] Major fixes in v0.2.1 (bugs introduced in v0.2.0)
   - [x] Fix bugs in augmentation module (validation module)
+
+  - [x] Implement "binarize" augmentation for images (EDIT: soft-binarize in the final version)
+  - [x] Implement tailoring of RandomAffine to make it border crossing aware
+
+- v0.3.X
+  - [x] Implement custom adaptive pooling layers for ONNx static export
+  - [x] Implement tests for *onnxability* of models provided by model_building module of PTAF
+
+- v0.4.0
+  - [x] Improve CI setup
+  - [x] Add new datakeys and coverage
+  - [x] Improve backbone configuration
+
+- v0.5.0
+  - [ ] Migrate documentation from Read The Docs to something more controllable and less restrictive
   - [ ] [MAJOR] Restructure and expand augmentations module to correctly handle images and 1D vectors jointly
   - [ ] Implement 1d vector error models (from selected distributions)
   - [ ] Change random apply and structure of augs module for images (split based on type)
-  - [x] Implement "binarize" augmentation for images (EDIT: soft-binarize in the final version)
   - [ ] Review and unit test selection criteria implementation
-  - [ ] Extend augs-trainer integration to allow "discard" option in validation module
-  - [x] Implement tailoring of RandomAffine to make it border crossing aware
-  - [ ] Migrate documentation from Read The Docs to something more controllable and less restrictive
+  - [ ] Extend augs-trainer integration to allow "discard" option
 
-- [ ] v0.3.X
-  - [x] Implement custom adaptive pooling layers for ONNx static export
-  - [x] Implement tests for *onnxability* of models provided by model_building module of PTAF
+- v0.X.X
   - [ ] Modify implementation of trainer to use static or cls methods instead of instance methods for increased flexibility
   - [ ] Add capability to trainer/new class helper: transfer learning from checkpoint instead of replacing model!
   - [ ] Fix all unit tests for up-to-date modules
@@ -67,8 +77,6 @@
   - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
   - [ ] Upgrade api.torch to save model "packages" with all info to run the model
   - [ ] Improve docstrings in src code
-
-- v0.X.X
   - [ ] Implement prototype of K-fold cross-validation for training runs
   - [ ] Extend ModelEvaluator to evaluate sklearn and xgb models
   - [ ] All those above
