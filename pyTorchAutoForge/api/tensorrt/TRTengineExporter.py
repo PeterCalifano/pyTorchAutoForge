@@ -291,11 +291,11 @@ class TRTengineExporter:
         elif self.precision == TRTprecision.INT8:
             command_.append("--int8")
 
-        # Workspace size
+        # Workspace size — TRT 10+ uses --memPoolSize, older uses --workspace
         if self.workspace_size_bytes is not None:
             workspace_mib_ = max(
                 1, int(math.ceil(self.workspace_size_bytes / (1024 * 1024))))
-            command_.append(f"--workspace={workspace_mib_}")
+            command_.append(f"--memPoolSize=workspace:{workspace_mib_}M")
 
         # Dynamic shapes
         if self.dynamic_shape_profiles is not None:
