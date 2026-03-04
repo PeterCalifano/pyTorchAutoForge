@@ -1,10 +1,8 @@
-from ast import Import
 import enum
 from torch.utils.data import Dataset
 import numpy as np
 import torch
 import os
-import sys
 from dataclasses import dataclass, field
 import copy
 
@@ -15,15 +13,11 @@ from torchvision.transforms import Compose
 
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-from abc import ABC, abstractmethod
-from abc import ABCMeta
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, Literal
 from collections.abc import Callable
 import yaml
 from PIL import Image
 from functools import partial
-import json
-import yaml
 import concurrent.futures
 import time
 from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey, LabelsContainer
@@ -198,7 +192,7 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
 
         if self.intensity_scale_value is not None and self.intensity_scaling_mode != 'custom':
             raise ValueError(
-                f"intensity_scale_value must be None unless intensity_scaling_mode is 'custom'.")
+                "intensity_scale_value must be None unless intensity_scaling_mode is 'custom'.")
 
 
 ######################## DEVNOTE Relatively stable code BELOW ########################
@@ -337,7 +331,6 @@ def _EvaluateSampleSelectionWorker(worker_args: tuple[int,
     # Unpack worker arguments
     idx_, tmp_img_path_, tmp_lbl_path_ = worker_args
 
-    label_folder_path_ = context_["label_folder_path"]
     has_label_filters_ = context_["has_label_filters"]
     has_max_apparent_size_filter_ = context_["has_max_apparent_size_filter"]
     min_bbox_wh_ = context_["min_bbox_wh"]
@@ -497,7 +490,7 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
 
         if datasets_root_folder_ is None:
             raise ValueError(
-                f"\033[91mDataset folder cannot be None: automatic resolution of dataset root folder failed silently. Please check your configuration and report issue.\033[0m")
+                "\033[91mDataset folder cannot be None: automatic resolution of dataset root folder failed silently. Please check your configuration and report issue.\033[0m")
 
         print(
             f"Fetching dataset '{_dataset_name}' with root folder {datasets_root_folder_}...")
@@ -592,7 +585,7 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
 
             # Warn once outside the loop if OpenCV is unavailable
             if selection_criteria.min_Q75_intensity is not None and not hasOpenCV:
-                print(f"\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m")
+                print("\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m")
 
             tmp_img_filepaths = []
             tmp_lbl_filepaths = []
