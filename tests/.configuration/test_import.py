@@ -10,8 +10,8 @@ def test_import_pytorch_autoforge_modules():
     for _, mod_name, _ in pkgutil.walk_packages(pyTorchAutoForge.__path__, package_name + "."):
         try:
             importlib.import_module(mod_name)
-        except ImportError as e:
-            errors.append(f"{mod_name}")
+        except Exception as import_error:
+            errors.append(f"{mod_name}: {type(import_error).__name__}: {import_error}")
 
     # If there are any errors, pytest will fail the test
     assert not errors, f"Some modules failed to import:\n" + "\n".join(errors)
