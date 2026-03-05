@@ -56,18 +56,17 @@ class ResultsPlotterHelper():
         for key, value in vars(config).items():
             setattr(self, key, value)
 
-        # Determine whether output folder exists already and if is empty
+        # Determine output folder. Reuse requested folder when possible; append numeric suffix only if needed.
+        base_output_folder = self.output_folder
         folder_id = 0
-        tmp_output_folder = self.output_folder + f"_{folder_id}"
+        tmp_output_folder = base_output_folder
 
-        while os.path.isdir(tmp_output_folder):
-            if len(os.listdir(tmp_output_folder)) == 0:
-                self.output_folder = tmp_output_folder
-                print(f"Output folder {tmp_output_folder} exists but is empty. Using it...")
-                break
-            else:
-                folder_id += 1
-                tmp_output_folder = tmp_output_folder + f"_{folder_id}"
+        while os.path.isdir(tmp_output_folder) and len(os.listdir(tmp_output_folder)) > 0:
+            folder_id += 1
+            tmp_output_folder = f"{base_output_folder}_{folder_id}"
+
+        if os.path.isdir(tmp_output_folder) and len(os.listdir(tmp_output_folder)) == 0:
+            print(f"Output folder {tmp_output_folder} exists but is empty. Using it...")
 
         # Define the output folder
         self.output_folder = tmp_output_folder
@@ -96,7 +95,7 @@ class ResultsPlotterHelper():
 
         # DATA: Check if stats dictionary is empty
         if stats == None:
-            self.stats == self.loaded_stats
+            self.stats = self.loaded_stats
         else:
             self.stats = stats
 
@@ -346,4 +345,3 @@ def test_debug_resultsPlotter():
 
 if __name__ == '__main__':
     test_debug_resultsPlotter()
-
