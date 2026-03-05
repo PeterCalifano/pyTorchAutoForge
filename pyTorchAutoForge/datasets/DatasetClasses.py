@@ -699,9 +699,6 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                             if tmp_img_path is not None and tmp_lbl_path is not None:
                                 selected_by_idx[sample_idx] = (
                                     tmp_img_path, tmp_lbl_path)
-                                if _limit > 0 and len(selected_by_idx) >= _limit:
-                                    early_stop_requested = True
-                                    break
 
                             last_progress_print_time = _PrintSelectionProgress(dataset_name=_dataset_name,
                                                                                processed_samples=processed_samples_count,
@@ -710,12 +707,6 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                                                                                    selected_by_idx),
                                                                                last_print_time=last_progress_print_time,
                                                                                )
-
-                        if early_stop_requested:
-                            for pending_future in pending_futures:
-                                pending_future.cancel()
-                            pending_futures.clear()
-                            break
 
                         while len(pending_futures) < max_inflight:
                             try:
