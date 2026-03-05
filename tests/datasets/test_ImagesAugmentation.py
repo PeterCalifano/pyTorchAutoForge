@@ -15,13 +15,10 @@ from time import perf_counter
 import PIL
 from kornia.constants import DataKey
 
-# Determine matplotlib backend based on environment
-import matplotlib
-if os.getenv("DISPLAY", "") == "":
-    # Use non-interactive backend if no display is available
-    matplotlib.use('agg')
-
 # Helper functions
+def _should_show_plots() -> bool:
+    """Enable interactive plot display only when explicitly requested."""
+    return os.getenv("PTAF_ENABLE_TEST_PLOTS") == "1" and plt.get_backend().lower() != "agg"
 
 
 def _load_sample_images(max_num: int = 5):  # -> list[Any]:
@@ -279,8 +276,8 @@ def test_synthetic_mask_augmentation():
         axs[1, i].axis('off')
 
     plt.tight_layout()
-    # plt.pause(2)
-    plt.show()
+    if _should_show_plots():
+        plt.show()
     plt.close()
 
 
@@ -378,8 +375,7 @@ def test_sample_images_augmentation():
 
         plt.tight_layout()
         # plt.pause(2)
-        # Call show only if gui is available
-        if plt.get_backend() != 'agg':
+        if _should_show_plots():
             plt.show()
         plt.close()
 
@@ -454,7 +450,7 @@ def test_random_softbinarize_only_sample_images_with_viz():
         axs[1, i].axis('off')
 
     plt.tight_layout()
-    if plt.get_backend() != 'agg':
+    if _should_show_plots():
         plt.show()
     plt.close()
 
@@ -539,8 +535,9 @@ def test_AugmentationSequential():
                    s=40, label='Transformed Point 2', marker='x')
 
     plt.tight_layout()
-    if plt.get_backend() != 'agg':
+    if _should_show_plots():
         plt.show()
+    plt.close()
 
 # Chain parametrize to test combinations
 

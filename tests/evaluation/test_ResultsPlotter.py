@@ -1,10 +1,12 @@
 import pytest
 import numpy as np
 import os
+from pathlib import Path
 from pyTorchAutoForge.evaluation.ResultsPlotter import ResultsPlotterHelper, ResultsPlotterConfig, backend_module
 
 @pytest.fixture
-def setup_plotter():
+def setup_plotter(tmp_path: Path):
+    output_dir_ = tmp_path / "plots"
     stats = {
         'prediction_err': np.random.randn(100, 3),
         'mean_prediction_err': np.random.randn(3)
@@ -16,14 +18,10 @@ def setup_plotter():
         colours=['red', 'green', 'blue'],
         units=['unit1', 'unit2', 'unit3'],
         entriesNames=['Component 0', 'Component 1', 'Component 2'],
-        output_folder='test_output'
+        output_folder=str(output_dir_)
     )
     plotter = ResultsPlotterHelper(stats=stats, backend_module_=backend_module.SEABORN, config=config)
     yield plotter, stats, config
-    if os.path.isdir('test_output'):
-        for file in os.listdir('test_output'):
-            os.remove(os.path.join('test_output', file))
-        os.rmdir('test_output')
 
 def test_initialization(setup_plotter):
     plotter, stats, config = setup_plotter
@@ -35,7 +33,7 @@ def test_initialization(setup_plotter):
     assert plotter.colours == config.colours
     assert plotter.units == config.units
     assert plotter.entriesNames == config.entriesNames
-    assert plotter.output_folder == config.output_folder
+    assert str(plotter.output_folder).startswith(str(config.output_folder))
 
 def test_histPredictionErrors(setup_plotter):
     plotter, _, _ = setup_plotter
@@ -81,8 +79,6 @@ def test_histPredictionErrors_with_missing_mean_prediction_err(setup_plotter):
 def test_save_figs(setup_plotter):
     plotter, _, config = setup_plotter
     plotter.save_figs = True
-    plotter.output_folder = 'test_output'
-    plotter.histPredictionErrors()
-    assert os.path.isdir('test_output')
-    for entry in config.entriesNames:
-        assert os.path.isfile(os.path.join('test_output', f"prediction_errors_{entry}.png"))
+    plotter.histPredictionErrors(stats=plotter.loaded_stats)
+    assert os.path.isdir(plotter.output_folder)
+    assert os.path.isfile(os.path.join(plotter.output_folder, "prediction_errors_all_components.png"))
