@@ -1,47 +1,45 @@
 #!/usr/bin/env python3
 import os, sys, argparse
 
-# Define parser to get path to images and options
-parser = argparse.ArgumentParser(description="Script to rename images in a directory.")
+def _BuildParser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Script to rename images in a directory.")
 
-parser.add_argument(
-    "-p", "--path_folder",
-    type=str,
-    required=True,
-    help="Path to the folder containing the images to rename.",
-)
+    parser.add_argument(
+        "-p", "--path_folder",
+        type=str,
+        required=True,
+        help="Path to the folder containing the images to rename.",
+    )
 
-parser.add_argument('-e', '--extension',
-                    type=str, 
-                    default=".png", 
-                    help="Extension of the images to rename. Default is .png")
+    parser.add_argument('-e', '--extension',
+                        type=str,
+                        default=".png",
+                        help="Extension of the images to rename. Default is .png")
 
-parser.add_argument('-t', '--type_renaming', 
-                    type=str, 
-                    default="progressive_id", 
-                    help="Type of renaming to perform. Options: 'progressive_id'.")
+    parser.add_argument('-t', '--type_renaming',
+                        type=str,
+                        default="progressive_id",
+                        help="Type of renaming to perform. Options: 'progressive_id'.")
 
-parser.add_argument('-s', '--start',
-                    type=int, 
-                    default=0, 
-                    help="Starting number for renaming. Default is 0.")
+    parser.add_argument('-s', '--start',
+                        type=int,
+                        default=0,
+                        help="Starting number for renaming. Default is 0.")
 
-parser.add_argument("--step", type=int, default=1, help="Step for renaming.")
+    parser.add_argument("--step", type=int, default=1, help="Step for renaming.")
 
-parser.add_argument(
-    "-o", "--output_folder",
-    type=str,
-    default=None,
-    help="Path to the folder where the renamed images will be saved. If not specified, images will be renamed in the original folder.",
-)
+    parser.add_argument(
+        "-o", "--output_folder",
+        type=str,
+        default=None,
+        help="Path to the folder where the renamed images will be saved. If not specified, images will be renamed in the original folder.",
+    )
 
-# Add help list
-parser.add_argument('-h', '--help_list', action='store_true', help="Display a list of available options.")
-
-# Parse the arguments
-args = parser.parse_args()
+    parser.add_argument('--help_list', action='store_true', help="Display a list of available options.")
+    return parser
 
 def main():
+    args = _BuildParser().parse_args()
 
     if args.help_list:
         print("Available options:")
@@ -98,4 +96,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
