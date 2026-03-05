@@ -140,6 +140,16 @@ def test_constructor_is_side_effect_free_and_supports_kwargs_override() -> None:
     assert exporter_.exporter_mode == TRTengineExporterMode.TRTEXEC
 
 
+def test_constructor_supports_workspace_pool_size_new_name() -> None:
+    exporter_new_ = TRTengineExporter(workspace_pool_size_bytes=2048)
+    assert exporter_new_.workspace_pool_size_bytes == 2048
+
+
+def test_constructor_rejects_legacy_workspace_size_alias() -> None:
+    with pytest.raises(TypeError, match="workspace_size_bytes"):
+        TRTengineExporter(workspace_size_bytes=1024)  # type: ignore[call-arg]
+
+
 def test_validate_onnx_input_path_rejects_missing_file(tmp_path: Path) -> None:
     exporter_ = TRTengineExporter()
     missing_path_ = tmp_path / "missing.onnx"
@@ -189,7 +199,7 @@ def test_build_with_trtexec_uses_safe_arg_list_and_flags(tmp_path: Path, monkeyp
     )
     exporter_ = TRTengineExporter(
         precision=TRTprecision.FP16,
-        workspace_size_bytes=16 * 1024 * 1024,
+        workspace_pool_size_bytes=16 * 1024 * 1024,
         dynamic_shape_profiles=(profile_,),
         trtexec_extra_args=("--skipInference",),
     )
@@ -228,7 +238,7 @@ def test_build_with_trtexec_uses_safe_arg_list_and_flags(tmp_path: Path, monkeyp
 def test_build_with_trtexec_falls_back_to_legacy_workspace_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     exporter_ = TRTengineExporter(
         precision=TRTprecision.FP16,
-        workspace_size_bytes=8 * 1024 * 1024,
+        workspace_pool_size_bytes=8 * 1024 * 1024,
     )
     onnx_path_ = _make_dummy_onnx_file(tmp_path)
     output_path_ = tmp_path / "legacy_workspace.engine"
@@ -349,7 +359,7 @@ def test_python_builder_success_writes_engine(tmp_path: Path, monkeypatch: pytes
     exporter_ = TRTengineExporter(
         exporter_mode=TRTengineExporterMode.PYTHON,
         precision=TRTprecision.FP16,
-        workspace_size_bytes=1024,
+        workspace_pool_size_bytes=1024,
         dynamic_shape_profiles=(profile_,),
     )
     fake_trt_ = _make_fake_trt_module(parse_success=True, serialized_engine=b"engine_data")
@@ -367,7 +377,7 @@ def test_python_builder_success_writes_engine(tmp_path: Path, monkeypatch: pytes
 def test_python_builder_workspace_falls_back_to_legacy_max_workspace_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     exporter_ = TRTengineExporter(
         exporter_mode=TRTengineExporterMode.PYTHON,
-        workspace_size_bytes=2048,
+        workspace_pool_size_bytes=2048,
     )
 
     class Logger:
@@ -453,7 +463,7 @@ def test_python_builder_workspace_falls_back_to_legacy_max_workspace_size(tmp_pa
 def test_python_builder_workspace_size_is_accepted_and_ignored_when_api_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     exporter_ = TRTengineExporter(
         exporter_mode=TRTengineExporterMode.PYTHON,
-        workspace_size_bytes=4096,
+        workspace_pool_size_bytes=4096,
     )
 
     class Logger:
@@ -545,7 +555,7 @@ def test_python_builder_workspace_size_is_accepted_and_ignored_when_api_unavaila
 def test_python_builder_workspace_uses_legacy_fallback_when_modern_api_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     exporter_ = TRTengineExporter(
         exporter_mode=TRTengineExporterMode.PYTHON,
-        workspace_size_bytes=8192,
+        workspace_pool_size_bytes=8192,
     )
 
     class Logger:

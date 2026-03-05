@@ -88,7 +88,7 @@ class TRTengineExporterConfig:
     precision: TRTprecision = TRTprecision.FP32
     default_output_engine_path: str | None = None
     verbose: bool = False
-    workspace_size_bytes: int | None = None
+    workspace_pool_size_bytes: int | None = None
     dynamic_shape_profiles: tuple[TRTDynamicShapeProfile, ...] | None = None
     trtexec_extra_args: tuple[str, ...] = ()
 
@@ -107,7 +107,7 @@ class TRTengineExporter:
                  precision: TRTprecision | None = None,
                  default_output_engine_path: str | None = None,
                  verbose: bool | None = None,
-                 workspace_size_bytes: int | None = None,
+                 workspace_pool_size_bytes: int | None = None,
                  dynamic_shape_profiles: tuple[TRTDynamicShapeProfile, ...] | None = None,
                  trtexec_extra_args: tuple[str, ...] | None = None,
                  ) -> None:
@@ -129,10 +129,10 @@ class TRTengineExporter:
         )
 
         self.verbose = verbose if verbose is not None else config_.verbose
-        self.workspace_size_bytes = (
-            workspace_size_bytes
-            if workspace_size_bytes is not None
-            else config_.workspace_size_bytes
+        self.workspace_pool_size_bytes = (
+            workspace_pool_size_bytes
+            if workspace_pool_size_bytes is not None
+            else config_.workspace_pool_size_bytes
         )
         self.dynamic_shape_profiles = (
             dynamic_shape_profiles
@@ -151,8 +151,8 @@ class TRTengineExporter:
 
     def _validate_configuration(self) -> None:
         """Validate configuration fields for consistency and basic correctness."""
-        if self.workspace_size_bytes is not None and self.workspace_size_bytes <= 0:
-            raise ValueError("workspace_size_bytes must be > 0 when provided.")
+        if self.workspace_pool_size_bytes is not None and self.workspace_pool_size_bytes <= 0:
+            raise ValueError("workspace_pool_size_bytes must be > 0 when provided.")
 
         if self.dynamic_shape_profiles is None:
             return
@@ -276,7 +276,7 @@ class TRTengineExporter:
         are missing/deprecated on a runtime, this method silently skips setting
         the limit (optionally reporting in verbose mode).
         """
-        if self.workspace_size_bytes is None:
+        if self.workspace_pool_size_bytes is None:
             return
 
         # Preferred API for modern TensorRT versions.
@@ -290,7 +290,7 @@ class TRTengineExporter:
             if workspace_pool_ is not None:
                 try:
                     builder_config.set_memory_pool_limit(
-                        workspace_pool_, self.workspace_size_bytes
+                        workspace_pool_, self.workspace_pool_size_bytes
                     )
                     return
                 except Exception as workspace_error_:
@@ -303,7 +303,7 @@ class TRTengineExporter:
         # Legacy API fallback for older TensorRT versions.
         if hasattr(builder_config, "max_workspace_size"):
             try:
-                builder_config.max_workspace_size = self.workspace_size_bytes
+                builder_config.max_workspace_size = self.workspace_pool_size_bytes
                 return
             except Exception as workspace_error_:
                 if self.verbose:
@@ -314,7 +314,7 @@ class TRTengineExporter:
 
         if self.verbose:
             print(
-                "workspace_size_bytes was provided but no compatible TensorRT workspace API is available. "
+                "workspace_pool_size_bytes was provided but no compatible TensorRT workspace API is available. "
                 "Continuing without explicit workspace size."
             )
 
@@ -345,9 +345,9 @@ class TRTengineExporter:
             command_.append("--int8")
 
         # Workspace size
-        if self.workspace_size_bytes is not None:
+        if self.workspace_pool_size_bytes is not None:
             workspace_mib_ = max(
-                1, int(math.ceil(self.workspace_size_bytes / (1024 * 1024))))
+                1, int(math.ceil(self.workspace_pool_size_bytes / (1024 * 1024))))
             if self._trtexec_supports_mem_pool_size(trtexec_path_):
                 command_.append(f"--memPoolSize=workspace:{workspace_mib_}")
             else:
