@@ -1,4 +1,3 @@
-from librosa import resample
 from torch import nn
 from torchvision import models
 from .base_backbones import EfficientNetConfig, FeatureExtractorFactory
