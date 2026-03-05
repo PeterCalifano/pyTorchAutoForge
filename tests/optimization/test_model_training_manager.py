@@ -1,5 +1,6 @@
 # Import modules
 import torch
+import pytest
 from pyTorchAutoForge.optimization.ModelTrainingManager import ModelTrainingManagerConfig, ModelTrainingManager, TaskType
 from pyTorchAutoForge.datasets import DataloaderIndex
 import tempfile
@@ -7,6 +8,7 @@ import tempfile
 from torchvision import models
 import optuna, mlflow
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA GPU required for this test.")
 def test_ModelTrainingManager():
 
     from torchvision import transforms
