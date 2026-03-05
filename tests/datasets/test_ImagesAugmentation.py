@@ -1069,11 +1069,9 @@ def test_helper_metadata_supports_external_sun_direction_label_update():
     )
 
     augmentation_helper = ImageAugmentationsHelper(augmentation_config)
-    augmented_image_batch, augmented_label_batch = augmentation_helper(
-        input_image_batch, input_label_batch
+    (augmented_image_batch, augmented_label_batch), batch_geometric_transform_metadata = augmentation_helper(
+        input_image_batch, input_label_batch, return_transform_metadata=True
     )
-
-    batch_geometric_transform_metadata = augmentation_helper.Get_last_batch_transform_metadata()
     assert batch_geometric_transform_metadata is not None
     assert batch_geometric_transform_metadata.combined_matrix_3x3.shape == (batch_size, 3, 3)
 

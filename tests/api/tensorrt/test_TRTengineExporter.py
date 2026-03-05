@@ -330,8 +330,16 @@ def test_build_with_trtexec_surfaces_subprocess_error_output(tmp_path: Path, mon
         exporter_._build_with_trtexec(str(onnx_path_), str(output_path_))
 
 
-def test_python_builder_raises_when_tensorrt_missing() -> None:
+def test_python_builder_raises_when_tensorrt_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     exporter_ = TRTengineExporter(exporter_mode=TRTengineExporterMode.PYTHON)
+    original_import_module_ = trt_exporter_module.importlib.import_module
+
+    def fake_import_module(module_name: str, package: str | None = None):
+        if module_name == "tensorrt":
+            raise ImportError("mock missing tensorrt")
+        return original_import_module_(module_name, package)
+
+    monkeypatch.setattr(trt_exporter_module.importlib, "import_module", fake_import_module)
 
     with pytest.raises(ImportError, match="TensorRT Python API is not available"):
         exporter_._build_with_python_api_from_onnx_bytes(b"onnx", "/tmp/model.engine")

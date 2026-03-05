@@ -65,8 +65,9 @@ def test_histPredictionErrors_with_invalid_stats(setup_plotter):
 def test_histPredictionErrors_with_missing_prediction_err(setup_plotter):
     plotter, _, _ = setup_plotter
     incomplete_stats = {'mean_prediction_err': np.random.randn(3)}
-    plotter.histPredictionErrors(stats=incomplete_stats)
-    assert plotter.stats is None  
+    return_code = plotter.histPredictionErrors(stats=incomplete_stats)
+    assert return_code == -1
+    assert plotter.stats == incomplete_stats
 
 def test_histPredictionErrors_with_missing_mean_prediction_err(setup_plotter):
     plotter, _, _ = setup_plotter
