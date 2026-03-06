@@ -82,6 +82,7 @@ class ModelHandlerONNx:
         self.generate_report = generate_report
         self.torch_version = torch.__version__
         self.run_onnx_simplify = run_onnx_simplify
+        self._runtime_api: Any | None = None
 
     def _resolve_model_inputs(self,
                               model_inputs: torch.Tensor | numpy.ndarray | tuple[torch.Tensor, ...] | list[torch.Tensor | numpy.ndarray] | None,
@@ -385,6 +386,14 @@ class ModelHandlerONNx:
                 self.onnx_filepath, self.onnx_model = self.onnx_simplify(
                     self.onnx_model)
 
+    def _get_runtime_api(self):
+        """Return lazy-initialized runtime facade instance."""
+        if self._runtime_api is None:
+            from pyTorchAutoForge.api.runtime import ModelRuntimeApi
+
+            self._runtime_api = ModelRuntimeApi()
+        return self._runtime_api
+
     def export_onnx(self,
                     model_inputs: torch.Tensor | numpy.ndarray | tuple[
                         torch.Tensor, ...] | list[torch.Tensor] | None = None,
@@ -595,6 +604,89 @@ class ModelHandlerONNx:
             fallback_to_legacy=True,
         )
 
+    def clear_onnx_session_cache(self) -> None:
+        """Clear cached ONNX Runtime sessions owned by this handler.
+
+        Returns:
+            ``None``.
+        """
+        runtime_api = self._get_runtime_api()
+        runtime_api.clear_session_cache(backend="onnx")
+
+    def onnx_forward(self,
+                     model_inputs: (torch.Tensor
+                                    | numpy.ndarray
+                                    | tuple[torch.Tensor | numpy.ndarray, ...]
+                                    | list[torch.Tensor | numpy.ndarray]
+                                    | dict[str, torch.Tensor | numpy.ndarray]
+                                    | None
+                                    ) = None,
+                     input_tensor: (torch.Tensor
+                                    | numpy.ndarray
+                                    | tuple[torch.Tensor | numpy.ndarray, ...]
+                                    | list[torch.Tensor | numpy.ndarray]
+                                    | None
+                                    ) = None,
+                     providers: list[str] | tuple[str, ...] | None = None,
+                     provider_options: dict[str, dict[str, Any]] | None = None,
+                     force_new_session: bool = False,
+                     session_options: Any | None = None,
+                     ) -> dict[str, numpy.ndarray]:
+        """Run ONNX Runtime inference through a cached runtime helper.
+
+        Args:
+            model_inputs: Runtime model inputs in tensor, tuple/list, or dict form.
+            input_tensor: Deprecated alias for `model_inputs`.
+            providers: Ordered execution providers preference list.
+            provider_options: Optional provider-specific options.
+            force_new_session: Whether to bypass and refresh session cache.
+            session_options: Optional ORT session options object.
+
+        Returns:
+            ONNX output dictionary keyed by graph output names.
+
+        Raises:
+            ValueError: If both `model_inputs` and `input_tensor` are provided,
+                or if no ONNX source is available.
+            TypeError: If provider options or input value types are invalid.
+
+        Notes:
+            ONNX source selection order is:
+            1. `self.onnx_model` (in-memory model).
+            2. `self.onnx_filepath` (existing model file on disk).
+            Provider selection is delegated to `ModelRuntimeApi` and
+            `OnnxRuntimeApi`, which keep requested provider order, skip
+            unavailable providers with warning, and raise only when no provider
+            remains usable.
+        """
+        if model_inputs is not None and input_tensor is not None:
+            raise ValueError(
+                "Please provide only one of: model_inputs or input_tensor.")
+
+        if model_inputs is None and input_tensor is not None:
+            warnings.warn(
+                "input_tensor is deprecated. Use model_inputs instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            model_inputs = input_tensor
+
+        if model_inputs is None and self.dummy_input_sample is not None:
+            model_inputs = self.dummy_input_sample
+
+        # Get runtime api model
+        runtime_api = self._get_runtime_api()
+
+        # Forward request
+        return runtime_api.onnx_forward(model_inputs=model_inputs,
+                                        providers=providers,
+                                        provider_options=provider_options,
+                                        force_new_session=force_new_session,
+                                        session_options=session_options,
+                                        onnx_model=self.onnx_model,
+                                        onnx_filepath=self.onnx_filepath if self.onnx_filepath != "" else None,
+                                        )
+
     # Conversion utility to convert ONNX model to a different opset version, with error handling
     def convert_to_onnx_opset(self,
                               onnx_model: onnx.ModelProto | None = None,
@@ -658,22 +750,16 @@ class ModelHandlerONNx:
         print("\033[92mPASSED.\033[0m")
 
         if test_sample is not None:
+            # Use validated model as runtime source for inference checks
+            self.onnx_model = onnx_model
+
             print(
                 "\033[94mValidating model inference using onnxruntime...\033[0m", end=" ")
-            from onnxruntime import InferenceSession
-
-            ort_session = InferenceSession(onnx_model.SerializeToString(), providers=[
-                                           "CPUExecutionProvider"])
-
-            if isinstance(test_sample, (tuple, list)):
-                ort_inputs = {
-                    ort_session.get_inputs()[i].name: torch_to_numpy(tensor=s)
-                    for i, s in enumerate(test_sample)
-                }
-            else:
-                ort_inputs = {ort_session.get_inputs(
-                )[0].name: torch_to_numpy(tensor=test_sample)}
-            ort_outs = ort_session.run(None, ort_inputs)
+            ort_outs_map = self.onnx_forward(model_inputs=test_sample,
+                                             providers=[
+                                                 "CPUExecutionProvider"],
+                                             force_new_session=True,
+                                             )
             print("\033[92mPASSED.\033[0m")
 
             if output_sample is not None:
@@ -681,8 +767,9 @@ class ModelHandlerONNx:
                     "\033[94mOutput equivalence test. Using tolerances rtol=1e-03 and atol=1e-06...\033[0m",
                     end=" ",
                 )
+                ort_first_output = next(iter(ort_outs_map.values()))
                 assert_allclose(torch_to_numpy(output_sample),
-                                ort_outs[0], rtol=1e-03, atol=1e-06)
+                                ort_first_output, rtol=1e-03, atol=1e-06)
                 print("\033[92mPASSED.\033[0m")
             else:
                 print(
@@ -713,19 +800,20 @@ class ModelHandlerONNx:
             Dictionary with average torch and ONNX inference times.
         """
         torch_model.to("cpu")
+        self.onnx_model = onnx_model
 
-        from onnxruntime import InferenceSession
+        # TODO add multiple device selection if available
 
-        ort_session = InferenceSession(
-            onnx_model, providers=["CPUExecutionProvider"])
-        
-        ort_inputs = {ort_session.get_inputs()[0].name: torch_to_numpy(tensor=test_sample)}
-        
-        ort_session_run = ort_session.run
+        # Utility function to perform forward using onnxruntime and measure time
+        def ort_forward(sample: torch.Tensor | numpy.ndarray):
+            return self.onnx_forward(
+                model_inputs=sample,
+                providers=["CPUExecutionProvider"],
+            )
 
         return {
             "avg_time_torch": timeit_averaged_(torch_model, num_iterations, test_sample),
-            "avg_time_onnx": timeit_averaged_(ort_session_run, num_iterations, None, ort_inputs),
+            "avg_time_onnx": timeit_averaged_(ort_forward, num_iterations, test_sample),
         }
 
     def onnx_load(self, onnx_filepath: str = "") -> onnx.ModelProto:
@@ -764,7 +852,7 @@ class ModelHandlerONNx:
 
         try:
             from onnxsim import simplify
-            
+
         except ImportError as import_err:
             print(
                 "\033[38;5;208mONNX simplification requested but onnx-simplify package is not installed. "
