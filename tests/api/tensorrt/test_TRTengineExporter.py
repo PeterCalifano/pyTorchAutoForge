@@ -3,12 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 from types import SimpleNamespace
+import importlib
 import importlib.util
 import sys
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 TRT_EXPORTER_MODULE_PATH = REPO_ROOT / "pyTorchAutoForge/api/tensorrt/TRTengineExporter.py"
 SPEC = importlib.util.spec_from_file_location(
     "ptaf_trt_exporter_module", TRT_EXPORTER_MODULE_PATH
@@ -89,6 +93,8 @@ def _make_fake_trt_module(parse_success: bool = True, serialized_engine: bytes |
             return "mock parser error"
 
     class FakeBuilder:
+        last_config: FakeBuilderConfig | None = None
+
         def __init__(self, logger: Logger) -> None:
             self.logger = logger
             self.config = FakeBuilderConfig()
@@ -98,6 +104,7 @@ def _make_fake_trt_module(parse_success: bool = True, serialized_engine: bytes |
             return object()
 
         def create_builder_config(self) -> FakeBuilderConfig:
+            FakeBuilder.last_config = self.config
             return self.config
 
         def create_optimization_profile(self) -> FakeOptimizationProfile:
@@ -135,6 +142,16 @@ def test_constructor_is_side_effect_free_and_supports_kwargs_override() -> None:
     assert exporter_.precision == TRTprecision.INT8
     assert exporter_.verbose is True
     assert exporter_.exporter_mode == TRTengineExporterMode.TRTEXEC
+
+
+def test_constructor_supports_workspace_pool_size_new_name() -> None:
+    exporter_new_ = TRTengineExporter(workspace_pool_size_bytes=2048)
+    assert exporter_new_.workspace_pool_size_bytes == 2048
+
+
+def test_constructor_rejects_legacy_workspace_size_alias() -> None:
+    with pytest.raises(TypeError, match="workspace_size_bytes"):
+        TRTengineExporter(workspace_size_bytes=1024)  # type: ignore[call-arg]
 
 
 def test_validate_onnx_input_path_rejects_missing_file(tmp_path: Path) -> None:
@@ -186,7 +203,7 @@ def test_build_with_trtexec_uses_safe_arg_list_and_flags(tmp_path: Path, monkeyp
     )
     exporter_ = TRTengineExporter(
         precision=TRTprecision.FP16,
-        workspace_size_bytes=16 * 1024 * 1024,
+        workspace_pool_size_bytes=16 * 1024 * 1024,
         dynamic_shape_profiles=(profile_,),
         trtexec_extra_args=("--skipInference",),
     )
@@ -207,6 +224,7 @@ def test_build_with_trtexec_uses_safe_arg_list_and_flags(tmp_path: Path, monkeyp
 
     monkeypatch.setattr(trt_exporter_module.shutil, "which", lambda _: "/usr/bin/trtexec")
     monkeypatch.setattr(trt_exporter_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(exporter_, "_trtexec_supports_mem_pool_size", lambda _: True)
 
     built_engine_path_ = exporter_._build_with_trtexec(str(onnx_path_), str(output_path_))
 
@@ -214,11 +232,86 @@ def test_build_with_trtexec_uses_safe_arg_list_and_flags(tmp_path: Path, monkeyp
     command_ = call_data_["command"]
     assert isinstance(command_, list)
     assert "--fp16" in command_
-    assert "--workspace=16" in command_
+    assert "--memPoolSize=workspace:16" in command_
     assert "--skipInference" in command_
     assert "--minShapes=input:1x3x224x224" in command_
     assert "--optShapes=input:2x3x224x224" in command_
     assert "--maxShapes=input:4x3x224x224" in command_
+
+
+def test_build_with_trtexec_falls_back_to_legacy_workspace_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter(
+        precision=TRTprecision.FP16,
+        workspace_pool_size_bytes=8 * 1024 * 1024,
+    )
+    onnx_path_ = _make_dummy_onnx_file(tmp_path)
+    output_path_ = tmp_path / "legacy_workspace.engine"
+    call_data_: dict[str, object] = {}
+
+    def fake_run(command: list[str], check: bool, stdout: int, stderr: int, text: bool):
+        _ = check
+        _ = stdout
+        _ = stderr
+        _ = text
+        call_data_["command"] = command
+        output_path_.write_bytes(b"engine")
+        return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(trt_exporter_module.shutil, "which", lambda _: "/usr/bin/trtexec")
+    monkeypatch.setattr(trt_exporter_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(exporter_, "_trtexec_supports_mem_pool_size", lambda _: False)
+
+    built_engine_path_ = exporter_._build_with_trtexec(str(onnx_path_), str(output_path_))
+
+    assert built_engine_path_ == str(output_path_)
+    command_ = call_data_["command"]
+    assert isinstance(command_, list)
+    assert "--workspace=8" in command_
+
+
+def test_trtexec_mem_pool_support_probe_uses_help_output_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter()
+    run_calls_: list[list[str]] = []
+
+    def fake_run(command: list[str], check: bool, stdout: int, stderr: int, text: bool):
+        _ = check
+        _ = stdout
+        _ = stderr
+        _ = text
+        run_calls_.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="Usage: trtexec --memPoolSize=workspace:1024",
+            stderr="",
+        )
+
+    monkeypatch.setattr(trt_exporter_module.subprocess, "run", fake_run)
+
+    assert exporter_._trtexec_supports_mem_pool_size("/usr/bin/trtexec") is True
+    assert exporter_._trtexec_supports_mem_pool_size("/usr/bin/trtexec") is True
+    assert len(run_calls_) == 1
+    assert run_calls_[0] == ["/usr/bin/trtexec", "--help"]
+
+
+def test_trtexec_mem_pool_support_probe_falls_back_false_on_probe_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter(verbose=True)
+    run_calls_: list[list[str]] = []
+
+    def fake_run(command: list[str], check: bool, stdout: int, stderr: int, text: bool):
+        _ = check
+        _ = stdout
+        _ = stderr
+        _ = text
+        run_calls_.append(command)
+        raise OSError("probe failed")
+
+    monkeypatch.setattr(trt_exporter_module.subprocess, "run", fake_run)
+
+    assert exporter_._trtexec_supports_mem_pool_size("/usr/bin/trtexec") is False
+    assert exporter_._trtexec_supports_mem_pool_size("/usr/bin/trtexec") is False
+    assert len(run_calls_) == 1
+    assert run_calls_[0] == ["/usr/bin/trtexec", "--help"]
 
 
 def test_build_with_trtexec_surfaces_subprocess_error_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -241,8 +334,16 @@ def test_build_with_trtexec_surfaces_subprocess_error_output(tmp_path: Path, mon
         exporter_._build_with_trtexec(str(onnx_path_), str(output_path_))
 
 
-def test_python_builder_raises_when_tensorrt_missing() -> None:
+def test_python_builder_raises_when_tensorrt_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     exporter_ = TRTengineExporter(exporter_mode=TRTengineExporterMode.PYTHON)
+    import_module_original_ = trt_exporter_module.importlib.import_module
+
+    def fake_import_module(module_name: str):
+        if module_name == "tensorrt":
+            raise ImportError("No module named 'tensorrt'")
+        return import_module_original_(module_name)
+
+    monkeypatch.setattr(trt_exporter_module.importlib, "import_module", fake_import_module)
 
     with pytest.raises(ImportError, match="TensorRT Python API is not available"):
         exporter_._build_with_python_api_from_onnx_bytes(b"onnx", "/tmp/model.engine")
@@ -270,7 +371,7 @@ def test_python_builder_success_writes_engine(tmp_path: Path, monkeypatch: pytes
     exporter_ = TRTengineExporter(
         exporter_mode=TRTengineExporterMode.PYTHON,
         precision=TRTprecision.FP16,
-        workspace_size_bytes=1024,
+        workspace_pool_size_bytes=1024,
         dynamic_shape_profiles=(profile_,),
     )
     fake_trt_ = _make_fake_trt_module(parse_success=True, serialized_engine=b"engine_data")
@@ -281,6 +382,284 @@ def test_python_builder_success_writes_engine(tmp_path: Path, monkeypatch: pytes
 
     assert built_path_ == str(output_path_)
     assert output_path_.read_bytes() == b"engine_data"
+    assert fake_trt_.Builder.last_config is not None
+    assert fake_trt_.Builder.last_config.workspace_limit == 1024
+
+
+def test_python_builder_workspace_falls_back_to_legacy_max_workspace_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter(
+        exporter_mode=TRTengineExporterMode.PYTHON,
+        workspace_pool_size_bytes=2048,
+    )
+
+    class Logger:
+        WARNING = 1
+        VERBOSE = 2
+
+        def __init__(self, level: int) -> None:
+            self.level = level
+
+    class NetworkDefinitionCreationFlag:
+        EXPLICIT_BATCH = 0
+
+    class BuilderFlag:
+        FP16 = 1
+        INT8 = 2
+
+    class FakeBuilderConfig:
+        def __init__(self) -> None:
+            self.flags: list[int] = []
+            self.max_workspace_size: int | None = None
+
+        def set_flag(self, flag: int) -> None:
+            self.flags.append(flag)
+
+        def add_optimization_profile(self, profile: object) -> None:
+            _ = profile
+
+    class FakeParser:
+        def __init__(self, network: object, logger: Logger) -> None:
+            _ = network
+            _ = logger
+            self.num_errors = 0
+
+        def parse(self, onnx_bytes: bytes) -> bool:
+            _ = onnx_bytes
+            return True
+
+        def get_error(self, index: int) -> str:
+            _ = index
+            return "mock parser error"
+
+    class FakeBuilder:
+        last_config: FakeBuilderConfig | None = None
+
+        def __init__(self, logger: Logger) -> None:
+            _ = logger
+            self.config = FakeBuilderConfig()
+
+        def create_network(self, flags: int) -> object:
+            _ = flags
+            return object()
+
+        def create_builder_config(self) -> FakeBuilderConfig:
+            FakeBuilder.last_config = self.config
+            return self.config
+
+        def create_optimization_profile(self) -> object:
+            return object()
+
+        def build_serialized_network(self, network: object, config: FakeBuilderConfig) -> bytes | None:
+            _ = network
+            _ = config
+            return b"engine_data"
+
+    fake_trt_ = SimpleNamespace(
+        Logger=Logger,
+        Builder=FakeBuilder,
+        OnnxParser=FakeParser,
+        NetworkDefinitionCreationFlag=NetworkDefinitionCreationFlag,
+        BuilderFlag=BuilderFlag,
+    )
+    monkeypatch.setattr(exporter_, "_import_tensorrt", lambda: fake_trt_)
+
+    output_path_ = tmp_path / "legacy_workspace.engine"
+    built_path_ = exporter_._build_with_python_api_from_onnx_bytes(b"onnx_bytes", str(output_path_))
+
+    assert built_path_ == str(output_path_)
+    assert output_path_.read_bytes() == b"engine_data"
+    assert fake_trt_.Builder.last_config is not None
+    assert fake_trt_.Builder.last_config.max_workspace_size == 2048
+
+
+def test_python_builder_workspace_size_is_accepted_and_ignored_when_api_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter(
+        exporter_mode=TRTengineExporterMode.PYTHON,
+        workspace_pool_size_bytes=4096,
+    )
+
+    class Logger:
+        WARNING = 1
+        VERBOSE = 2
+
+        def __init__(self, level: int) -> None:
+            self.level = level
+
+    class NetworkDefinitionCreationFlag:
+        EXPLICIT_BATCH = 0
+
+    class BuilderFlag:
+        FP16 = 1
+        INT8 = 2
+
+    class FakeBuilderConfig:
+        def __init__(self) -> None:
+            self.flags: list[int] = []
+            self.set_memory_pool_limit_called = False
+
+        def set_flag(self, flag: int) -> None:
+            self.flags.append(flag)
+
+        def set_memory_pool_limit(self, pool_type: int, workspace_limit: int) -> None:
+            _ = pool_type
+            _ = workspace_limit
+            self.set_memory_pool_limit_called = True
+
+        def add_optimization_profile(self, profile: object) -> None:
+            _ = profile
+
+    class FakeParser:
+        def __init__(self, network: object, logger: Logger) -> None:
+            _ = network
+            _ = logger
+            self.num_errors = 0
+
+        def parse(self, onnx_bytes: bytes) -> bool:
+            _ = onnx_bytes
+            return True
+
+        def get_error(self, index: int) -> str:
+            _ = index
+            return "mock parser error"
+
+    class FakeBuilder:
+        last_config: FakeBuilderConfig | None = None
+
+        def __init__(self, logger: Logger) -> None:
+            _ = logger
+            self.config = FakeBuilderConfig()
+
+        def create_network(self, flags: int) -> object:
+            _ = flags
+            return object()
+
+        def create_builder_config(self) -> FakeBuilderConfig:
+            FakeBuilder.last_config = self.config
+            return self.config
+
+        def create_optimization_profile(self) -> object:
+            return object()
+
+        def build_serialized_network(self, network: object, config: FakeBuilderConfig) -> bytes | None:
+            _ = network
+            _ = config
+            return b"engine_data"
+
+    # Purposefully omit MemoryPoolType to emulate newer/changed API variants.
+    fake_trt_ = SimpleNamespace(
+        Logger=Logger,
+        Builder=FakeBuilder,
+        OnnxParser=FakeParser,
+        NetworkDefinitionCreationFlag=NetworkDefinitionCreationFlag,
+        BuilderFlag=BuilderFlag,
+    )
+    monkeypatch.setattr(exporter_, "_import_tensorrt", lambda: fake_trt_)
+
+    output_path_ = tmp_path / "workspace_ignored.engine"
+    built_path_ = exporter_._build_with_python_api_from_onnx_bytes(b"onnx_bytes", str(output_path_))
+
+    assert built_path_ == str(output_path_)
+    assert output_path_.read_bytes() == b"engine_data"
+    assert fake_trt_.Builder.last_config is not None
+    assert fake_trt_.Builder.last_config.set_memory_pool_limit_called is False
+
+
+def test_python_builder_workspace_uses_legacy_fallback_when_modern_api_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter(
+        exporter_mode=TRTengineExporterMode.PYTHON,
+        workspace_pool_size_bytes=8192,
+    )
+
+    class Logger:
+        WARNING = 1
+        VERBOSE = 2
+
+        def __init__(self, level: int) -> None:
+            self.level = level
+
+    class NetworkDefinitionCreationFlag:
+        EXPLICIT_BATCH = 0
+
+    class BuilderFlag:
+        FP16 = 1
+        INT8 = 2
+
+    class MemoryPoolType:
+        WORKSPACE = 1
+
+    class FakeBuilderConfig:
+        def __init__(self) -> None:
+            self.flags: list[int] = []
+            self.max_workspace_size: int | None = None
+            self.pool_call_count: int = 0
+
+        def set_flag(self, flag: int) -> None:
+            self.flags.append(flag)
+
+        def set_memory_pool_limit(self, pool_type: int, workspace_limit: int) -> None:
+            _ = pool_type
+            _ = workspace_limit
+            self.pool_call_count += 1
+            raise RuntimeError("workspace pool unsupported by runtime")
+
+        def add_optimization_profile(self, profile: object) -> None:
+            _ = profile
+
+    class FakeParser:
+        def __init__(self, network: object, logger: Logger) -> None:
+            _ = network
+            _ = logger
+            self.num_errors = 0
+
+        def parse(self, onnx_bytes: bytes) -> bool:
+            _ = onnx_bytes
+            return True
+
+        def get_error(self, index: int) -> str:
+            _ = index
+            return "mock parser error"
+
+    class FakeBuilder:
+        last_config: FakeBuilderConfig | None = None
+
+        def __init__(self, logger: Logger) -> None:
+            _ = logger
+            self.config = FakeBuilderConfig()
+
+        def create_network(self, flags: int) -> object:
+            _ = flags
+            return object()
+
+        def create_builder_config(self) -> FakeBuilderConfig:
+            FakeBuilder.last_config = self.config
+            return self.config
+
+        def create_optimization_profile(self) -> object:
+            return object()
+
+        def build_serialized_network(self, network: object, config: FakeBuilderConfig) -> bytes | None:
+            _ = network
+            _ = config
+            return b"engine_data"
+
+    fake_trt_ = SimpleNamespace(
+        Logger=Logger,
+        Builder=FakeBuilder,
+        OnnxParser=FakeParser,
+        NetworkDefinitionCreationFlag=NetworkDefinitionCreationFlag,
+        BuilderFlag=BuilderFlag,
+        MemoryPoolType=MemoryPoolType,
+    )
+    monkeypatch.setattr(exporter_, "_import_tensorrt", lambda: fake_trt_)
+
+    output_path_ = tmp_path / "workspace_pool_throws.engine"
+    built_path_ = exporter_._build_with_python_api_from_onnx_bytes(b"onnx_bytes", str(output_path_))
+
+    assert built_path_ == str(output_path_)
+    assert output_path_.read_bytes() == b"engine_data"
+    assert fake_trt_.Builder.last_config is not None
+    assert fake_trt_.Builder.last_config.pool_call_count == 1
+    assert fake_trt_.Builder.last_config.max_workspace_size == 8192
 
 
 def test_trtexec_dispatch_does_not_trigger_tensorrt_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -433,3 +812,92 @@ def test_configuration_rejects_invalid_dynamic_profiles() -> None:
                 ),
             )
         )
+
+
+def test_package_path_import_exposes_tensorrt_symbols() -> None:
+    tensorrt_api_module_ = importlib.import_module("pyTorchAutoForge.api.tensorrt")
+
+    assert hasattr(tensorrt_api_module_, "TRTengineExporter")
+    assert hasattr(tensorrt_api_module_, "TRTengineExporterMode")
+    assert hasattr(tensorrt_api_module_, "TRTprecision")
+
+
+def test_import_onnx_raises_clear_error_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter()
+    import_module_original_ = trt_exporter_module.importlib.import_module
+
+    def fake_import_module(module_name: str):
+        if module_name == "onnx":
+            raise ImportError("No module named 'onnx'")
+        return import_module_original_(module_name)
+
+    monkeypatch.setattr(trt_exporter_module.importlib, "import_module", fake_import_module)
+
+    with pytest.raises(ImportError, match="ONNX package is required"):
+        exporter_._import_onnx()
+
+
+def test_serialize_onnx_model_to_bytes_success() -> None:
+    exporter_ = TRTengineExporter()
+
+    class FakeOnnxModel:
+        def SerializeToString(self) -> bytes:
+            return b"serialized_onnx"
+
+    out_bytes_ = exporter_._serialize_onnx_model_to_bytes(FakeOnnxModel())
+    assert out_bytes_ == b"serialized_onnx"
+
+
+def test_serialize_onnx_model_to_bytes_rejects_non_serializable_model() -> None:
+    exporter_ = TRTengineExporter()
+
+    with pytest.raises(TypeError, match="SerializeToString"):
+        exporter_._serialize_onnx_model_to_bytes(object())
+
+
+def test_build_dynamic_shapes_flag_rejects_invalid_shape_key() -> None:
+    profile_ = TRTDynamicShapeProfile(
+        input_name="input",
+        min_shape=(1, 3, 8, 8),
+        opt_shape=(2, 3, 8, 8),
+        max_shape=(4, 3, 8, 8),
+    )
+    exporter_ = TRTengineExporter(dynamic_shape_profiles=(profile_,))
+
+    with pytest.raises(AttributeError):
+        exporter_._build_dynamic_shapes_flag("invalid_shape_key")
+
+
+def test_dispatch_from_onnx_model_normalizes_non_onnx_temporary_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter_ = TRTengineExporter(exporter_mode=TRTengineExporterMode.TRTEXEC)
+    observed_: dict[str, str] = {}
+
+    class FakeOnnxModel:
+        pass
+
+    def fake_save_onnx_model_to_path(onnx_model: object, onnx_path: str) -> None:
+        _ = onnx_model
+        observed_["save_path"] = onnx_path
+        Path(onnx_path).write_bytes(b"serialized")
+
+    def fake_build_with_trtexec(onnx_model_path: str, output_engine_path: str) -> str:
+        observed_["build_path"] = onnx_model_path
+        Path(output_engine_path).write_bytes(b"engine")
+        return output_engine_path
+
+    monkeypatch.setattr(exporter_, "_save_onnx_model_to_path", fake_save_onnx_model_to_path)
+    monkeypatch.setattr(exporter_, "_build_with_trtexec", fake_build_with_trtexec)
+
+    output_path_ = tmp_path / "model.engine"
+    temp_path_without_suffix_ = tmp_path / "nested" / "tmp_model"
+
+    built_path_ = exporter_._dispatch_build_from_onnx_model(
+        FakeOnnxModel(),
+        str(output_path_),
+        str(temp_path_without_suffix_),
+    )
+
+    assert built_path_ == str(output_path_)
+    assert observed_["save_path"].endswith(".onnx")
+    assert observed_["build_path"].endswith(".onnx")
+    assert Path(observed_["save_path"]).exists()

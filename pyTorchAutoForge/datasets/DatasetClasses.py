@@ -1,10 +1,8 @@
-from ast import Import
 import enum
 from torch.utils.data import Dataset
 import numpy as np
 import torch
 import os
-import sys
 from dataclasses import dataclass, field
 import copy
 
@@ -15,15 +13,11 @@ from torchvision.transforms import Compose
 
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-from abc import ABC, abstractmethod
-from abc import ABCMeta
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, Literal
 from collections.abc import Callable
 import yaml
 from PIL import Image
 from functools import partial
-import json
-import yaml
 import concurrent.futures
 import time
 from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey, LabelsContainer
@@ -37,6 +31,7 @@ except ImportError:
 
 
 _SAMPLE_SELECTION_WORKER_CONTEXT: dict[str, Any] | None = None
+_PROCESS_POOL_AVAILABLE_CACHE: bool | None = None
 
 # DEVNOTE (PC) this is an attempt to define a configuration class that allows a user to specify dataset structure to drive the loader, in order to ease the use of diverse dataset formats
 
@@ -198,7 +193,7 @@ class ImagesDatasetConfig(DatasetLoaderConfig):
 
         if self.intensity_scale_value is not None and self.intensity_scaling_mode != 'custom':
             raise ValueError(
-                f"intensity_scale_value must be None unless intensity_scaling_mode is 'custom'.")
+                "intensity_scale_value must be None unless intensity_scaling_mode is 'custom'.")
 
 
 ######################## DEVNOTE Relatively stable code BELOW ########################
@@ -306,8 +301,8 @@ class SamplesSelectionCriteria():
 
 
 def _EvaluateSampleSelectionWorker(worker_args: tuple[int,
-                                                     str,
-                                                     str]) -> tuple[int, str | None, str | None]:
+                                                      str,
+                                                      str]) -> tuple[int, str | None, str | None]:
     """Evaluates whether a sample meets selection criteria for dataset inclusion.
 
     Worker function evaluating a single image-label pair against the specified
@@ -329,7 +324,7 @@ def _EvaluateSampleSelectionWorker(worker_args: tuple[int,
             file cannot be read when intensity filtering is applied.
         TypeError: If image data type is neither uint8 nor uint16 when applying intensity filters.
     """
-    
+
     context_ = _SAMPLE_SELECTION_WORKER_CONTEXT
     if context_ is None:
         raise RuntimeError("Worker context is not initialized.")
@@ -337,7 +332,6 @@ def _EvaluateSampleSelectionWorker(worker_args: tuple[int,
     # Unpack worker arguments
     idx_, tmp_img_path_, tmp_lbl_path_ = worker_args
 
-    label_folder_path_ = context_["label_folder_path"]
     has_label_filters_ = context_["has_label_filters"]
     has_max_apparent_size_filter_ = context_["has_max_apparent_size_filter"]
     min_bbox_wh_ = context_["min_bbox_wh"]
@@ -351,12 +345,14 @@ def _EvaluateSampleSelectionWorker(worker_args: tuple[int,
         label_file_ = LabelsContainer.load_from_yaml(tmp_lbl_path_)
 
         if has_max_apparent_size_filter_:
-            lbl_check_val_ = label_file_.get_labels(data_keys=PTAF_Datakey.APPARENT_SIZE)
+            lbl_check_val_ = label_file_.get_labels(
+                data_keys=PTAF_Datakey.APPARENT_SIZE)
             if lbl_check_val_ is not None and lbl_check_val_[0] > max_apparent_size_:
                 return idx_, None, None
 
         if min_bbox_wh_ is not None:
-            lbl_check_val_ = label_file_.get_labels(data_keys=PTAF_Datakey.BBOX_XYWH)
+            lbl_check_val_ = label_file_.get_labels(
+                data_keys=PTAF_Datakey.BBOX_XYWH)
             if lbl_check_val_ is not None and lbl_check_val_[2] < min_bbox_wh_[0] and \
                     lbl_check_val_[3] < min_bbox_wh_[1]:
                 return idx_, None, None
@@ -381,7 +377,8 @@ def _EvaluateSampleSelectionWorker(worker_args: tuple[int,
         # Compute stats and apply intensity-based selection criteria
         scaled_img_ = image_scaling_coeff_ * img_.astype(np.float32)
         nonzero_pixels_ = scaled_img_[scaled_img_ > 0]
-        perc75_intensity_ = np.percentile(nonzero_pixels_, 75) if nonzero_pixels_.size > 0 else 0
+        perc75_intensity_ = np.percentile(
+            nonzero_pixels_, 75) if nonzero_pixels_.size > 0 else 0
         nz_sum_ = nonzero_pixels_.sum()
 
         # TODO generalize and allow user specification
@@ -409,13 +406,35 @@ def _ShouldUseParallelSelection(num_workers: int,
     return candidate_count >= min_parallel_work_items and effective_limit >= min_parallel_work_items
 
 
-def _MaybePrintSelectionProgress(dataset_name: str | Path,
-                                 processed_samples: int,
-                                 total_samples: int,
-                                 accepted_samples: int,
-                                 last_print_time: float,
-                                 update_period_s: float = 0.5,
-                                 force: bool = False) -> float:
+def _CheckProcessPoolAvailability(num_workers: int) -> bool:
+    global _PROCESS_POOL_AVAILABLE_CACHE
+
+    if num_workers <= 1:
+        return False
+
+    if _PROCESS_POOL_AVAILABLE_CACHE is not None:
+        return _PROCESS_POOL_AVAILABLE_CACHE
+
+    try:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as preflight_executor:
+            preflight_future = preflight_executor.submit(int, 1)
+            _ = preflight_future.result(timeout=2.0)
+        _PROCESS_POOL_AVAILABLE_CACHE = True
+    except Exception:
+        _PROCESS_POOL_AVAILABLE_CACHE = False
+
+    return _PROCESS_POOL_AVAILABLE_CACHE
+
+
+def _PrintSelectionProgress(dataset_name: str | Path,
+                            processed_samples: int,
+                            total_samples: int,
+                            accepted_samples: int,
+                            last_print_time: float,
+                            update_period_s: float = 0.5,
+                            force: bool = False) -> float:
+    """Function to print info about pre-processing execution"""
+    
     now = time.monotonic()
     if force or (now - last_print_time) >= update_period_s:
         print(
@@ -497,7 +516,7 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
 
         if datasets_root_folder_ is None:
             raise ValueError(
-                f"\033[91mDataset folder cannot be None: automatic resolution of dataset root folder failed silently. Please check your configuration and report issue.\033[0m")
+                "\033[91mDataset folder cannot be None: automatic resolution of dataset root folder failed silently. Please check your configuration and report issue.\033[0m")
 
         print(
             f"Fetching dataset '{_dataset_name}' with root folder {datasets_root_folder_}...")
@@ -510,7 +529,8 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
             datasets_root_folder_, _dataset_name, "labels"))
 
         # Read image/label file names directly from disk instead of inferring templates.
-        supported_image_exts = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'}
+        supported_image_exts = {'.png', '.jpg',
+                                '.jpeg', '.bmp', '.tif', '.tiff'}
         image_filenames = sorted(
             f for f in os.listdir(image_folder[dset_count])
             if os.path.isfile(os.path.join(image_folder[dset_count], f))
@@ -546,7 +566,8 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
 
         file_ext = os.path.splitext(label_filenames[0])[1]
         label_paths_by_stem = {
-            os.path.splitext(lbl_name)[0]: os.path.join(label_folder[dset_count], lbl_name)
+            os.path.splitext(lbl_name)[0]: os.path.join(
+                label_folder[dset_count], lbl_name)
             for lbl_name in label_filenames
         }
 
@@ -560,7 +581,7 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
             selection_criteria is not None and selection_criteria.max_apparent_size is not None)
         has_intensity_filter = bool(
             selection_criteria is not None and selection_criteria.min_Q75_intensity is not None)
-        
+
         min_bbox_wh = selection_criteria.min_bbox_width_height if selection_criteria is not None else None
 
         if isinstance(min_bbox_wh, (float, int)):
@@ -570,7 +591,7 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         has_label_filters = has_max_apparent_size_filter or has_bbox_filter
         has_active_selection = bool(
             selection_criteria is not None and (has_label_filters or has_intensity_filter))
-        
+
         # Precompute quantities for prepro
         uint16_to_uint8_scale = 1.0 / 257.01
 
@@ -584,31 +605,43 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                 raise FileNotFoundError(
                     f"Label file not found for image stem '{image_stem}' in {label_folder[dset_count]}")
 
-            tmp_img_path = os.path.join(image_folder[dset_count], image_filename)
-            sample_path_triplets.append((sample_idx, tmp_img_path, tmp_lbl_path))
+            tmp_img_path = os.path.join(
+                image_folder[dset_count], image_filename)
+            sample_path_triplets.append(
+                (sample_idx, tmp_img_path, tmp_lbl_path))
 
         if has_active_selection:
             # Determine limit early to allow early exit inside the loop
 
             # Warn once outside the loop if OpenCV is unavailable
             if selection_criteria.min_Q75_intensity is not None and not hasOpenCV:
-                print(f"\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m")
+                print("\033[38;5;208mWARNING: OpenCV is not installed, cannot check image intensity. Skipping selection based on min_Q75_intensity.\033[0m")
 
             tmp_img_filepaths = []
             tmp_lbl_filepaths = []
             max_apparent_size = selection_criteria.max_apparent_size if selection_criteria is not None else None
             min_q75_intensity = selection_criteria.min_Q75_intensity if selection_criteria is not None else None
 
-            run_parallel = _ShouldUseParallelSelection(
-                num_workers=num_workers,
-                candidate_count=len(sample_path_triplets),
-                samples_limit=_limit,
-            )
+            # Attempt to use parallel pre-processing
+            run_parallel = _ShouldUseParallelSelection(num_workers=num_workers,
+                                                       candidate_count=len(
+                                                           sample_path_triplets),
+                                                       samples_limit=_limit,
+                                                       )
+
+            if run_parallel and not _CheckProcessPoolAvailability(num_workers=num_workers):
+                print(
+                    "\033[38;5;208mWARNING: Process-pool selection is unavailable in this environment. "
+                    "Falling back to serial selection.\033[0m"
+                )
+                run_parallel = False
+
             processed_samples_count = 0
             total_samples_count = len(sample_path_triplets)
             last_progress_print_time = time.monotonic()
             mode_name = "parallel" if run_parallel else "serial"
-            print(f"\tSelection mode: {mode_name} ({num_workers=}, {total_samples_count=}, {_limit=})")
+            print(
+                f"\tSelection mode: {mode_name} ({num_workers=}, {total_samples_count=}, {_limit=})")
 
             if run_parallel:
                 worker_context = {
@@ -625,21 +658,24 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                 max_inflight = max(num_workers * 2, 8)
                 selected_by_idx: dict[int, tuple[str, str]] = {}
                 triplets_iterator = iter(sample_path_triplets)
-                pending_futures: dict[concurrent.futures.Future[tuple[int, str | None, str | None]], None] = {}
+                pending_futures: dict[concurrent.futures.Future[tuple[int,
+                                                                      str | None, str | None]], None] = {}
                 early_stop_requested = False
-                executor = concurrent.futures.ProcessPoolExecutor(
-                    max_workers=num_workers,
-                    initializer=_InitializeSampleSelectionWorker,
-                    initargs=(worker_context,),
-                )
+                executor: concurrent.futures.ProcessPoolExecutor | None = None
 
                 try:
+                    executor = concurrent.futures.ProcessPoolExecutor(
+                        max_workers=num_workers,
+                        initializer=_InitializeSampleSelectionWorker,
+                        initargs=(worker_context,),
+                    )
                     while len(pending_futures) < max_inflight:
                         try:
                             worker_args = next(triplets_iterator)
                         except StopIteration:
                             break
-                        pending_futures[executor.submit(_EvaluateSampleSelectionWorker, worker_args)] = None
+                        pending_futures[executor.submit(
+                            _EvaluateSampleSelectionWorker, worker_args)] = None
 
                     while pending_futures:
                         done_futures, _ = concurrent.futures.wait(
@@ -653,44 +689,47 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                             processed_samples_count += 1
 
                             if tmp_img_path is not None and tmp_lbl_path is not None:
-                                selected_by_idx[sample_idx] = (tmp_img_path, tmp_lbl_path)
-                                if _limit > 0 and len(selected_by_idx) >= _limit:
-                                    early_stop_requested = True
-                                    break
+                                selected_by_idx[sample_idx] = (
+                                    tmp_img_path, tmp_lbl_path)
 
-                            last_progress_print_time = _MaybePrintSelectionProgress(
-                                dataset_name=_dataset_name,
-                                processed_samples=processed_samples_count,
-                                total_samples=total_samples_count,
-                                accepted_samples=len(selected_by_idx),
-                                last_print_time=last_progress_print_time,
-                            )
-
-                        if early_stop_requested:
-                            for pending_future in pending_futures:
-                                pending_future.cancel()
-                            pending_futures.clear()
-                            break
+                            last_progress_print_time = _PrintSelectionProgress(dataset_name=_dataset_name,
+                                                                               processed_samples=processed_samples_count,
+                                                                               total_samples=total_samples_count,
+                                                                               accepted_samples=len(
+                                                                                   selected_by_idx),
+                                                                               last_print_time=last_progress_print_time,
+                                                                               )
 
                         while len(pending_futures) < max_inflight:
                             try:
                                 worker_args = next(triplets_iterator)
                             except StopIteration:
                                 break
-                            pending_futures[executor.submit(_EvaluateSampleSelectionWorker, worker_args)] = None
+                            pending_futures[executor.submit(
+                                _EvaluateSampleSelectionWorker, worker_args)] = None
+                except (PermissionError, OSError) as pool_error_:
+                    print(
+                        "\033[38;5;208mWARNING: Process-pool selection failed at runtime "
+                        f"({pool_error_}). Falling back to serial selection.\033[0m"
+                    )
+                    run_parallel = False
                 finally:
-                    executor.shutdown(wait=not early_stop_requested, cancel_futures=early_stop_requested)
+                    if executor is not None:
+                        executor.shutdown(
+                            wait=not early_stop_requested, cancel_futures=early_stop_requested)
 
-                selected_indexes = sorted(selected_by_idx.keys())
-                if _limit > 0:
-                    selected_indexes = selected_indexes[:_limit]
+                if run_parallel:
+                    selected_indexes = sorted(selected_by_idx.keys())
+                    if _limit > 0:
+                        selected_indexes = selected_indexes[:_limit]
 
-                for selected_idx in selected_indexes:
-                    selected_img_path, selected_lbl_path = selected_by_idx[selected_idx]
-                    tmp_img_filepaths.append(selected_img_path)
-                    tmp_lbl_filepaths.append(selected_lbl_path)
-            else:
-                # Serial execution
+                    for selected_idx in selected_indexes:
+                        selected_img_path, selected_lbl_path = selected_by_idx[selected_idx]
+                        tmp_img_filepaths.append(selected_img_path)
+                        tmp_lbl_filepaths.append(selected_lbl_path)
+
+            # Serial execution (also working as fallback if parallel fails)
+            if not run_parallel:
                 _InitializeSampleSelectionWorker({
                     "label_folder_path": label_folder[dset_count],
                     "has_label_filters": has_label_filters,
@@ -703,31 +742,31 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
                 })
 
                 for worker_args in sample_path_triplets:
-                    _, tmp_img_path, tmp_lbl_path = _EvaluateSampleSelectionWorker(worker_args)
+                    _, tmp_img_path, tmp_lbl_path = _EvaluateSampleSelectionWorker(
+                        worker_args)
                     processed_samples_count += 1
-                    
+
                     if tmp_img_path is not None and tmp_lbl_path is not None:
                         tmp_img_filepaths.append(tmp_img_path)
                         tmp_lbl_filepaths.append(tmp_lbl_path)
                         if _limit > 0 and len(tmp_img_filepaths) >= _limit:
                             break
 
-                    last_progress_print_time = _MaybePrintSelectionProgress(
-                        dataset_name=_dataset_name,
-                        processed_samples=processed_samples_count,
-                        total_samples=total_samples_count,
-                        accepted_samples=len(tmp_img_filepaths),
-                        last_print_time=last_progress_print_time,
-                    )
+                    last_progress_print_time = _PrintSelectionProgress(dataset_name=_dataset_name,
+                                                                       processed_samples=processed_samples_count,
+                                                                       total_samples=total_samples_count,
+                                                                       accepted_samples=len(
+                                                                           tmp_img_filepaths),
+                                                                       last_print_time=last_progress_print_time,
+                                                                       )
 
-            _MaybePrintSelectionProgress(
-                dataset_name=_dataset_name,
-                processed_samples=processed_samples_count,
-                total_samples=total_samples_count,
-                accepted_samples=len(tmp_img_filepaths),
-                last_print_time=last_progress_print_time,
-                force=True,
-            )
+            _PrintSelectionProgress(dataset_name=_dataset_name,
+                                    processed_samples=processed_samples_count,
+                                    total_samples=total_samples_count,
+                                    accepted_samples=len(tmp_img_filepaths),
+                                    last_print_time=last_progress_print_time,
+                                    force=True,
+                                    )
             print()
 
             if _limit > 0:
@@ -743,8 +782,10 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         else:
             # Build paths WITHOUT selection based on samples content
 
-            tmp_img_filepaths = [tmp_img_path for _, tmp_img_path, _ in sample_path_triplets]
-            tmp_lbl_filepaths = [tmp_lbl_path for _, _, tmp_lbl_path in sample_path_triplets]
+            tmp_img_filepaths = [tmp_img_path for _,
+                                 tmp_img_path, _ in sample_path_triplets]
+            tmp_lbl_filepaths = [tmp_lbl_path for _, _,
+                                 tmp_lbl_path in sample_path_triplets]
 
             if _limit > 0:
                 tmp_img_filepaths = tmp_img_filepaths[:_limit]
@@ -757,7 +798,8 @@ def FetchDatasetPaths(dataset_name: Path | str | list[str | Path] | tuple[str | 
         img_filepaths.extend(tmp_img_filepaths)
         lbl_filepaths.extend(tmp_lbl_filepaths)
 
-        print(f"Dataset '{_dataset_name}' contains {num_of_imags_in_set[dset_count]} valid images and labels in {file_ext} format. Removed by selection criteria: {prev_size - num_of_imags_in_set[dset_count]}.")
+        print(
+            f"Dataset '{_dataset_name}' contains {num_of_imags_in_set[dset_count]} valid images and labels in {file_ext} format. Removed by selection criteria: {prev_size - num_of_imags_in_set[dset_count]}.")
 
     total_num_imgs = sum(num_of_imags_in_set)
 
@@ -859,8 +901,9 @@ class ImagesLabelsDatasetBase(Dataset):
         self.skip_output_slicing = skip_output_slicing
 
         if selection_criteria is not None and not isinstance(selection_criteria, SamplesSelectionCriteria):
-            raise TypeError(f'selection_criteria must be either None or a SamplesSelectionCriteria instance. Got {type(selection_criteria)}.')
-        
+            raise TypeError(
+                f'selection_criteria must be either None or a SamplesSelectionCriteria instance. Got {type(selection_criteria)}.')
+
         self.selection_criteria = selection_criteria
 
         # Setup backend loader
@@ -964,17 +1007,17 @@ class ImagesLabelsDatasetBase(Dataset):
                         f"Unsupported image shape for grayscale conversion at {img_path}: {img.shape}. "
                         "Supported layouts are HxW, HxWx1, HxWx3, HxWx4."
                     )
-                
+
             elif self.dset_cfg.image_backend == 'pil':
                 # Conversion to grayscale using PIL backend
                 if isinstance(img, Image.Image):
                     img = img.convert('L')
-                
+
                 img = np.asarray(img)
-                
+
                 if img.ndim == 3 and img.shape[2] == 1:
                     img = img[:, :, 0]
-                
+
                 elif img.ndim != 2:
                     raise ValueError(
                         f"Unsupported PIL image shape for grayscale conversion at {img_path}: {img.shape}. "
