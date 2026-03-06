@@ -195,3 +195,64 @@ def test_export_onnx_rejects_both_model_inputs_and_input_tensor(tmp_path):
             input_tensor=second_input,
             backend="legacy",
         )
+
+
+def test_onnx_forward_bridge_delegates_to_runtime_api(tmp_path):
+    handler = _make_handler(tmp_path, tmp_path / "runtime_bridge.onnx")
+    handler.onnx_model = model_handler_module.onnx.ModelProto()
+    handler.onnx_filepath = str(tmp_path / "runtime_bridge.onnx")
+
+    captured = {}
+
+    class FakeRuntimeApi:
+        def onnx_forward(self, **kwargs):
+            captured["kwargs"] = kwargs
+            return {"output": torch.randn(1, 5).numpy()}
+
+        def clear_session_cache(self, backend):
+            captured["cache_cleared_backend"] = backend
+
+    fake_runtime_api = FakeRuntimeApi()
+    handler._runtime_api = fake_runtime_api
+
+    model_inputs = torch.randn(1, 10)
+    result = handler.onnx_forward(model_inputs=model_inputs, providers=["CPUExecutionProvider"])
+
+    assert "output" in result
+    assert torch.equal(captured["kwargs"]["model_inputs"], model_inputs)
+    assert captured["kwargs"]["providers"] == ["CPUExecutionProvider"]
+    assert captured["kwargs"]["onnx_model"] is handler.onnx_model
+    assert captured["kwargs"]["onnx_filepath"] == handler.onnx_filepath
+
+    handler.clear_onnx_session_cache()
+    assert captured.get("cache_cleared_backend") == "onnx"
+
+
+def test_onnx_forward_supports_deprecated_input_tensor_alias(tmp_path):
+    handler = _make_handler(tmp_path, tmp_path / "runtime_alias.onnx")
+    handler.onnx_model = model_handler_module.onnx.ModelProto()
+
+    class FakeRuntimeApi:
+        def onnx_forward(self, **kwargs):
+            return {"output": torch.randn(1, 5).numpy()}
+
+        def clear_session_cache(self, backend):
+            return None
+
+    handler._runtime_api = FakeRuntimeApi()
+    alias_input = torch.randn(1, 10)
+
+    with pytest.warns(FutureWarning, match="input_tensor is deprecated"):
+        output_dict = handler.onnx_forward(input_tensor=alias_input)
+
+    assert "output" in output_dict
+
+
+def test_onnx_forward_rejects_both_model_inputs_and_input_tensor(tmp_path):
+    handler = _make_handler(tmp_path, tmp_path / "runtime_conflict.onnx")
+
+    with pytest.raises(ValueError, match="only one of: model_inputs or input_tensor"):
+        handler.onnx_forward(
+            model_inputs=torch.randn(1, 10),
+            input_tensor=torch.randn(1, 10),
+        )
