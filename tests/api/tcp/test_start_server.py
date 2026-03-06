@@ -6,7 +6,7 @@ import threading
 
 # MAIN SCRIPT
 def main():
-    print('\n\n----------------------------------- RUNNING: testStartServer.py -----------------------------------\n')
+    print('\n\n----------------------------------- RUNNING: test_start_server.py -----------------------------------\n')
     
     # %% TCP SERVER INITIALIZATION
     HOST1, PORT1 = "127.0.0.1", 50000 # Define host and port for the first server
@@ -47,5 +47,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

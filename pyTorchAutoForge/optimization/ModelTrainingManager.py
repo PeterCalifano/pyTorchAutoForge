@@ -865,9 +865,8 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                         # DEVNOTE current implementation limited to keypoints.
                         # How to allow extraction of entries in Y?
                         X, Y = self.augment_data_batch(X, Y)
-                    else:
-                        # Use internal scaling factors to scale labels
-                        assert self.label_scaling_factors is not None, 'Labels scaling factors are not defined. Cannot scale labels.'
+                    elif self.label_scaling_factors is not None:
+                        # Apply label scaling factors when available.
                         Y = Y * self.label_scaling_factors.to(Y.device)
 
                     # Perform FORWARD PASS
@@ -913,9 +912,9 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
                     # Perform data augmentation on batch
                     if self.data_augmentation_module is not None and self.augment_validation_data:
                         X, Y = self.augment_data_batch(X, Y)
-                    else:
-                        # Use internal scaling factors to scale labels
-                        assert self.label_scaling_factors is not None, 'Labels scaling factors are not defined. Cannot scale labels.'
+                        
+                    elif self.label_scaling_factors is not None:
+                        # Apply label scaling factors when available.
                         Y = Y * self.label_scaling_factors.to(Y.device)
                     
                     # Perform FORWARD PASS
@@ -1365,14 +1364,13 @@ class ModelTrainingManager(ModelTrainingManagerConfig):
 
                         if self.data_augmentation_module is not None and self.augment_validation_data:
                             X, Y = self.augment_data_batch(X, Y)
-                        else:
-                            # Use internal scaling factors to scale labels
-                            assert self.label_scaling_factors is not None, 'Labels scaling factors are not defined. Cannot scale labels.'
+
+                        elif self.label_scaling_factors is not None:
+                            # Apply label scaling factors when available
                             Y = Y * self.label_scaling_factors.to(self.device)
 
                         # Perform FORWARD PASS
-                        example_predictions = self.model(
-                            X)  # Evaluate model at input
+                        example_predictions = self.model(X)  # Evaluate model at input
 
                         try:
                             if example_predictions.shape != Y.shape:

@@ -190,7 +190,7 @@ def test_param_validation_exponential_rate_zero() -> None:
             variable_name="x",
             shape=(1,),
             error_type=DistributionType.NEG_EXPONENTIAL,
-            parameters=ExponentialParams(rate=0.0),
+            parameters=NegExponentialParams(rate=0.0),
         )
 
 

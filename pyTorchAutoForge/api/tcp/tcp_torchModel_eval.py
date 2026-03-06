@@ -23,16 +23,38 @@ from pyTorchAutoForge.utils import GetDevice
 from pyTorchAutoForge.utils.DeviceManager import GetDeviceMulti 
 from typing import Any
 
-# Import model paths
+# External model repos (optional dependencies)
 REPO_XFEAT_PATH = '/home/peterc/devDir/ML-repos/accelerated_features_PeterCdev'
-sys.path.append(REPO_XFEAT_PATH)
-
-from modules.xfeat import XFeatLightGlueWrapper
-
 REPO_SUPERGLUE_PATH = '/home/peterc/devDir/ML-repos/SuperGluePretrainedNetwork_PeterCdev'
-sys.path.append(REPO_SUPERGLUE_PATH)
 
-from match_pairs_custom import DefineSuperPointSuperGlueModel
+
+def _AppendRepoPathOnce(repo_path: str) -> None:
+    if repo_path not in sys.path:
+        sys.path.append(repo_path)
+
+
+def _ImportXFeatLightGlueWrapper() -> Any:
+    try:
+        _AppendRepoPathOnce(REPO_XFEAT_PATH)
+        from modules.xfeat import XFeatLightGlueWrapper as wrapper_class_
+        return wrapper_class_
+    except Exception as import_error_:
+        raise ImportError(
+            "Failed to import XFeatLightGlueWrapper. "
+            f"Check external repo at '{REPO_XFEAT_PATH}'."
+        ) from import_error_
+
+
+def _ImportDefineSuperPointSuperGlueModel() -> Any:
+    try:
+        _AppendRepoPathOnce(REPO_SUPERGLUE_PATH)
+        from match_pairs_custom import DefineSuperPointSuperGlueModel as define_model_fcn_
+        return define_model_fcn_
+    except Exception as import_error_:
+        raise ImportError(
+            "Failed to import DefineSuperPointSuperGlueModel. "
+            f"Check external repo at '{REPO_SUPERGLUE_PATH}'."
+        ) from import_error_
 
 
 # Define processing function for model evaluation (OPNAV limb based)
@@ -103,11 +125,13 @@ def defineModelEval_FeatureMatching(enumFeatureMatchingType: EnumFeatureMatching
 
     if enumFeatureMatchingType == EnumFeatureMatchingType.SUPERPOINT_SUPERGLUE:
         # Define SuperPoint + SuperGlue model
-        model = DefineSuperPointSuperGlueModel(device)
+        define_model_fcn_ = _ImportDefineSuperPointSuperGlueModel()
+        model = define_model_fcn_(device)
 
     elif enumFeatureMatchingType == EnumFeatureMatchingType.XFEAT_LIGHTGLUE:
         # Define XFeat + LightGlue model
-        model = XFeatLightGlueWrapper(device)
+        xfeat_wrapper_class_ = _ImportXFeatLightGlueWrapper()
+        model = xfeat_wrapper_class_(device)
 
     else:
         raise ValueError("Feature matching type not valid.")
@@ -231,6 +255,7 @@ def test_TorchWrapperComm_FeatureMatching() -> None:
 
     # Hardcoded for quick-n-dirty use
     model = defineModelEval_FeatureMatching(enumFeatureMatchingType=network_name, device=device)
+    is_xfeat_model_ = network_name == EnumFeatureMatchingType.XFEAT_LIGHTGLUE
 
     def forward_wrapper_FeatureMatching(inputData, model, processingMode: ProcessingMode) -> dict[Any, Any]:
         if processingMode == ProcessingMode.MULTI_TENSOR:
@@ -280,7 +305,7 @@ def test_TorchWrapperComm_FeatureMatching() -> None:
             #input_image2 = input_image2 / 255.0
             ###########################################################################
 
-            if isinstance(model, XFeatLightGlueWrapper):
+            if is_xfeat_model_:
                 # Renormalize images to [0, 255] range
                 input_image1 = input_image1 * 255.0
                 input_image2 = input_image2 * 255.0
@@ -301,7 +326,7 @@ def test_TorchWrapperComm_FeatureMatching() -> None:
 
             # DEVNOTE temporary casting to float32 to ensure TensorCommManager casts ok
 
-            if isinstance(model, XFeatLightGlueWrapper):
+            if is_xfeat_model_:
                 # Define output dictionary
                 for k, v in predictedMatchesDict.items():
                     if isinstance(v, np.ndarray):
@@ -402,5 +427,4 @@ if __name__ == "__main__":
     #test_TorchWrapperComm_OPNAVlimbBased()
     test_TorchWrapperComm_FeatureMatching()
     #main()
-
 
