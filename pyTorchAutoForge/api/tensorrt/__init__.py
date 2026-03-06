@@ -5,6 +5,7 @@ from .TRTengineExporter import (
     TRTengineExporterMode,
     TRTprecision,
 )
+from .TensorrtRuntimeApi import TensorrtRuntimeApi
 
 __all__ = [
     "TRTengineExporter",
@@ -12,4 +13,5 @@ __all__ = [
     "TRTprecision",
     "TRTengineExporterConfig",
     "TRTDynamicShapeProfile",
+    "TensorrtRuntimeApi",
 ]
