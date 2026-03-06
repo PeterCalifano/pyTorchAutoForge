@@ -8,6 +8,7 @@ from pyTorchAutoForge.model_building import AutoForgeModule
 from pyTorchAutoForge.optimization.ModelTrainingManager import TaskType
 import numpy as np
 import pandas as pd
+import warnings
 from enum import Enum
 from functools import partial
 from pyTorchAutoForge.utils.conversion_utils import numpy_to_torch, torch_to_numpy
@@ -29,7 +30,8 @@ class ShapExplainMethods(Enum):
     SHAP = "shap"
 
 try:
-    import shap, captum
+    import captum
+    import shap
     class ModelExplainerHelper():
         def __init__(self, model: nn.Module | AutoForgeModule,
                     task_type: TaskType,
@@ -76,14 +78,12 @@ try:
 
             if isinstance(explain_method, CaptumExplainMethods):
                 # Build captum method object
-                import captum
                 self.captum_explainer = getattr(captum.attr, explain_method.value)
                 self.captum_explainer = self.captum_explainer(self.model)
                 print('ModelExplainer loaded with captum explainability method object: ' +
                     explain_method.value)
 
             elif isinstance(explain_method, ShapExplainMethods):
-                import shap
                 print('ModelExplainer is using SHAP library...')
 
                 # Build SHAP masker (determines how missing features are treated and computes base values for Expectation computation)
@@ -452,9 +452,22 @@ try:
             return {"mean": means, "quantiles": quantiles_list, "std_dev": std_dev, "min_max": np.array([lower, upper])}
 
 except ImportError:
-    print("\033[38;5;208mSHAP or Captum not installed in this environment. "
-        "ModelExplainerHelper() class won't be available\033[0m")    
     class ModelExplainerHelper():
-        def __init__(self):
-            raise NotImplementedError('You tried to instantiate ModelExplainerHelper, but did not install SHAP and Captum in this environment. Please do so first.')
-            
+        _warning_emitted: bool = False
+
+        def __init__(self, *args, **kwargs):
+            _ = args
+            _ = kwargs
+
+            if not ModelExplainerHelper._warning_emitted:
+                warnings.warn(
+                    "SHAP or Captum is not installed. ModelExplainerHelper is unavailable.",
+                    category=UserWarning,
+                    stacklevel=2,
+                )
+                ModelExplainerHelper._warning_emitted = True
+
+            raise NotImplementedError(
+                "You tried to instantiate ModelExplainerHelper, but SHAP and Captum "
+                "are not installed in this environment. Please install them first."
+            )

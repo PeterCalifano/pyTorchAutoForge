@@ -1,0 +1,36 @@
+# List of TODOs
+
+- [ ] `pyTorchAutoForge/__init__.py` import-safety and lazy export behavior
+- [ ] `pyTorchAutoForge/api/__init__.py` lazy optional import behavior
+- [ ] `pyTorchAutoForge/api/tensorrt/__init__.py` package-path import smoke test
+- [ ] `pyTorchAutoForge/api/mlflow/mlflow_api.py`
+- [ ] `pyTorchAutoForge/api/tcp/tcpServerPy.py`
+- [ ] `pyTorchAutoForge/api/tcp/tcp_socket_server.py`
+- [ ] `pyTorchAutoForge/api/tcp/tcp_torchModel_eval.py`
+- [ ] `pyTorchAutoForge/datasets/AugmentationsBaseClasses.py`
+- [ ] `pyTorchAutoForge/datasets/AugmentationsManager.py`
+- [ ] `pyTorchAutoForge/datasets/noise_models/FrameCameraErrorModels.py`
+- [ ] `pyTorchAutoForge/datasets/noise_models/GeometricAugs.py`
+- [ ] `pyTorchAutoForge/datasets/noise_models/IntensityAugs.py`
+- [ ] `pyTorchAutoForge/datasets/noise_models/NoiseErrorsAugs.py`
+- [ ] `pyTorchAutoForge/datasets/noise_models/OpticsErrorsAugs.py`
+- [ ] `pyTorchAutoForge/evaluation/ModelEvaluator.py`
+- [ ] `pyTorchAutoForge/hparams_optim/ModelHparamsOptimizer.py`
+- [ ] `pyTorchAutoForge/hparams_optim/OptunaStudyAnalyzer.py`
+- [ ] `pyTorchAutoForge/hparams_optim/optuna_auxiliary.py`
+- [ ] `pyTorchAutoForge/hparams_optim/seedNewOptunaStudy.py`
+- [ ] `pyTorchAutoForge/model_building/ModelAssembler.py`
+- [ ] `pyTorchAutoForge/model_building/backbones/base_backbones.py`
+- [ ] `pyTorchAutoForge/model_building/backbones/spatial_features_operators.py`
+- [ ] `pyTorchAutoForge/optimization/lossFunctionsClasses.py`
+- [ ] `pyTorchAutoForge/programs/profile_and_export_model.py`
+- [ ] `pyTorchAutoForge/setup/BaseConfigClass.py`
+- [ ] `pyTorchAutoForge/tensorboard/tensorboard_fcns.py`
+- [ ] `pyTorchAutoForge/utils/LossLandscapeVisualizer.py`
+- [ ] `pyTorchAutoForge/utils/argument_parsers.py`
+- [ ] `pyTorchAutoForge/utils/context_management.py`
+- [ ] `pyTorchAutoForge/utils/rename_images.py`
+- [ ] `pyTorchAutoForge/extra/data_analysis_tools_module.py`
+- [ ] `pyTorchAutoForge/extra/experimental_pysr_module.py`
+- [ ] `pyTorchAutoForge/extra/xgboost_regression_module.py`
+- [ ] `TRTengineExporter` missing branch tests: `_import_onnx`, `_serialize_onnx_model_to_bytes`, invalid `shape_kind` in `_build_dynamic_shapes_flag`, non-ONNX temp path normalization in `_dispatch_build_from_onnx_model`
