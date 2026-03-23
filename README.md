@@ -19,19 +19,6 @@ engine_path = exporter.build_engine_from_onnx_path(
 print(engine_path)
 ```
 
-```python
-from pyTorchAutoForge.api.tensorrt import TRTengineExporter
-
-exporter = TRTengineExporter()
-engine_path = exporter.export_torch_to_trt_engine(
-    torch_model=model,                    # torch.nn.Module
-    input_sample=sample,                  # torch.Tensor or tuple[torch.Tensor, ...]
-    onnx_export_path="/tmp/intermediate.onnx",
-    output_engine_path="/tmp/final.engine",
-)
-print(engine_path)
-```
-
 Notes:
 
 - `TRTEXEC` mode requires `trtexec` in `PATH`.
