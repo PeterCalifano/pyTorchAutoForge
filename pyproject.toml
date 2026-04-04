@@ -58,8 +58,8 @@ cuda_all = [
     "pynvml; platform_machine == 'x86_64'", 
 ]
 
-[tool.setuptools.packages.find]
-include = ["pyTorchAutoForge", "pyTorchAutoForge.*"]
+[tool.hatch.build.targets.wheel]
+packages = ["pyTorchAutoForge"]
 
 # pytest configuration
 [tool.pytest.ini_options]
