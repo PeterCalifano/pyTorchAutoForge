@@ -51,7 +51,7 @@
   - [x] Improve backbone configuration
 
 - v0.5.0
-  - [ ] Migrate documentation from Read The Docs to something more controllable and less restrictive
+  - [x] Migrate documentation from Read The Docs to GitHub Pages with MkDocs
   - [ ] [MAJOR] Restructure and expand augmentations module to correctly handle images and 1D vectors jointly
   - [ ] Implement 1d vector error models (from selected distributions)
   - [ ] Change random apply and structure of augs module for images (split based on type)
@@ -74,7 +74,7 @@
   - [ ] Add pySR conveniency module
   - [ ] Explore Hydra for configuration management from yml files
   - [ ] Add prototype of SHAP for CNNs
-  - [ ] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
+  - [x] Add prototype of model explainer for vector-to-vector regression using Captum (2 methods)
   - [ ] Upgrade api.torch to save model "packages" with all info to run the model
   - [ ] Improve docstrings in src code
   - [ ] Implement prototype of K-fold cross-validation for training runs
@@ -94,7 +94,7 @@
 
 - [ ] Add type annotations for mypy
 
-- [ ] Automate documentation building process
+- [x] Automate documentation building process
 
 - [x] Implement CI/CD to run tests
 

@@ -4,6 +4,24 @@
 
 A library based on PyTorch (<https://pytorch.org/>) and designed to automate ML models development, tracking and deployment, integrated with MLflow and Optuna (<https://mlflow.org/>, <https://optuna.org/>). It also supports spiking networks libraries (WIP). Model optimization and deployment can be performed using ONNx, pyTorch facilities or TensorRT (WIP). The library aims to be compatible with Jetson Orin Nano Jetpack rev6.1. Several other functionalities and utilities for sklearn and pySR (<https://github.com/MilesCranmer/PySR>) are included (see README and documentation).
 
+## Documentation
+
+Documentation is built with MkDocs and published through GitHub Pages:
+<https://petercalifano.github.io/pyTorchAutoForge/>.
+
+Local preview:
+
+```bash
+python -m pip install -e ".[docs]"
+doc/makedoc.sh -a
+```
+
+Local strict build:
+
+```bash
+doc/makedoc.sh
+```
+
 ## Some brief usage guides (WIP)
 
 ### TensorRT exporter quick usage
@@ -41,5 +59,5 @@ cd pyTorchAutoforge
 pip install .
 ```
 
-An automatic installation script `conda_install.sh` is provided and should work in most cases. Note that it will automatically create a new environment named **autoforge** and makes several assumptions about your environment.
+An automatic installation script `conda_install.sh` is provided and should work in most cases.
 Dependencies for the core modules should be installed automatically using pip. However, this is currently not fully tested. Please open related issues.

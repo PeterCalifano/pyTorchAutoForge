@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-html
-doctrees
-=======
-doctrees
-html
->>>>>>> main
-sources
+# Generated documentation outputs
+_build/
+doctrees/
+html/

@@ -1,6 +1,6 @@
-sphinx
-sphinx_rtd_theme
-numpy
-pyyaml
-matplotlib
-torch
+mkdocs
+mkdocs-material
+mkdocs-autorefs
+mkdocs-gen-files
+mkdocs-literate-nav
+mkdocstrings[python]

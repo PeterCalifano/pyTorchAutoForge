@@ -1,25 +1,28 @@
 #!/bin/bash
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate autoforge
+set -euo pipefail
 
-while getopts "a,i:,o:,p:" opt; do
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${REPO_ROOT}"
+
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate "${CONDA_ENV:-autoforge}"
+
+SERVE=0
+HOST="127.0.0.1"
+PORT="8000"
+
+while getopts "ah:p:" opt; do
     case $opt in
-        a) AUTOBUILD=1 ;;
-        i) INPUT="${OPTARG:-doc}" ;;
-        o) OUTPUT="${OPTARG:-test_autodoc}" ;;
-        p) PORT="${OPTARG:-8000}" ;;
+        a) SERVE=1 ;;
+        h) HOST="$OPTARG" ;;
+        p) PORT="$OPTARG" ;;
         *) echo "Invalid option"; exit 1 ;;
     esac
 done
 
-# Set default values if not provided
-AUTOBUILD=${AUTOBUILD:-0}
-INPUT=${INPUT:-doc}
-OUTPUT=${OUTPUT:-test_autodoc}
-PORT=${PORT:-8000}
-
-if [ -n "$AUTOBUILD" ]; then
-    sphinx-autobuild "$INPUT" "$OUTPUT" --port "$PORT" --open-browser
+if [ "$SERVE" -eq 1 ]; then
+    mkdocs serve --dev-addr "${HOST}:${PORT}"
 else
-    make html
+    mkdocs build --strict
 fi

@@ -80,6 +80,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+doc/_build/
+site/
 
 # PyBuilder
 .pybuilder/
@@ -173,3 +175,4 @@ cython_debug/
 .vscode/browse.vc.db
 .vscode/browse.vc.db-shm
 .vscode/browse.vc.db-wal
+CONTEXT.md

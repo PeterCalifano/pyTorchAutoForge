@@ -57,6 +57,18 @@ classifiers=[
 cuda_all = [
     "pynvml; platform_machine == 'x86_64'", 
 ]
+test = [
+    "coverage[toml]",
+    "pytest-cov",
+]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocs-autorefs",
+    "mkdocs-gen-files",
+    "mkdocs-literate-nav",
+    "mkdocstrings[python]",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["pyTorchAutoForge"]
@@ -72,6 +84,14 @@ addopts = """--ignore=lib/
              --disable-warnings 
            """
 console_output_style = "count"
+markers = [
+    "unit: fast test with no external service, large dataset, GPU, or long-running export requirement",
+    "integration: test spanning multiple subsystems or external-style runtime behavior",
+    "slow: test intentionally excluded from default runs unless --run-slow is passed",
+    "gpu: test requiring a usable CUDA runtime, excluded unless --run-gpu is passed",
+    "visual: plotting or visual-inspection-oriented test, excluded unless --run-visual is passed",
+    "export: model export or runtime-serialization test",
+]
 
 # Specify folders to ignore
 norecursedirs = ["*deprecated*", "*data", "*cache", "**/site-packages", "dist", "build"]
