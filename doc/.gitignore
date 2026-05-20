@@ -4,3 +4,5 @@ api/generated/
 doctrees/
 html/
 local_guides/
+_static/*
+_auto_api_templates/*
