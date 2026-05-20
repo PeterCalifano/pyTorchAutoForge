@@ -4,6 +4,24 @@
 
 A library based on PyTorch (<https://pytorch.org/>) and designed to automate ML models development, tracking and deployment, integrated with MLflow and Optuna (<https://mlflow.org/>, <https://optuna.org/>). It also supports spiking networks libraries (WIP). Model optimization and deployment can be performed using ONNx, pyTorch facilities or TensorRT (WIP). The library aims to be compatible with Jetson Orin Nano Jetpack rev6.1. Several other functionalities and utilities for sklearn and pySR (<https://github.com/MilesCranmer/PySR>) are included (see README and documentation).
 
+## Documentation
+
+Documentation is built with Sphinx, the PyData theme, and auto-generated public API pages. It is published through GitHub Pages:
+<https://petercalifano.github.io/pyTorchAutoForge/>.
+
+Local preview:
+
+```bash
+python -m pip install -e ".[docs]"
+doc/makedoc.sh -a
+```
+
+Local strict build:
+
+```bash
+doc/makedoc.sh
+```
+
 ## Some brief usage guides (WIP)
 
 ### TensorRT exporter quick usage
@@ -25,21 +43,35 @@ Notes:
 - `PYTHON` mode requires the `tensorrt` Python package.
 - Default behavior avoids architecture-specific flags and is suitable for Jetson deployment workflows.
 
-## Installation using pip
+## Installation Using Pip
 
-The suggested installation method is through pip as the others are mostly intended for development and may not be completely up-to-date with the newest release versions.
-In whatever conda or virtual environment you like (preferably with a sufficiently new torch release, to install from pypi:
+The package is available on PyPI. In any conda or virtual environment with a suitable PyTorch release:
 
 ```bash
-pip install pyTorchAutoForge
+python -m pip install pyTorchAutoForge
 ```
 
-Or from a local copy of the repository (requires `hatch` module for the build):
+From a local checkout:
 
 ```bash
 cd pyTorchAutoforge
-pip install .
+python -m pip install .
 ```
 
-An automatic installation script `conda_install.sh` is provided and should work in most cases. Note that it will automatically create a new environment named **autoforge** and makes several assumptions about your environment.
-Dependencies for the core modules should be installed automatically using pip. However, this is currently not fully tested. Please open related issues.
+An automatic installation script `conda_install.sh` is provided for development installs. By default it uses an existing `autoforge` conda environment and installs only the core package dependencies:
+
+```bash
+./conda_install.sh --create-env --editable
+```
+
+Optional extras are explicit:
+
+```bash
+./conda_install.sh --with-test --with-docs --build-docs
+```
+
+Jetson/ARM installs skip x86-only dependencies through package markers. Provide board-specific PyTorch wheels when needed:
+
+```bash
+./conda_install.sh --jetson --pytorch-url <wheel-or-url> --torchvision-url <wheel-or-url>
+```

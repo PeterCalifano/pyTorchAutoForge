@@ -1,6 +1,5 @@
 sphinx
-sphinx_rtd_theme
-numpy
-pyyaml
-matplotlib
-torch
+pydata-sphinx-theme
+myst-parser
+sphinx-autoapi
+sphinx-copybutton

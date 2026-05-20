@@ -1,1 +1,0 @@
-pip install sphinx sphinx-autobuild sphinx_rtd_theme sphinxcontrib-matlabdomain --break-system-packages

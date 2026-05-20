@@ -1,8 +1,8 @@
-<<<<<<< HEAD
-html
-doctrees
-=======
-doctrees
-html
->>>>>>> main
-sources
+# Generated documentation outputs
+_build/
+api/generated/
+doctrees/
+html/
+local_guides/
+_static/*
+_auto_api_templates/*
