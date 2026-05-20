@@ -1,5 +1,9 @@
 # Testing
 
+This page is for contributors and maintainers. It documents PTAF test commands,
+marker policy, and coverage checks; user-facing module workflows live in the
+User Guide.
+
 ## Default Test Run
 
 ```bash

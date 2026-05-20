@@ -30,8 +30,6 @@ training_monitoring
 evaluation
 model_explainer
 utilities
-testing
-roadmap
 ```
 
 ```{toctree}
@@ -39,4 +37,12 @@ roadmap
 :maxdepth: 2
 
 api/index
+```
+
+```{toctree}
+:caption: Development
+:maxdepth: 2
+
+testing
+roadmap
 ```
