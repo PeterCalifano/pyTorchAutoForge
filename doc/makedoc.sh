@@ -67,6 +67,8 @@ if [ "$STRICT" -eq 1 ]; then
     SPHINX_ARGS=(-W --keep-going "${SPHINX_ARGS[@]}")
 fi
 
+rm -rf site
+
 if [ "$SERVE" -eq 1 ]; then
     python -m sphinx "${SPHINX_ARGS[@]}"
     cd site

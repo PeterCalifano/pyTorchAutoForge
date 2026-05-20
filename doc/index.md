@@ -23,6 +23,13 @@ Public APIs are still evolving. Prefer pinned releases for production work.
 :maxdepth: 2
 
 getting_started
+model_building
+datasets
+runtime_export
+training_monitoring
+evaluation
+model_explainer
+utilities
 testing
 roadmap
 ```

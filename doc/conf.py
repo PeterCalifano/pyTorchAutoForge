@@ -59,6 +59,8 @@ exclude_patterns = [
     ".DS_Store",
     "developments",
     "developments/**",
+    "local_guides",
+    "local_guides/**",
 ]
 suppress_warnings = [
     "autoapi",
@@ -106,6 +108,7 @@ autoapi_ignore = [
     "*/.deprecated/*",
     "*/.experimental/*",
     "*/.experimental.py",
+    "*/api/telegram/*",
     "*/extra/*",
     "*/programs/*",
     "*/tensorboard/*",
