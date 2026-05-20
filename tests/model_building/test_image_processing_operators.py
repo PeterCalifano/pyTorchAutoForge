@@ -5,6 +5,7 @@ import cv2
 from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey
 from kornia.constants import DataKey
 import torch
+import pytest
 from pyTorchAutoForge.model_building.backbones.image_processing_operators import Compute_threshold_mask, Apply_sobel_gradient, Apply_laplacian_of_gaussian, Compute_distance_transform_map, Compute_local_variance_map
 from pyTorchAutoForge.utils import torch_to_numpy, numpy_to_torch
 from PIL import Image
@@ -192,6 +193,8 @@ def _run_all_batched_images_(image_names, apply_augs, augmentation_module: Image
     plt.close()
 
 
+@pytest.mark.integration
+@pytest.mark.visual
 def test_all_operators():
     # ---- Configuration ----
     this_file_path = os.path.dirname(os.path.abspath(__file__))

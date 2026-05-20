@@ -7,8 +7,13 @@ import tempfile
 
 from torchvision import models
 import optuna, mlflow
+from tests.helpers import CudaIsUsable
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA GPU required for this test.")
+
+@pytest.mark.gpu
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.skipif(not CudaIsUsable(), reason="Usable CUDA runtime required for this test.")
 def test_ModelTrainingManager():
 
     from torchvision import transforms

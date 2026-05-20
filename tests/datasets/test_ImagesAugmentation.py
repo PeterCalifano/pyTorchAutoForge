@@ -10,6 +10,7 @@ import pytest
 import matplotlib.pyplot as plt
 from pyTorchAutoForge.datasets import ImagesLabelsCachedDataset, AugmentationConfig, ImageAugmentationsHelper
 from pyTorchAutoForge.utils.conversion_utils import torch_to_numpy, numpy_to_torch
+from tests.helpers import CudaIsUsable, RequireCudaUsable
 import numpy as np
 from time import perf_counter
 import PIL
@@ -194,6 +195,9 @@ def test_detect_border_crossing_white_masks():
 # %% Integrated tests
 
 
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.visual
 def test_synthetic_mask_augmentation():
 
     augs_datakey = [DataKey.IMAGE, DataKey.KEYPOINTS]
@@ -219,7 +223,7 @@ def test_synthetic_mask_augmentation():
         contrast_aug_prob=1.0,
         input_normalization_factor=255.0,
         enable_auto_input_normalization=True,
-        device='cuda' if torch.cuda.is_available() else 'cpu'
+        device='cuda' if CudaIsUsable() else 'cpu'
     )
 
     augs_helper = ImageAugmentationsHelper(cfg)
@@ -281,6 +285,9 @@ def test_synthetic_mask_augmentation():
     plt.close()
 
 
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.visual
 def test_sample_images_augmentation():
     # Load sample images
     imgs = _load_sample_images()
@@ -330,7 +337,7 @@ def test_sample_images_augmentation():
                              input_normalization_factor=255.0,
                              enable_auto_input_normalization=True,
                              enable_batch_validation_check=True,
-                             device='cuda' if torch.cuda.is_available() else 'cpu'
+                             device='cuda' if CudaIsUsable() else 'cpu'
                              )
 
     augs_helper = ImageAugmentationsHelper(cfg)
@@ -380,6 +387,7 @@ def test_sample_images_augmentation():
         plt.close()
 
 
+@pytest.mark.visual
 def test_random_softbinarize_only_sample_images_with_viz():
     # Load sample images
     np.random.seed(0)
@@ -455,6 +463,8 @@ def test_random_softbinarize_only_sample_images_with_viz():
     plt.close()
 
 
+@pytest.mark.integration
+@pytest.mark.visual
 def test_AugmentationSequential():
     from kornia.augmentation import AugmentationSequential, RandomAffine, RandomHorizontalFlip
     from kornia.constants import DataKey
@@ -542,7 +552,7 @@ def test_AugmentationSequential():
 # Chain parametrize to test combinations
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=pytest.mark.gpu)])
 @pytest.mark.parametrize("shift_aug_prob", [0, 1])
 @pytest.mark.parametrize("rotation_aug_prob", [0, 1])
 @pytest.mark.parametrize("gaussian_noise_aug_prob", [0, 1])
@@ -557,8 +567,8 @@ def test_augmentation_helper_preserves_device(device,
                                               brightness_aug_prob,
                                               contrast_aug_prob) -> None:
 
-    if device == "cuda" and not torch.cuda.is_available():
-        pytest.skip("CUDA not available.")
+    if device == "cuda":
+        RequireCudaUsable()
 
     # Create a minimal configuration for the augmentations helper.
     cfg = AugmentationConfig(
@@ -601,10 +611,11 @@ def test_augmentation_helper_preserves_device(device,
     _assert_helper_modules_on_device(augs_helper, device_t)
 
 
+@pytest.mark.gpu
+@pytest.mark.slow
 def test_augmentation_helper_timing_cpu_vs_cuda():
     """Test execution time cpu vs cuda for augmentations helper"""
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA not available.")
+    RequireCudaUsable()
     num_iters_ = 500
     cfg_kwargs = dict(
         max_shift_img_fraction=(0.2, 0.2),
@@ -1106,7 +1117,7 @@ def test_helper_metadata_supports_external_sun_direction_label_update():
 # %% MANUAL TEST CALLS
 if __name__ == '__main__':
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda" if CudaIsUsable() else "cpu"
     shift_aug_prob = 0.0
     rotation_aug_prob = 0.0
     gaussian_noise_aug_prob = 0.0
