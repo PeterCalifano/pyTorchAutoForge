@@ -27,8 +27,10 @@ def test_data_processor_tensor_roundtrip() -> None:
     )
     input_array_ = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
 
-    output_buffer_ = processor_.process(processor_.TensorToBytesBuffer(input_array_))
-    output_array_, output_shape_ = processor_.BytesBufferToTensor(output_buffer_[4:])
+    output_buffer_ = processor_.process(
+        processor_.TensorToBytesBuffer(input_array_))
+    output_array_, output_shape_ = processor_.BytesBufferToTensor(output_buffer_[
+                                                                  4:])
 
     assert output_shape_ == input_array_.shape
     assert np.array_equal(output_array_, input_array_)
