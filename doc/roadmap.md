@@ -2,7 +2,7 @@
 
 ## Active Infrastructure Work
 
-- GitHub Pages documentation with MkDocs.
+- GitHub Pages documentation with Sphinx and the PyData theme.
 - Test markers for slow, GPU, visual, integration, and export paths.
 - Coverage reporting through `pytest-cov` and existing coverage config.
 - Better split between runnable examples and pytest modules.

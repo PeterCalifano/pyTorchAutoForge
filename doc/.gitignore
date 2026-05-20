@@ -1,4 +1,6 @@
 # Generated documentation outputs
 _build/
+api/generated/
 doctrees/
 html/
+local_guides/

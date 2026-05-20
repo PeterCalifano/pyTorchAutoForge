@@ -1,11 +1,15 @@
 # pyTorchAutoForge
 
-![pyTorchAutoForge logo](assets/ptaf_logo_small.jpg){ width="180" }
+```{image} assets/ptaf_logo_small.jpg
+:alt: pyTorchAutoForge logo
+:width: 180px
+```
 
 `pyTorchAutoForge` is a PyTorch-oriented toolbox for model construction, training support, experiment monitoring, and deployment through ONNX and TensorRT workflows.
 
-!!! warning "Work in progress"
-    Public APIs are still evolving. Prefer pinned releases for production work.
+```{warning}
+Public APIs are still evolving. Prefer pinned releases for production work.
+```
 
 ## Core Areas
 
@@ -14,9 +18,18 @@
 - Training-manager utilities, MLflow/Optuna integration, and monitoring helpers.
 - Runtime and export APIs for PyTorch, ONNX, and TensorRT deployment paths.
 
-## Quick Links
+```{toctree}
+:caption: User Guide
+:maxdepth: 2
 
-- [Getting Started](getting_started.md)
-- [Testing](testing.md)
-- [API Reference](api/index.md)
-- [Development Roadmap](roadmap.md)
+getting_started
+testing
+roadmap
+```
+
+```{toctree}
+:caption: Reference
+:maxdepth: 2
+
+api/index
+```

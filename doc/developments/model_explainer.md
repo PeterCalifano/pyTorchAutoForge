@@ -29,7 +29,7 @@ Scope: feature-level model explanation in PTAF for PyTorch models, first for tab
 - [x] Keep `CaptumExplainMethods` and `ShapExplainMethods` exported.
 - [ ] Add deprecation warning for `features_names` after downstream callers are checked.
 - [ ] Decide whether `task_type` should remain accepted but unused, or become part of backend selection.
-- [ ] Add API reference examples in MkDocs page.
+- [ ] Add API reference examples in the Sphinx API page.
 
 ## Stage 2 - Import Safety And Optional Dependencies
 
@@ -135,7 +135,7 @@ Scope: feature-level model explanation in PTAF for PyTorch models, first for tab
 - [ ] Add runnable example for Captum vector classification.
 - [ ] Add runnable example for SHAP vector regression.
 - [ ] Add example output snippets in docs.
-- [ ] Add explainer API page to MkDocs navigation.
+- [ ] Add explainer API page to Sphinx navigation.
 - [ ] Add docs section explaining backend dependency requirements.
 - [ ] Add docs section explaining artifact outputs.
 - [ ] Add docs section explaining known limitations:

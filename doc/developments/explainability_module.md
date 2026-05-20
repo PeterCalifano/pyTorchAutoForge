@@ -5,8 +5,8 @@ Scope: replace the current `ModelExplainer` prototype with a typed, modular expl
 ## Stage 0 - Repository, Docs, External Usage Inventory
 
 - [x] Treat `doc/` as canonical documentation folder.
-- [x] Confirm current docs build uses MkDocs with `docs_dir: doc` in `mkdocs.yml`.
-- [x] Confirm old Read the Docs Sphinx configuration is gone from tracked active config; docs now use `.github/workflows/docs_pages.yml` and `mkdocs.yml`.
+- [x] Confirm `doc/` is the canonical documentation source folder.
+- [x] Confirm active documentation config lives in `.github/workflows/docs_pages.yml` and `doc/conf.py`.
 - [x] Create this implementation plan at `doc/developments/explainability_module.md`.
 - [x] Keep old `doc/developments/model_explainer.md` as historical design context until final cleanup decision.
 - [x] Search PTAF for old explainer API references.
