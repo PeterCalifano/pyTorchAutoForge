@@ -1,224 +1,358 @@
-# Default values
-jetson_target=false
-editable_mode=false
-sudo_mode=false
-venv_name="autoforge"
-create_conda_env=false
+#!/bin/bash
+set -euo pipefail
 
-# Parse options using getopt
-# NOTE: no ":" after option means no argument, ":" means required argument, "::" means optional argument
-OPTIONS=j,v:,s,c,e
-LONGOPTIONS=jetson_target,venv_name:,sudo_mode,create_conda_env,editable_mode
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${SCRIPT_DIR}"
 
-# Parsed arguments list with getopt
-PARSED=$(getopt --options ${OPTIONS} --longoptions ${LONGOPTIONS} --name "$0" -- "$@") 
-# TODO check if this is where I need to modify something to allow things like -B build, instead of -Bbuild
+# Script variables
+CONDA_EXE="${CONDA_EXE:-conda}"
+ENV_NAME="${CONDA_ENV:-autoforge}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+CREATE_ENV=0
+EDITABLE=0
+BUILD_DOCS=0
+RUN_CHECK=0
+ARM_MODE=0
+USE_MAMBA=0
+INSTALL_NVIDIA_DEPLOY=0
+PYTORCH_URL=""
+TORCHVISION_URL=""
+TORCHVISION_SOURCE_TAG=""
+EXTRAS=()
 
-# Check validity of input arguments 
-if [[ $? -ne 0 ]]; then
-  exit 2
-fi
+usage() {
+    cat <<'EOF'
+Usage: ./conda_install.sh [options]
 
-# Parse arguments
-eval set -- "$PARSED"
+Default behavior:
+  - use an existing conda environment named "autoforge"
+  - install core pyTorchAutoForge package only, without optional extras
+  - do not create environments unless --create-env is passed
 
-# Process options (change default values if needed)
-while true; do
-  case "$1" in
-    -j|--jetson_target)
-      jetson_target=1
-      echo "Jetson target selected..."
-      shift
-      ;;
-    -v|--venv_name)
-      venv_name=$2
-      echo "Conda environment name: $venv_name"
-      shift 2
-      ;;
-    -s|--sudo_mode)
-      sudo_mode=true
-      echo "Sudo mode requested..."
-      shift
-      ;;
-    
-    -c|--create_conda_env)
-      create_conda_env=true
-      echo "Creating and initializing conda environment..."
-      shift
-      ;;
-    -e|--editable_mode)
-      editable_mode=true
-      echo "Editable mode selected..."
-      shift
-      ;;
-    --)
-      shift
-      break
-      ;;
-    *)
-      echo "Not a valid option: $1" >&2
-      exit 3
-      ;;
-  esac
+Environment:
+  -n, --env-name NAME           Conda environment name (default: CONDA_ENV or autoforge)
+  -v, --venv_name NAME          Compatibility alias for --env-name
+  -c, --create-env             Create environment if missing
+      --python-version VERSION Python version for new envs (default: PYTHON_VERSION or 3.12)
+      --conda-exe PATH         Conda executable (default: conda)
+      --mamba                  Use mamba for env creation when available
+
+Install:
+      --core                   Core package only (default)
+  -e, --editable               Install editable from this checkout
+      --wheel                  Install non-editable package from this checkout (default)
+      --extras LIST            Comma-separated pyproject extras, for example test,docs,explain
+      --with-test              Add test extra
+      --with-docs              Add docs extra
+      --with-explain           Add explain extra
+      --with-shap              Add explain-shap extra
+      --with-captum            Add explain-captum extra
+      --with-cuda              Add cuda_all extra
+      --with-classical-ml      Add classical-ml extra
+      --with-xgboost           Add xgboost extra
+      --with-pysr              Add pysr extra
+      --build-docs             Build MkDocs after install
+      --check                  Run tests/.configuration/test_env.py after install
+
+ARM / Jetson:
+  -j, --jetson                 Enable ARM/Jetson-friendly mode
+      --jetson_target          Compatibility alias for --jetson
+      --arm                    Alias for --jetson
+      --pytorch-url URL        Install board-specific PyTorch wheel/url before PTAF
+      --torchvision-url URL    Install board-specific torchvision wheel/url before PTAF
+      --torchvision-source-tag TAG
+                               Build torchvision from source tag, for example v0.20.0
+      --nvidia-deploy          Install NVIDIA deploy packages from pypi.nvidia.com
+
+Compatibility:
+  -s, --sudo_mode              Accepted for old callers; no system packages are installed here
+  -h, --help                   Show this help
+EOF
+}
+
+add_extra() {
+    local raw_extra_="$1"
+    local extra_=""
+
+    IFS=',' read -ra split_extras_ <<< "${raw_extra_}"
+    for extra_ in "${split_extras_[@]}"; do
+        extra_="${extra_//[[:space:]]/}"
+        if [[ -n "${extra_}" ]]; then
+            EXTRAS+=("${extra_}")
+        fi
+    done
+}
+
+join_extras() {
+    local joined_=""
+    local seen_=","
+    local extra_=""
+
+    for extra_ in "${EXTRAS[@]}"; do
+        if [[ "${seen_}" == *",${extra_},"* ]]; then
+            continue
+        fi
+        seen_="${seen_}${extra_},"
+        if [[ -z "${joined_}" ]]; then
+            joined_="${extra_}"
+        else
+            joined_="${joined_},${extra_}"
+        fi
+    done
+
+    printf "%s" "${joined_}"
+}
+
+source_conda() {
+    local base_dir_=""
+    base_dir_="$("${CONDA_EXE}" info --base)"
+    # shellcheck source=/dev/null
+    source "${base_dir_}/etc/profile.d/conda.sh"
+}
+
+conda_env_exists() {
+    "${CONDA_EXE}" env list | awk '{print $1}' | grep -Fxq "${ENV_NAME}"
+}
+
+create_conda_env() {
+    local create_cmd_=("${CONDA_EXE}" "create" "-y" "-n" "${ENV_NAME}" "python=${PYTHON_VERSION}" "pip" "setuptools" "wheel")
+
+    if [[ "${USE_MAMBA}" -eq 1 ]] && command -v mamba >/dev/null 2>&1; then
+        create_cmd_[0]="mamba"
+    fi
+
+    echo "Creating conda environment '${ENV_NAME}' with Python ${PYTHON_VERSION}"
+    "${create_cmd_[@]}"
+}
+
+install_url_if_requested() {
+    local label_="$1"
+    local url_="$2"
+
+    if [[ -n "${url_}" ]]; then
+        echo "Installing ${label_} from explicit URL"
+        python -m pip install "${url_}"
+    fi
+}
+
+install_torchvision_from_source() {
+    local tag_="$1"
+    local temp_dir_=""
+
+    if [[ -z "${tag_}" ]]; then
+        return
+    fi
+
+    temp_dir_="$(mktemp -d)"
+    trap 'rm -rf "${temp_dir_}"' RETURN
+
+    echo "Building torchvision from source tag ${tag_}"
+    git clone --depth 1 --branch "${tag_}" https://github.com/pytorch/vision.git "${temp_dir_}/vision"
+    python -m pip install "${temp_dir_}/vision"
+}
+
+detect_arm_mode() {
+    local machine_=""
+    machine_="$(uname -m)"
+
+    case "${machine_}" in
+        aarch64|arm64|armv7l|armv8l)
+            ARM_MODE=1
+            ;;
+    esac
+}
+
+# Parser loop
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -n|--env-name|-v|--venv_name)
+            ENV_NAME="$2"
+            shift 2
+            ;;
+        -c|--create-env|--create_conda_env)
+            CREATE_ENV=1
+            shift
+            ;;
+        --python-version)
+            PYTHON_VERSION="$2"
+            shift 2
+            ;;
+        --conda-exe)
+            CONDA_EXE="$2"
+            shift 2
+            ;;
+        --mamba)
+            USE_MAMBA=1
+            shift
+            ;;
+        --core)
+            EXTRAS=()
+            shift
+            ;;
+        -e|--editable|--editable_mode)
+            EDITABLE=1
+            shift
+            ;;
+        --wheel)
+            EDITABLE=0
+            shift
+            ;;
+        --extras)
+            add_extra "$2"
+            shift 2
+            ;;
+        --with-test)
+            add_extra "test"
+            shift
+            ;;
+        --with-docs)
+            add_extra "docs"
+            shift
+            ;;
+        --with-explain)
+            add_extra "explain"
+            shift
+            ;;
+        --with-shap)
+            add_extra "explain-shap"
+            shift
+            ;;
+        --with-captum)
+            add_extra "explain-captum"
+            shift
+            ;;
+        --with-cuda)
+            add_extra "cuda_all"
+            shift
+            ;;
+        --with-classical-ml)
+            add_extra "classical-ml"
+            shift
+            ;;
+        --with-xgboost)
+            add_extra "xgboost"
+            shift
+            ;;
+        --with-pysr)
+            add_extra "pysr"
+            shift
+            ;;
+        --build-docs)
+            BUILD_DOCS=1
+            shift
+            ;;
+        --check)
+            RUN_CHECK=1
+            shift
+            ;;
+        -j|--jetson|--jetson_target|--arm)
+            ARM_MODE=1
+            shift
+            ;;
+        --pytorch-url)
+            PYTORCH_URL="$2"
+            shift 2
+            ;;
+        --torchvision-url)
+            TORCHVISION_URL="$2"
+            shift 2
+            ;;
+        --torchvision-source-tag)
+            TORCHVISION_SOURCE_TAG="$2"
+            shift 2
+            ;;
+        --nvidia-deploy)
+            INSTALL_NVIDIA_DEPLOY=1
+            shift
+            ;;
+        -s|--sudo_mode)
+            echo "--sudo_mode accepted for compatibility; system package installation is not handled by this script."
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
 done
 
-if [ $jetson_target = true ] && [ ! $sudo_mode = true ]; then
-  echo "Jetson target requires sudo mode. Please use -s option."
-  exit 1
-fi
+# Check architecture before sourcing conda
+detect_arm_mode
 
-if [ $create_conda_env = true ]; then
-  # Create and activate conda environment
-  conda create -n $venv_name python=3.12
-  source $(conda info --base)/etc/profile.d/conda.sh
-  conda activate $venv_name
-else
-  echo "Attempt to activate existing conda environment..."
-  
-  # Check if conda environment exists else stop
-  if conda info --envs | grep -q "$venv_name"; then
-    echo "Conda environment $venv_name found. Activating it..."
-    conda init bash
-    # Activate conda environment
-    conda activate $venv_name
-  else
-    echo "Conda environment $venv_name does not exist. Please create it first or run this script with -c flag."
+if ! command -v "${CONDA_EXE}" >/dev/null 2>&1; then
+    echo "Conda executable not found: ${CONDA_EXE}" >&2
     exit 1
-  fi
 fi
 
-sleep 1
+# Source conda environment
+source_conda
 
-if [ $jetson_target = false ] && [ ! -f /usr/local/cuda/lib64/libcusparseLt.so ]; then
-    echo "libcusparseLt.so not found. Downloading and installing..."
-    # if not exist, download and copy to the directory
-    wget https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/linux-sbsa/libcusparse_lt-linux-sbsa-0.5.2.1-archive.tar.xz
-    tar xf libcusparse_lt-linux-sbsa-0.5.2.1-archive.tar.xz
-    sudo cp -a libcusparse_lt-linux-sbsa-0.5.2.1-archive/include/* /usr/local/cuda/include/
-    sudo cp -a libcusparse_lt-linux-sbsa-0.5.2.1-archive/lib/* /usr/local/cuda/lib64/
-    rm libcusparse_lt-linux-sbsa-0.5.2.1-archive.tar.xz
-    rm -r libcusparse_lt-linux-sbsa-0.5.2.1-archive
-fi
-
-if [ $jetson_target = true ]; then
-
-  #pip install -r requirements.txt  # Install dependencies
-  #pip install -e .  # Install the package in editable mode
-
-  # Tools for building and installing wheels
-  echo "Installing setuptools, twine, and build..."
-  pip install setuptools twine build 
-  python3 -m ensurepip --upgrade 
-  python3 -m pip install --upgrade pip 
-
-  # Install key modules not managed by dependencies installation for versioning reasons
-  echo "Installing additional key modules..."
-  
-  # Remove torch and torchvision 
-  pip uninstall -y torch torchvision torchaudio
-
-  # Install torch for Jetson
-  pip install torch https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl 
-
-  # Build and install torchvision from source
-  # From guide: https://github.com/azimjaan21/jetpack-6.1-pytorch-torchvision-/blob/main/README.md
-  git clone https://github.com/pytorch/vision.git
-  cd vision
-  git checkout tags/v0.20.0
-  python3 setup.py install 
-
-  # Clean up
-  cd ..
-  sudo rm -r vision
-
-  #pip install norse==1.0.0 aestream tonic expelliarmus --ignore-requires-python3   # FIXME: build fails due to "CUDA20" entry
-
-  pip install nvidia-pyindex pycuda 
-
-  # ACHTUNG: this must run correctly before torch_tensorrt
-  pip install "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
-
-  #  Install torch-tensorrt from source 
-  mkdir lib
-  cd lib
-  
-  # Check if submodule exists 
-  if [ -d "TensorRT" ]; then
-      echo "TensorRT submodule exists"
-  else
-      git submodule add --branch release/2.5 https://github.com/pytorch/TensorRT.git # Try to use release/2.6 (latest)
-  fi
-  
-  cd TensorRT
-  git checkout release/2.5
-  git pull
-
-  # Install required python3 packages of torch-tensorrt
-  python3 -m pip install -r toolchains/jp_workspaces/requirements.txt # NOTE: Installs the correct version of setuptools. Do not touch it.
-
-  cuda_version=$(nvcc --version | grep Cuda | grep release | cut -d ',' -f 2 | sed -e 's/ release //g')
-  export TORCH_INSTALL_PATH=$(python3 -c "import torch, os; print(os.path.dirname(torch.__file__))")
-  export SITE_PACKAGE_PATH=${TORCH_INSTALL_PATH::-6}
-  export CUDA_HOME=/usr/local/cuda-${cuda_version}/
-
-  # Replace the MODULE.bazel with the jetpack one # DOUBT: why needed?
-  cat toolchains/jp_workspaces/MODULE.bazel.tmpl | envsubst > MODULE.bazel
-
-  # Build and install torch_tensorrt wheel file with CXX11 ABI
-  python3 setup.py install --use-cxx11-abi
-  cd ../..
-
-  # Finally, build pyTorchAutoForge wheel
-  if [ $editable_mode -eq 1 ]; then
-      echo "Building and installing pyTorchAutoForge in editable mode..."
-      pip install -e .  # Install the package in editable mode
-  else
-    echo "Building and installing pyTorchAutoForge wheel..."
-    # Remove previous build 
-    rm -rf dist
-    rm -rf build
-    rm -rf pyTorchAutoForge.egg-info
-    # Build and install
-    python3 -m build 
-    pip install dist/*.whl  # Install pyTorchAutoForge wheel # FIXME editable mode does not work for this
-  fi
-    
+if conda_env_exists; then
+    echo "Using existing conda environment '${ENV_NAME}'"
+elif [[ "${CREATE_ENV}" -eq 1 ]]; then
+    # Create conda if target environment not found
+    create_conda_env
 else
-  #pip install -r requirements.txt  # Install dependencies that do not cause issues...
-  #python3 -m pip install -r toolchains/jp_workspaces/test_requirements.txt # Required for test cases
-
-  # Tools for building and installing wheels
-  echo "Installing setuptools, twine, and build..."
-  pip install setuptools twine build 
-  python3 -m ensurepip --upgrade 
-  python3 -m pip install --upgrade pip 
-
-  # Install key modules not managed by dependencies installation for versioning reasons
-  echo "Installing additional key modules..."
-
-  # Build pyTorchAutoForge wheel
-  if [ $editable_mode -eq 1 ]; then
-      echo "Building and installing pyTorchAutoForge in editable mode..."
-      pip install -e .  # Install the package in editable mode
-  else
-    echo "Building and installing pyTorchAutoForge wheel..."
-    # Remove previous build 
-    rm -rf dist
-    rm -rf build
-    rm -rf pyTorchAutoForge.egg-info
-    # Build and install
-    python3 -m build 
-    pip install dist/*.whl  # Install pyTorchAutoForge wheel # FIXME editable mode does not work for this
-  fi
-
-  # Install tools for model optimization and deployment
-  echo "Installing tools for model optimization and deployment by Nvidia..."
-  python3 -m pip install pycuda torch torchvision torch-tensorrt tensorrt "nvidia-modelopt[all]" -U --extra-index-url https://pypi.nvidia.com
+    echo "Conda environment '${ENV_NAME}' does not exist. Re-run with --create-env to create it." >&2
+    exit 1
 fi
 
-# Check installation by printing versions in python3
-cd ./tests/.configuration/
-python3 -m test_env
-cd ../..
+# Activate environment and basic tools setup
+conda activate "${ENV_NAME}"
 
+python -m pip install --upgrade pip setuptools wheel build
 
+if [[ "${ARM_MODE}" -eq 1 ]]; then
+    echo "ARM/Jetson mode active. x86-only pyproject dependencies are skipped by platform markers."
+    if [[ -z "${PYTORCH_URL}" ]]; then
+        echo "No --pytorch-url provided. Use board-specific PyTorch install before GPU workflows if torch is not already available."
+    fi
+fi
+
+# Install PyTorch and torchvision from URLs if provided
+install_url_if_requested "PyTorch" "${PYTORCH_URL}"
+install_url_if_requested "torchvision" "${TORCHVISION_URL}"
+install_torchvision_from_source "${TORCHVISION_SOURCE_TAG}"
+
+cd "${REPO_ROOT}"
+
+# Append extras from command line and join into CSV for pip install
+extras_csv="$(join_extras)"
+
+# Install package with extras if provided
+install_spec="."
+if [[ -n "${extras_csv}" ]]; then
+    install_spec=".[${extras_csv}]"
+fi
+
+if [[ "${EDITABLE}" -eq 1 ]]; then
+    # Install as editable
+    echo "Installing editable package: ${install_spec}"
+    python -m pip install -e "${install_spec}"
+else
+    # Normal install    
+    echo "Installing package: ${install_spec}"
+    python -m pip install "${install_spec}"
+fi
+
+# Install nvidia tools from pypi.nvidia.com
+if [[ "${INSTALL_NVIDIA_DEPLOY}" -eq 1 ]]; then
+    echo "Installing optional NVIDIA deploy packages"
+    python -m pip install -U --extra-index-url https://pypi.nvidia.com \
+        pycuda torch-tensorrt tensorrt "nvidia-modelopt[all]"
+fi
+
+# Build documentation
+if [[ "${BUILD_DOCS}" -eq 1 ]]; then
+    CONDA_ENV="${ENV_NAME}" "${REPO_ROOT}/doc/makedoc.sh"
+fi
+
+# Test environment setup
+if [[ "${RUN_CHECK}" -eq 1 ]]; then
+    python "${REPO_ROOT}/tests/.configuration/test_env.py"
+fi
