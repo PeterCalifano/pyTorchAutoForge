@@ -1,0 +1,79 @@
+name: Bug report
+description: >-
+  Report a reproducible library, training, export, runtime,
+  documentation, or packaging problem.
+title: "[BUG] "
+labels:
+  - major-bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: State the observed failure and the expected behavior.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Installation or package import
+        - Model building or training
+        - Dataset or preprocessing
+        - Evaluation or explainability
+        - Monitoring, MLflow, or Optuna
+        - ONNX export or runtime
+        - TensorRT export or runtime
+        - MATLAB or TCP integration
+        - Documentation or CI workflow
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction commands
+      description: Paste the smallest exact command or code sample that reproduces the problem.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output excerpt
+      description: Include the first real error and its surrounding context.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and platform
+      placeholder: "Ubuntu 24.04 x86_64, Jetson Orin Nano with JetPack 6.1, ..."
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python and PyTorch versions
+      placeholder: "Python 3.12.5, PyTorch 2.7.1"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Installation and runtime environment
+      description: >-
+        Include the install method and extras, accelerator, and relevant
+        CUDA, ONNX, or TensorRT versions.
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I verified whether the failure occurs in a clean environment or clean checkout.
+        - label: I included the optional extras and dependency versions relevant to this failure.
+        - label: I stated whether the failure occurs on CPU, GPU, or both.

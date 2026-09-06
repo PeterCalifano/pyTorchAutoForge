@@ -1,0 +1,57 @@
+name: Feature request
+description: >-
+  Propose a scoped improvement to model development, tracking, export,
+  deployment, documentation, or CI.
+title: "[FEATURE] "
+labels:
+  - major-enhancement
+assignees:
+  - PeterCalifano
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or missing capability
+      description: Explain the current limitation and who is affected.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Owning surface
+      options:
+        - Installation or package API
+        - Model building or training
+        - Dataset or preprocessing
+        - Evaluation or explainability
+        - Monitoring, MLflow, or Optuna
+        - ONNX export or runtime
+        - TensorRT export or runtime
+        - MATLAB or TCP integration
+        - Documentation or CI workflow
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the intended behavior, public API, configuration, or workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: >-
+        List the tests, export checks, runtime checks, or documentation
+        checks that should prove the change.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Note simpler, narrower, or rejected approaches if relevant.
+    validations:
+      required: false
