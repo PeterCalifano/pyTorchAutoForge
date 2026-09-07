@@ -1,50 +1,64 @@
-import numpy as np
+from __future__ import annotations
 
-# Custom imports
-from pyTorchAutoForge.api.tcp import DataProcessor, pytcp_server, pytcp_requestHandler, ProcessingMode
 import threading
 
-# MAIN SCRIPT
-def main():
-    print('\n\n----------------------------------- RUNNING: test_start_server.py -----------------------------------\n')
-    
-    # %% TCP SERVER INITIALIZATION
-    HOST1, PORT1 = "127.0.0.1", 50000 # Define host and port for the first server
-    HOST2, PORT2 = "127.0.0.1", 50001 # Define host and port for the second server
+import numpy as np
 
-    def dummy_function(inputData):
-        return inputData
+from pyTorchAutoForge.api.tcp import (
+    DataProcessor,
+    ProcessingMode,
+    pytcp_requestHandler,
+    pytcp_server,
+)
 
-    # Define DataProcessor object for RequestHandler
-    dataProcessorObj = DataProcessor(dummy_function, np.float32, 1024,
-                                        ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True,
-                                        PRE_PROCESSING_MODE=ProcessingMode.TENSOR)
-    
-    dataProcessorObj_multi = DataProcessor(dummy_function, np.float32, 1024, 
-                                                 ENDIANNESS='little', DYNAMIC_BUFFER_MODE=True, 
-                                                 PRE_PROCESSING_MODE=ProcessingMode.MULTI_TENSOR)
 
-    def start_server(host, port, dataProcessorObj):
-        with pytcp_server((host, port), pytcp_requestHandler, dataProcessorObj, bindAndActivate=True) as server:
-            try:
-                print(f'\nServer initialized correctly on {host}:{port}. Set in "serve_forever" mode.')
-                server.serve_forever()
-            except KeyboardInterrupt:
-                print(f"\nServer on {host}:{port} is gracefully shutting down =D.")
-                server.shutdown()
-                server.server_close()
+def _Identity(input_data_: np.ndarray) -> np.ndarray:
+    return input_data_
 
-    # Start two servers on separate threads
-    thread1 = threading.Thread(target=start_server, args=( HOST1, PORT1, dataProcessorObj) )
-    thread2 = threading.Thread(target=start_server, args=( HOST2, PORT2, dataProcessorObj_multi) )
 
-    thread1.start()
-    thread2.start()
+def test_data_processor_tensor_roundtrip() -> None:
+    processor_ = DataProcessor(
+        _Identity,
+        np.float32,
+        1024,
+        ENDIANNESS="little",
+        DYNAMIC_BUFFER_MODE=True,
+        PRE_PROCESSING_MODE=ProcessingMode.TENSOR,
+    )
+    input_array_ = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
 
-    # Wait for the threads to finish processing
-    thread1.join()
-    thread2.join()
+    output_buffer_ = processor_.process(
+        processor_.TensorToBytesBuffer(input_array_))
+    output_array_, output_shape_ = processor_.BytesBufferToTensor(output_buffer_[
+                                                                  4:])
 
-if __name__ == "__main__":
-    main()
+    assert output_shape_ == input_array_.shape
+    assert np.array_equal(output_array_, input_array_)
 
+
+def test_tcp_server_starts_and_shuts_down_without_hanging() -> None:
+    processor_ = DataProcessor(
+        _Identity,
+        np.float32,
+        1024,
+        ENDIANNESS="little",
+        DYNAMIC_BUFFER_MODE=True,
+        PRE_PROCESSING_MODE=ProcessingMode.TENSOR,
+    )
+
+    with pytcp_server(
+        ("127.0.0.1", 0),
+        pytcp_requestHandler,
+        processor_,
+        bindAndActivate=True,
+    ) as server_:
+        thread_ = threading.Thread(target=server_.serve_forever, daemon=True)
+        thread_.start()
+
+        assert server_.server_address[0] == "127.0.0.1"
+        assert server_.server_address[1] > 0
+
+        server_.shutdown()
+        thread_.join(timeout=2.0)
+
+    assert not thread_.is_alive()

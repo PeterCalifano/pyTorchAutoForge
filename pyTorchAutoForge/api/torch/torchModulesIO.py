@@ -36,7 +36,7 @@ def SaveModel(model: torch.nn.Module,
               model_filename: str | pathlib.Path, 
               save_mode : AutoForgeModuleSaveMode | str = AutoForgeModuleSaveMode.MODEL_ARCH_STATE, 
               example_input: torch.Tensor | None = None, 
-              target_device: str = 'cpu', 
+              target_device: str | torch.device = 'cpu',
               model_base_name : str | None = None) -> None:
     """
     Saves a PyTorch model to a file.
@@ -57,7 +57,7 @@ def SaveModel(model: torch.nn.Module,
             Defaults to AutoForgeModuleSaveMode.MODEL_ARCH_STATE.
         example_input (torch.Tensor | None, optional): A sample input tensor for tracing or scripting.
             Defaults to None.
-        target_device (str, optional): The target device (e.g., 'cpu' or 'cuda:0') to save the model.
+        target_device (str | torch.device, optional): The target device (e.g., 'cpu' or 'cuda:0') to save the model.
             Defaults to 'cpu'.
         model_base_name (str | None, optional): An optional base name for the model.
             Defaults to None.
@@ -94,9 +94,10 @@ def SaveModel(model: torch.nn.Module,
     else: 
         extension = '.pth'
         
+    target_device = torch.device(target_device)
+
     # Format target device string to remove ':' from name
-    target_device_name = target_device
-    target_device_name = target_device_name.replace(':', '')
+    target_device_name = str(target_device).replace(':', '')
 
     # Form filename for saving
     # Check if device is in model name and remove it
@@ -283,5 +284,3 @@ def ValidateDictLoading(model: torch.nn.Module | torch.nn.ModuleDict | torch.nn.
 
     else:
         print("All model parameters are correctly loaded.")
-
-

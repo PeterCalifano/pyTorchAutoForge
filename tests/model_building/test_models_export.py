@@ -1,8 +1,10 @@
 import torch
+import pytest
 from pathlib import Path
 from pyTorchAutoForge.model_building.backbones.efficient_net import EfficientNetConfig, FeatureExtractorFactory
 
 # Export efficient net to ONNX
+@pytest.mark.export
 def test_efficientnet_basic_backbone_export(tmp_path: Path):
     # Create configuration
     cfg = EfficientNetConfig(

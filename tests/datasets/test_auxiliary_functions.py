@@ -3,9 +3,14 @@ from pyTorchAutoForge.datasets.LabelsClasses import PTAF_Datakey
 
 import os
 import numpy as np
+import pytest
 
 from pyTorchAutoForge.setup.AutoForgeInit import Is_session_headless
 
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.visual
 def test_LoadDatasetToMem():
 
     import matplotlib
